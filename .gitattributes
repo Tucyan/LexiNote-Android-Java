@@ -1,0 +1,9 @@
+* text=auto
+*.bat text eol=crlf
+*.jar binary
+*.png binary
+*.apk binary
+
+*.zip binary
+*.md whitespace=-blank-at-eol
+gradlew text eol=lf

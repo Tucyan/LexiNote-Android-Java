@@ -1,0 +1,31 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.lexinote.nativeapp'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.lexinote.nativeapp'
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName '1.0.0-native'
+        testInstrumentationRunner 'com.lexinote.nativeapp.SmokeInstrumentation'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    lint { abortOnError true }
+}
+
+dependencies {
+    implementation 'androidx.exifinterface:exifinterface:1.4.2'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20180813'
+}

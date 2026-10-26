@@ -1,0 +1,10 @@
+
+PASS: 8 device smoke checks
+five native tabs
+offline query, shared vocabulary references, result navigation
+assistant proposals require hub confirmation and session images stay isolated
+review answer and persisted grade
+Android Keystore API key roundtrip
+native image crop coordinates and rotation
+AtomicFile persistence and restore rollback
+corrupt data retains a usable recovery entry and preserves raw bytes
