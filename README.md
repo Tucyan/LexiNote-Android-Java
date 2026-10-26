@@ -2,7 +2,7 @@
 
 LexiNote 的独立 Android 原生迁移首版。应用界面、业务规则和服务由 Java 编写，采用原生 Android View；无需 Node、Expo、React Native 或 Kotlin 应用源码。
 
-本仓库位于 `../LexiNote-Android-Java`，分支为 `codex/android-native-java`，拥有独立 `.git`，没有继承原项目远端。来源是 [Tucyan/LexiNote](https://github.com/Tucyan/LexiNote) 的 `d465b969b76f9baaba3d098fb89342916e7efce9`。原项目现有更改已先提交，本仓库创建后不再修改原项目。
+本仓库位于 `../LexiNote-Android-Java`，分支为 `codex/android-native-java`，拥有独立 `.git`，公开仓库为 [Tucyan/LexiNote-Android-Java](https://github.com/Tucyan/LexiNote-Android-Java)。来源是 [Tucyan/LexiNote](https://github.com/Tucyan/LexiNote) 的 `d465b969b76f9baaba3d098fb89342916e7efce9`。原项目现有更改已先提交，本仓库创建后不再修改原项目。
 
 这是已可编译、安装和离线使用的迁移首版，尚未达到全部 Expo 功能和交互的逐项一致。详细覆盖范围与差异见 [迁移说明](docs/MIGRATION.md)。
 
@@ -78,4 +78,4 @@ adb shell am instrument -w com.lexinote.nativeapp.test/com.lexinote.nativeapp.Fe
 
 构建版本依据 [AGP 8.13 官方兼容表](https://developer.android.com/build/releases/agp-8-13-0-release-notes)。文档和图片通过 [Android Storage Access Framework](https://developer.android.com/training/data-storage/shared/documents-files) 选择，不要求全盘存储权限；凭据使用 [Android Keystore](https://developer.android.com/privacy-and-security/keystore)。
 
-MIT License，保留原项目许可证。远端仓库尚未创建或推送。
+MIT License，保留原项目许可证。独立公开仓库：[Tucyan/LexiNote-Android-Java](https://github.com/Tucyan/LexiNote-Android-Java)。

@@ -1,6 +1,6 @@
 # Android 原生迁移记录
 
-迁移日期：2026-10-26（Asia/Singapore）。原项目基线：d465b969b76f9baaba3d098fb89342916e7efce9，原分支 codex/conversation-pages。迁移仓库独立初始化，分支 codex/android-native-java，无共享 Git 元数据或 origin。
+迁移日期：2026-10-26（Asia/Singapore）。原项目基线：d465b969b76f9baaba3d098fb89342916e7efce9，原分支 codex/conversation-pages。迁移仓库独立初始化，分支 codex/android-native-java，无共享 Git 元数据；随后按用户要求发布到独立公开仓库 [Tucyan/LexiNote-Android-Java](https://github.com/Tucyan/LexiNote-Android-Java)，作为本仓库的 origin。
 
 ## 架构决策
 
@@ -39,6 +39,6 @@ API Key 与供应商连接独立存放，使用 Keystore AES/GCM；JSON/ZIP 备�
 
 ## 验证与交付
 
-原项目在迁移前提交现有更改，lint、tsc --noEmit、142项原测试通过。独立项目的测试和设备日志见 README 与 docs/verification。未使用真实API Key进行付费网络验收，未发布远端仓库或正式签名商店包。
+原项目在迁移前提交现有更改，lint、tsc --noEmit、142项原测试通过。独立项目的测试和设备日志见 README 与 docs/verification。未使用真实API Key进行付费网络验收。源代码按用户要求公开发布，正式签名商店包尚未发布。
 
 Subagent 实现、规格审查、代码质量审查参与了此次迁移；用户于中途指定后续代理为 gpt-6-luna / high，之后的新审查和修复代理按该配置运行。
