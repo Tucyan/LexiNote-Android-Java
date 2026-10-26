@@ -3,13 +3,11 @@ package com.lexinote.nativeapp;
 import android.app.*;
 import android.content.*;
 import android.content.res.Configuration;
-import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.*;
-import android.provider.MediaStore;
 import android.view.*;
 import android.widget.*;
 import java.io.*;
@@ -29,7 +27,10 @@ public final class MainActivity extends Activity {
   String screen = "tabs";
   JSONObject session;
   JSONObject committed;
-  Uri image;
+  Uri image, originalImage, pendingCameraUri;
+  ImageEditorState imageEditorState = ImageEditorState.initial();
+  JSONObject imageRegion;
+  ConversationTitles titles;
   int generation = 0;
   AiClient active;
   final ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -49,6 +50,7 @@ public final class MainActivity extends Activity {
     super.onCreate(state);
     repository = new Repository(this);
     secure = new SecureSettings(this);
+    titles = new ConversationTitles(this);
     try {
       library = repository.load();
       committed = library.snapshot();
@@ -75,6 +77,25 @@ public final class MainActivity extends Activity {
       query.guessContext = state.getString("guessContext", "");
       String uri = state.getString("image");
       image = uri == null ? null : Uri.parse(uri);
+      String original = state.getString("originalImage", uri);
+      originalImage = original == null ? null : Uri.parse(original);
+      String camera = state.getString("pendingCamera");
+      pendingCameraUri = camera == null ? null : Uri.parse(camera);
+      try {
+        imageEditorState =
+            ImageEditorState.fromJson(new JSONObject(state.getString("imageEditorState", "{}")));
+      } catch (Exception ignored) {
+        imageEditorState = ImageEditorState.initial();
+      }
+      try {
+        String region = state.getString("imageRegion");
+        imageRegion = region == null ? null : new JSONObject(region);
+      } catch (Exception ignored) {
+        imageRegion = null;
+      }
+      query.homeMode = state.getString("homeMode", "text");
+      query.guessMode = state.getString("guessMode", "image");
+      query.organizing = state.getBoolean("organizing");
     }
     if (state != null && state.getString("export") != null) {
       File candidate = new File(getCacheDir(), new File(state.getString("export")).getName());
@@ -118,6 +139,10 @@ public final class MainActivity extends Activity {
 
   void render() {
     if (library == null) return;
+    if (query != null && query.assistantView != null) {
+      query.assistantView.saveAnchor();
+      query.assistantView = null;
+    }
     palette();
     root = column();
     root.setBackgroundColor(card);
@@ -516,16 +541,20 @@ public final class MainActivity extends Activity {
     }
   }
 
-  void change(Runnable r) {
+  boolean change(Runnable r) {
     JSONObject before = library.snapshot();
+    JSONObject oldSession = session == null ? null : Library.copy(session);
     try {
       r.run();
-      persist();
+      boolean saved = persist();
       render();
+      return saved;
     } catch (Exception e) {
       library = new Library(before);
+      session = oldSession;
       error(e);
       render();
+      return false;
     }
   }
 
@@ -538,6 +567,10 @@ public final class MainActivity extends Activity {
   }
 
   void request(Work work, Done done) {
+    request(work, done, true);
+  }
+
+  void request(Work work, Done done, boolean modal) {
     if (active != null) {
       say("正在请求，可取消后重新发送");
       return;
@@ -550,24 +583,28 @@ public final class MainActivity extends Activity {
       return;
     }
     AiClient c = active;
-    ProgressDialog progress = new ProgressDialog(this);
-    progress.setMessage("AI 正在思考…");
-    progress.setCancelable(true);
-    progress.setButton(DialogInterface.BUTTON_NEGATIVE, "取消", (d, w) -> cancel());
-    progress.setOnCancelListener(d -> cancel());
-    progress.show();
+    final JSONObject requestSession = session;
+    ProgressDialog progress = modal ? new ProgressDialog(this) : null;
+    if (progress != null) {
+      progress.setMessage("AI 正在思考…");
+      progress.setCancelable(true);
+      progress.setButton(DialogInterface.BUTTON_NEGATIVE, "取消", (d, w) -> cancel());
+      progress.setOnCancelListener(d -> cancel());
+      progress.show();
+    } else render();
     worker.execute(
         () -> {
           try {
             JSONObject value = work.run(c);
             handler.post(
                 () -> {
-                  progress.dismiss();
+                  if (progress != null) progress.dismiss();
                   if (token != generation || !alive()) return;
                   active = null;
+                  query.partialReply = "";
                   try {
                     done.accept(value);
-                    persist();
+                    if (persist()) titles.schedule(session);
                     render();
                   } catch (Exception e) {
                     error(e);
@@ -576,15 +613,20 @@ public final class MainActivity extends Activity {
           } catch (Exception e) {
             handler.post(
                 () -> {
-                  progress.dismiss();
+                  if (progress != null) progress.dismiss();
                   if (token != generation || !alive()) return;
                   active = null;
-                  if (session != null) {
+                  query.partialReply = "";
+                  if (session != null && session == requestSession) {
                     Library.put(session, "last_error", e.getMessage());
                     library.touchSession(session, true);
                     persist();
                   }
-                  error(e);
+                  if (modal) error(e);
+                  else {
+                    say(e.getMessage() == null ? "请求失败，可重试" : e.getMessage());
+                    render();
+                  }
                 });
           }
         });
@@ -594,31 +636,36 @@ public final class MainActivity extends Activity {
     generation++;
     if (active != null) active.cancel();
     active = null;
+    if (query != null) query.partialReply = "";
   }
 
   String imageData() throws Exception {
     return image == null ? null : ImageTools.dataUrl(this, image);
   }
 
+  void clearImage() {
+    image = null;
+    originalImage = null;
+    imageEditorState = ImageEditorState.initial();
+    imageRegion = null;
+    invalidateDraft();
+    if (screen.equals("assistant") && session != null) {
+      query.storeImageSource(session);
+      library.touchSession(session, false);
+      persist();
+    }
+  }
+
   void chooseImage() {
     new AlertDialog.Builder(this)
         .setItems(
-            new String[] {"选择图片", "拍照（系统相机缩略图）", "移除图片"},
-            (d, w) -> {
-              if (w == 0) {
-                Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                i.setType("image/*");
-                i.addCategory(Intent.CATEGORY_OPENABLE);
-                startActivityForResult(i, 101);
-              } else if (w == 1) {
-                try {
-                  startActivityForResult(new Intent(MediaStore.ACTION_IMAGE_CAPTURE), 102);
-                } catch (Exception e) {
-                  error(e);
-                }
-              } else {
-                image = null;
-                invalidateDraft();
+            new String[] {"选择图片", "拍照（完整照片）", "编辑当前图片", "移除图片"},
+            (dialog, which) -> {
+              if (which == 0) chooseImage(false);
+              else if (which == 1) chooseImage(true);
+              else if (which == 2) cropImage();
+              else {
+                clearImage();
                 render();
               }
             })
@@ -626,22 +673,42 @@ public final class MainActivity extends Activity {
   }
 
   void chooseImage(boolean camera) {
+    cancel();
     try {
-      if (camera) startActivityForResult(new Intent(MediaStore.ACTION_IMAGE_CAPTURE), 102);
-      else {
+      if (camera) {
+        pendingCameraUri = FullResolutionCamera.createOutputUri(this);
+        startActivityForResult(
+            FullResolutionCamera.createCaptureIntent(this, pendingCameraUri), 102);
+      } else {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.setType("image/*");
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         startActivityForResult(intent, 101);
       }
-    } catch (Exception e) {
-      error(e);
+    } catch (Exception error) {
+      if (pendingCameraUri != null) FullResolutionCamera.cleanup(this, pendingCameraUri);
+      pendingCameraUri = null;
+      error(error);
     }
   }
 
   @Override
   protected void onActivityResult(int req, int result, Intent data) {
     super.onActivityResult(req, result, data);
+    if (req == 102) {
+      Uri output = pendingCameraUri;
+      pendingCameraUri = null;
+      try {
+        if (result == RESULT_OK && output != null) {
+          acceptImage(FullResolutionCamera.persistCaptured(this, output));
+        }
+      } catch (Exception error) {
+        error(error);
+      } finally {
+        if (output != null) FullResolutionCamera.cleanup(this, output);
+      }
+      return;
+    }
     if (result != RESULT_OK || data == null) {
       if (req == 201 && pendingExport != null) {
         pendingExport.delete();
@@ -653,14 +720,7 @@ public final class MainActivity extends Activity {
       if (req == 101) {
         Uri uri = data.getData();
         if (uri == null) return;
-        image = ImageTools.persist(this, uri);
-        cropImage();
-      } else if (req == 102) {
-        Bitmap bitmap = (Bitmap) data.getExtras().get("data");
-        if (bitmap != null) {
-          image = ImageTools.saveBitmap(this, bitmap);
-          cropImage();
-        }
+        acceptImage(ImageTools.persist(this, uri));
       } else if (req == 201) {
         final Uri destination = data.getData();
         final File source = pendingExport;
@@ -701,39 +761,57 @@ public final class MainActivity extends Activity {
     }
   }
 
-  void cropImage() {
+  void acceptImage(Uri source) {
+    originalImage = image = source;
+    imageEditorState = ImageEditorState.initial();
+    imageRegion = null;
     invalidateDraft();
-    if (page == 1) {
-      query.stage = 0;
-      query.guessReply = null;
+    if (screen.equals("assistant") && session != null) {
+      query.storeImageSource(session);
+      library.touchSession(session, false);
+      persist();
     }
-    try {
-      Bitmap b = ImageTools.decode(this, image);
-      ImageCropView crop = new ImageCropView(this, b);
-      LinearLayout box = column();
-      box.addView(crop, new LinearLayout.LayoutParams(-1, dp(300)));
-      LinearLayout tools = row();
-      tools.addView(button("旋转", v -> crop.rotate()));
-      tools.addView(button("重置", v -> crop.reset()));
-      box.addView(tools);
-      new AlertDialog.Builder(this)
-          .setTitle("选择图片区域")
-          .setView(box)
-          .setNegativeButton("保留原图", (d, w) -> render())
-          .setPositiveButton(
-              "使用裁剪",
-              (d, w) -> {
-                try {
-                  image = ImageTools.saveBitmap(this, crop.crop());
-                  render();
-                } catch (Exception e) {
-                  error(e);
-                }
-              })
-          .show();
-    } catch (Exception e) {
-      error(e);
+    render();
+    cropImage();
+  }
+
+  void cropImage() {
+    Uri source = originalImage == null ? image : originalImage;
+    if (source == null) {
+      say("请先选择图片");
+      return;
     }
+    ImageEditorDialog.show(
+        this,
+        source,
+        imageEditorState,
+        new ImageEditorDialog.Callback() {
+          @Override
+          public void onComplete(ImageEditorResult result) {
+            originalImage = result.originalUri;
+            image = result.effectiveUri == null ? result.originalUri : result.effectiveUri;
+            imageEditorState = result.state;
+            imageRegion = result.region;
+            invalidateDraft();
+            if (page == 1) {
+              query.stage = 0;
+              query.guessReply = null;
+            }
+            // Attachments changed inside an assistant remain part of that session's explicit
+            // source.
+            if (screen.equals("assistant") && session != null) {
+              query.storeImageSource(session);
+              library.touchSession(session, false);
+              persist();
+            }
+            render();
+          }
+
+          @Override
+          public void onError(Activity activity, Exception error) {
+            MainActivity.this.error(error);
+          }
+        });
   }
 
   void export(String filename, String mime, String content) {
@@ -785,6 +863,13 @@ public final class MainActivity extends Activity {
       state.putString("guessContext", query.guessContext);
     }
     if (image != null) state.putString("image", image.toString());
+    if (originalImage != null) state.putString("originalImage", originalImage.toString());
+    if (pendingCameraUri != null) state.putString("pendingCamera", pendingCameraUri.toString());
+    state.putString("imageEditorState", imageEditorState.toJson().toString());
+    if (imageRegion != null) state.putString("imageRegion", imageRegion.toString());
+    state.putString("homeMode", query.homeMode);
+    state.putString("guessMode", query.guessMode);
+    state.putBoolean("organizing", query.organizing);
     if (pendingExport != null) state.putString("export", pendingExport.getName());
   }
 
@@ -886,6 +971,7 @@ public final class MainActivity extends Activity {
 
   void applyRestore(BackupArchive.Prepared prepared) {
     cancel();
+    titles.reset();
     final Library before = library;
     final int token = ++generation;
     ProgressDialog p = ProgressDialog.show(this, "", "正在恢复…", true, false);
@@ -912,10 +998,11 @@ public final class MainActivity extends Activity {
                   p.dismiss();
                   if (token != generation || !alive()) return;
                   library = restored;
+                  titles.reset();
                   recoveryOnly = false;
                   committed = library.snapshot();
                   session = null;
-                  image = null;
+                  clearImage();
                   review.queue.clear();
                   notebooks.selected = null;
                   render();
@@ -951,7 +1038,18 @@ public final class MainActivity extends Activity {
   @Override
   protected void onDestroy() {
     cancel();
+    if (titles != null) titles.close();
     worker.shutdownNow();
     super.onDestroy();
+  }
+
+  @Override
+  protected void onPause() {
+    if (query != null && query.assistantView != null && session != null) {
+      query.assistantView.saveAnchor();
+      library.touchSession(session, false);
+      persist();
+    }
+    super.onPause();
   }
 }

@@ -100,6 +100,48 @@ public class AiClientTest {
   }
 
   @Test
+  public void streamingAgentReturnsValidatedFinalActionAndOnlyMessagePreview() throws Exception {
+    String finalJson = "{\"kind\":\"answer\",\"message\":\"safe preview\"}";
+    next =
+        new FakeConnection(
+            200, stream(finalJson, "stop", true), "text/event-stream; charset=utf-8");
+    StringBuilder preview = new StringBuilder();
+    JSONObject reply =
+        new AiClient(provider(true), "test-only")
+            .agent(new JSONArray(), "question", null, preview::append);
+    assertEquals("answer", reply.getString("kind"));
+    assertEquals("safe preview", reply.getString("message"));
+    assertEquals("safe preview", preview.toString());
+    assertTrue(new JSONObject(next.sent.toString("UTF-8")).optBoolean("stream"));
+    assertTrue(next.disconnected);
+  }
+
+  @Test
+  public void streamingLengthOrMissingTerminalMarkerNeverReturnsAnAnswer() throws Exception {
+    String answer = "{\"kind\":\"answer\",\"message\":\"looks complete\"}";
+    for (String wire : new String[] {stream(answer, "length", true), stream(answer, null, false)}) {
+      next = new FakeConnection(200, wire, "text/event-stream");
+      try {
+        new AiClient(provider(true), "test-only")
+            .agent(new JSONArray(), "question", null, part -> {});
+        fail("truncated stream must not produce a reply");
+      } catch (java.io.IOException expected) {
+        assertTrue(expected.getMessage().contains("结束") || expected.getMessage().contains("截断"));
+      }
+    }
+  }
+
+  private static String stream(String content, String finishReason, boolean done) throws Exception {
+    JSONObject delta = new JSONObject().put("content", content);
+    JSONObject choice = new JSONObject().put("delta", delta);
+    if (finishReason == null) choice.put("finish_reason", JSONObject.NULL);
+    else choice.put("finish_reason", finishReason);
+    String wire = "data: " + new JSONObject().put("choices", new JSONArray().put(choice)) + "\n\n";
+    if (done) wire += "data: [DONE]\n\n";
+    return wire;
+  }
+
+  @Test
   public void cancellationPreventsNetworkAndTargetSubstitutionIsRejected() throws Exception {
     int before = opened;
     AiClient cancelled = new AiClient(provider(true), "test-only");
@@ -126,20 +168,27 @@ public class AiClientTest {
     final ByteArrayOutputStream sent = new ByteArrayOutputStream();
     final String answer;
     final int code;
+    final String contentType;
     boolean disconnected;
 
     FakeConnection(int code, String content) throws Exception {
+      this(code, envelope(content), "application/json");
+    }
+
+    FakeConnection(int code, String response, String contentType) throws Exception {
       super(new URL("https://provider.invalid"));
       this.code = code;
-      answer =
-          new JSONObject()
-              .put(
-                  "choices",
-                  new JSONArray()
-                      .put(
-                          new JSONObject()
-                              .put("message", new JSONObject().put("content", content))))
-              .toString();
+      this.answer = response;
+      this.contentType = contentType;
+    }
+
+    private static String envelope(String content) throws Exception {
+      return new JSONObject()
+          .put(
+              "choices",
+              new JSONArray()
+                  .put(new JSONObject().put("message", new JSONObject().put("content", content))))
+          .toString();
     }
 
     @Override
@@ -163,6 +212,11 @@ public class AiClientTest {
     @Override
     public int getResponseCode() {
       return code;
+    }
+
+    @Override
+    public String getContentType() {
+      return contentType;
     }
 
     @Override

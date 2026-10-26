@@ -22,6 +22,10 @@ final class QueryUi {
   boolean showDateFields = false;
   int stage = 0;
   JSONObject guessReply;
+  AssistantUi assistantView;
+  String partialReply = "";
+  boolean organizing;
+  final Set<String> editingMeanings = new HashSet<>();
 
   QueryUi(MainActivity a) {
     this.a = a;
@@ -182,7 +186,7 @@ final class QueryUi {
             a.button(
                 "移除",
                 v -> {
-                  a.image = null;
+                  a.clearImage();
                   a.render();
                 }));
       }
@@ -317,7 +321,7 @@ final class QueryUi {
             "＋ 新建",
             v -> {
               a.cancel();
-              a.image = null;
+              a.clearImage();
               a.session = a.library.newSession("");
               a.screen = "assistant";
               a.render();
@@ -542,9 +546,14 @@ final class QueryUi {
     a.image = queryImage;
     Library.put(a.session, "source_context", queryContext);
     if (queryImage != null) {
-      Library.put(a.session, "input_images", new JSONArray().put(queryImage.toString()));
+      storeImageSource(a.session);
       Library.put(a.session, "query_type", queryText.isEmpty() ? "image" : "both");
-    } else Library.put(a.session, "query_type", "text");
+    } else {
+      a.originalImage = null;
+      a.imageEditorState = ImageEditorState.initial();
+      a.imageRegion = null;
+      Library.put(a.session, "query_type", "text");
+    }
     JSONObject local = queryImage == null ? a.library.local(queryText) : null;
     if (local != null) {
       JSONObject r = Library.copy(local);
@@ -595,6 +604,23 @@ final class QueryUi {
   }
 
   void send(String text, boolean fromHub) {
+    sendInternal(text, fromHub, true);
+  }
+
+  void retryLast() {
+    if (a.session == null || a.active != null) return;
+    JSONArray history = messages();
+    for (int i = history.length() - 1; i >= 0; i--) {
+      JSONObject last = history.optJSONObject(i);
+      if (last != null && last.optString("role").equals("user")) {
+        sendInternal(
+            last.optString("content"), a.session.optBoolean("last_request_from_hub"), false);
+        return;
+      }
+    }
+  }
+
+  void sendInternal(String text, boolean fromHub, boolean append) {
     if (a.active != null) {
       a.say("请等待当前请求或取消");
       return;
@@ -606,6 +632,10 @@ final class QueryUi {
     final Uri requestImage = fromHub && homeMode.equals("text") ? null : a.image;
     final boolean hasImage = requestImage != null;
     JSONArray previous = copyMessages();
+    if (!append
+        && previous.length() > 0
+        && previous.optJSONObject(previous.length() - 1).optString("role").equals("user"))
+      previous.remove(previous.length() - 1);
     JSONObject resultContext = target.optJSONObject("query_results");
     if (resultContext != null) {
       JSONObject contextMessage = new JSONObject();
@@ -613,14 +643,27 @@ final class QueryUi {
       Library.put(contextMessage, "content", "当前词条完整上下文：" + resultContext.toString());
       previous.put(contextMessage);
     }
-    message("user", text, null);
+    if (append) message("user", text, null);
+    Library.put(target, "last_request_from_hub", fromHub);
+    target.remove("last_error");
+    partialReply = "";
     Library.put(target, "pending_lookup", JSONObject.NULL);
     a.library.touchSession(target, true);
     if (!a.persist()) return;
+    a.screen = "assistant";
     a.request(
         client ->
             client.agent(
-                previous, text, requestImage == null ? null : ImageTools.dataUrl(a, requestImage)),
+                previous,
+                text,
+                requestImage == null ? null : ImageTools.dataUrl(a, requestImage),
+                delta ->
+                    a.handler.post(
+                        () -> {
+                          if (a.active != client || a.session != target) return;
+                          partialReply += delta;
+                          if (assistantView != null) assistantView.updatePartial(partialReply);
+                        })),
         reply -> {
           if (a.session != target) return;
           applyReply(
@@ -628,7 +671,8 @@ final class QueryUi {
               reply.optJSONObject("result") != null
                   && AgentProtocol.canApplyDirectResult(
                       explicitTarget, reply.optJSONObject("result"), fromHub, hasImage));
-        });
+        },
+        false);
   }
 
   void applyReply(JSONObject original, boolean applyDirectly) {
@@ -678,6 +722,8 @@ final class QueryUi {
     if (local != null) {
       JSONObject r = Library.copy(local);
       Library.put(r, "word", local.optString("content"));
+      Library.put(r, "is_from_local", true);
+      Library.put(r, "local_vocabulary_id", local.optString("id"));
       finishResult(r);
       a.persist();
       a.render();
@@ -721,9 +767,13 @@ final class QueryUi {
     a.session.remove("last_error");
     a.library.touchSession(a.session, true);
     a.screen = "result";
+    organizing = false;
+    editingMeanings.clear();
+    autoRecord();
   }
 
   void open(JSONObject s) {
+    if (assistantView != null) assistantView.saveAnchor();
     a.cancel();
     JSONObject existing = a.library.find("conversations", s.optString("id"));
     a.session = Library.copy(existing == null ? s : existing);
@@ -731,6 +781,14 @@ final class QueryUi {
     context = a.session.optString("source_context");
     JSONArray images = a.session.optJSONArray("input_images");
     a.image = images != null && images.length() > 0 ? Uri.parse(images.optString(0)) : null;
+    a.originalImage = a.image;
+    JSONArray selected = a.session.optJSONArray("native_selected_images");
+    if (selected != null && selected.length() > 0) a.image = Uri.parse(selected.optString(0));
+    a.imageEditorState = ImageEditorState.fromJson(a.session.optJSONObject("image_editor_state"));
+    JSONArray regions = a.session.optJSONArray("selected_regions");
+    a.imageRegion = regions == null ? null : regions.optJSONObject(0);
+    organizing = false;
+    editingMeanings.clear();
     a.library.touchSession(a.session, false);
     a.persist();
     a.screen = a.session.optJSONObject("query_results") != null ? "result" : "assistant";
@@ -739,143 +797,179 @@ final class QueryUi {
 
   void assistant() {
     if (a.session == null) a.session = a.library.newSession("");
-    a.body.setBackgroundColor(a.card);
-    a.scroll.setBackgroundColor(a.card);
-    a.body.setGravity(Gravity.BOTTOM);
-    a.body.setPadding(a.dp(14), a.dp(14), a.dp(14), a.dp(56));
-    image(a.body);
-    JSONArray m = messages();
-    if (m.length() == 0) {
-      LinearLayout empty = a.column();
-      empty.setGravity(Gravity.CENTER);
-      TextView prompt = a.text("开始提问吧。可以聊英语学习，也可以告诉我想了解的词或表达。", 14, false);
-      prompt.setGravity(Gravity.CENTER);
-      prompt.setPadding(0, a.dp(40), 0, a.dp(40));
-      empty.addView(prompt);
-      a.body.addView(empty, new LinearLayout.LayoutParams(-1, -2));
+    assistantView = AssistantUi.show(a, this);
+    if (!partialReply.isEmpty()) assistantView.updatePartial(partialReply);
+  }
+
+  void storeImageSource(JSONObject target) {
+    if (a.image == null) {
+      for (String key :
+          new String[] {
+            "input_images", "native_selected_images", "selected_regions", "image_editor_state"
+          }) target.remove(key);
+      return;
     }
-    for (int i = 0; i < m.length(); i++) {
-      JSONObject msg = m.optJSONObject(i);
-      boolean mine = msg.optString("role").equals("user");
-      LinearLayout line = a.row();
-      line.setGravity(mine ? Gravity.RIGHT : Gravity.LEFT);
-      LinearLayout card = a.column();
-      card.setPadding(a.dp(14), a.dp(14), a.dp(14), a.dp(14));
-      card.setBackground(a.shape(mine ? a.accent : a.inputBg, 16, mine ? 0 : a.border));
-      TextView messageView = a.text(msg.optString("content"), 14, false);
-      messageView.setMaxWidth(
-          (int) (a.getResources().getDisplayMetrics().widthPixels * .88f) - a.dp(28));
-      messageView.setLineSpacing(a.dp(3), 1);
-      messageView.setTextColor(mine ? -1 : a.foreground);
-      MarkdownText.apply(messageView, msg.optString("content"));
-      card.addView(messageView);
-      line.addView(card, new LinearLayout.LayoutParams(mine ? -2 : -1, -2));
-      LinearLayout.LayoutParams lineLp = new LinearLayout.LayoutParams(-1, -2);
-      lineLp.bottomMargin = a.dp(12);
-      a.body.addView(line, lineLp);
-      JSONObject action = msg.optJSONObject("action");
-      if (action == null) continue;
-      JSONArray choices = action.optJSONArray("choices");
-      if (choices != null)
-        for (int j = 0; j < choices.length(); j++) {
-          JSONObject choice = choices.optJSONObject(j);
-          String label = choice == null ? choices.optString(j) : choice.optString("label");
-          card.addView(
-              a.button(
-                  label,
-                  v -> {
-                    follow = label;
-                    a.render();
-                  }));
-        }
-      JSONArray questions = action.optJSONArray("follow_up_questions");
-      if (questions != null)
-        for (int j = 0; j < questions.length(); j++) {
-          String q = questions.optString(j);
-          card.addView(
-              a.button(
-                  q,
-                  v -> {
-                    follow = q;
-                    a.render();
-                  }));
-        }
+    Uri original = a.originalImage == null ? a.image : a.originalImage;
+    Library.put(target, "input_images", new JSONArray().put(original.toString()));
+    if (!original.toString().equals(a.image.toString()))
+      Library.put(target, "native_selected_images", new JSONArray().put(a.image.toString()));
+    else target.remove("native_selected_images");
+    Library.put(target, "image_editor_state", a.imageEditorState.toJson());
+    if (a.imageRegion != null)
+      Library.put(target, "selected_regions", new JSONArray().put(a.imageRegion));
+    else target.remove("selected_regions");
+  }
+
+  void autoRecord() {
+    if (!QueryWorkflow.shouldAutoRecord(a.session, a.library.settings())) return;
+    JSONObject before = a.library.snapshot();
+    try {
+      String notebook = a.library.settings().optString("default_notebook_id", "nb_default");
+      JSONObject display = new JSONObject();
+      Library.put(display, "fields", QueryWorkflow.defaultFields(a.library.settings()));
+      String id =
+          a.library.saveResult(
+              a.session.getJSONObject("query_results"), new String[] {notebook}, display);
+      JSONObject saved = new JSONObject();
+      Library.put(saved, "saved", true);
+      Library.put(saved, "vocabulary_id", id);
+      Library.put(saved, "notebook_ids", new JSONArray().put(notebook));
+      Library.put(saved, "saved_at", Library.now());
+      Library.put(a.session, "saved_content", saved);
+      Library.put(a.session, "auto_record_key", QueryWorkflow.resultKey(a.session));
+      a.session.remove("auto_record_error");
+    } catch (Exception error) {
+      a.library = new Library(before);
+      Library.put(a.session, "auto_record_error", error.getMessage());
     }
-    JSONObject resultSuggestions = a.session.optJSONObject("query_results");
-    if (resultSuggestions != null
-        && resultSuggestions.optJSONArray("follow_up_questions") != null) {
-      JSONArray questions = resultSuggestions.optJSONArray("follow_up_questions");
-      for (int i = 0; i < questions.length(); i++) {
-        String question = questions.optString(i);
-        Button suggestion =
-            a.outlineButton(
-                question,
-                v -> {
-                  follow = question;
-                  a.render();
-                });
-        LinearLayout.LayoutParams suggestionLp = new LinearLayout.LayoutParams(-2, a.dp(44));
-        suggestionLp.topMargin = a.dp(8);
-        a.body.addView(suggestion, suggestionLp);
-      }
+    a.library.touchSession(a.session, true);
+  }
+
+  void updateResult(JSONObject updated) {
+    if (a.session == null || a.active != null) {
+      a.say("请先等待当前请求完成");
+      return;
     }
-    JSONObject pending = pending();
-    if (pending != null) {
-      LinearLayout confirm = a.card("确认查询 · " + pending.optString("target"));
-      confirm.addView(
-          a.text(
-              pending.optString("context_quote") + "\n" + pending.optString("user_requirement"),
-              14,
-              false));
-      confirm.addView(
+    Library.put(a.session, "query_results", updated);
+    a.library.touchSession(a.session, true);
+    if (a.persist()) a.render();
+  }
+
+  void presentation(JSONObject meaning, boolean selected, String choice, boolean example) {
+    try {
+      updateResult(
+          QueryWorkflow.presentation(
+              a.session.getJSONObject("query_results"),
+              meaning.optString("id"),
+              selected,
+              choice,
+              example));
+    } catch (Exception error) {
+      a.error(error);
+    }
+  }
+
+  void supplement() {
+    if (a.session == null || a.active != null) return;
+    final JSONObject target = a.session;
+    final JSONObject original = Library.copy(target.optJSONObject("query_results"));
+    final int revision = target.optInt("revision");
+    a.request(
+        client ->
+            client.lookup(original.optString("word"), "请为此词汇提供更加丰富、深入的语境用法与高级搭配。保留原查询目标。", null),
+        incoming -> {
+          if (a.session != target || target.optInt("revision") != revision) return;
+          Library.put(target, "query_results", QueryWorkflow.mergeSupplement(original, incoming));
+          a.library.touchSession(target, true);
+        });
+  }
+
+  void addMeaningControls(LinearLayout card, JSONObject meaning) {
+    String id = meaning.optString("id");
+    boolean selected = meaning.optBoolean("selected", true),
+        example = meaning.optBoolean("save_example", true);
+    String choice =
+        meaning.optString(
+            "definition_choice", meaning.optString("zh_definition").isEmpty() ? "en" : "zh");
+    LinearLayout choices = a.row();
+    CheckBox visible = new CheckBox(a);
+    visible.setText("显示本义");
+    visible.setTextColor(a.foreground);
+    visible.setChecked(selected);
+    visible.setOnCheckedChangeListener(
+        (v, checked) -> presentation(meaning, checked, choice, example));
+    choices.addView(visible);
+    for (String language : new String[] {"zh", "en"}) {
+      Button button =
+          a.chip(
+              language.equals("zh") ? "中文" : "英文",
+              choice.equals(language),
+              v -> presentation(meaning, selected, language, example));
+      button.setEnabled(
+          !meaning
+              .optString(language.equals("zh") ? "zh_definition" : "en_definition")
+              .trim()
+              .isEmpty());
+      choices.addView(button);
+    }
+    card.addView(choices);
+    CheckBox examples = new CheckBox(a);
+    examples.setText("显示例句");
+    examples.setTextColor(a.foreground);
+    examples.setChecked(example);
+    examples.setOnCheckedChangeListener(
+        (v, checked) -> presentation(meaning, selected, choice, checked));
+    card.addView(examples);
+    if (!editingMeanings.contains(id)) {
+      card.addView(
           a.button(
-              "返回首页确认",
+              "就地编辑释义",
               v -> {
-                a.screen = "tabs";
-                a.page = 0;
+                editingMeanings.add(id);
                 a.render();
               }));
+      return;
     }
-    LinearLayout send = a.fixedFooter();
-    send.setBackground(a.shape(a.card, 0, a.border));
-    send.setPadding(a.dp(12), a.dp(12), a.dp(12), a.dp(12));
-    EditText f = a.input("继续提问，或说明你想了解什么…", follow, true);
-    f.setMinHeight(a.dp(48));
-    f.setMinLines(1);
-    f.setBackground(a.shape(a.inputBg, 18, a.border));
-    f.setOnLongClickListener(
-        v -> {
-          a.chooseImage();
-          return true;
-        });
-    LinearLayout composer = a.row();
-    composer.addView(f, new LinearLayout.LayoutParams(0, a.dp(48), 1));
-    TextView sendButton = a.icon("arrow-up", 22, -1);
-    sendButton.setContentDescription("发送给助手");
-    sendButton.setBackground(a.shape(a.accent, 24, 0));
-    sendButton.setAlpha(follow.trim().isEmpty() ? .4f : 1f);
-    track(
-        f,
-        s -> {
-          follow = s;
-          sendButton.setAlpha(s.trim().isEmpty() ? .4f : 1f);
-        });
-    sendButton.setOnClickListener(
-        v -> {
-          if (follow.trim().isEmpty()) return;
-          String value = follow;
-          follow = "";
-          send(value);
-        });
-    LinearLayout.LayoutParams sendLp = new LinearLayout.LayoutParams(a.dp(48), a.dp(48));
-    sendLp.leftMargin = a.dp(10);
-    composer.addView(sendButton, sendLp);
-    send.addView(composer);
-    if (a.session.has("last_error"))
-      send.addView(a.text("上次请求：" + a.session.optString("last_error") + "。可重新发送。", 13, false));
+    String[] keys = {
+      "part_of_speech", "zh_definition", "en_definition", "phonetic", "example", "source", "remarks"
+    };
+    String[] names = {"词性", "中文释义", "英文释义", "音标", "例句", "来源", "备注"};
+    List<EditText> inputs = new ArrayList<>();
+    for (int i = 0; i < keys.length; i++) {
+      card.addView(a.text(names[i], 12, true));
+      EditText input = a.input(names[i], meaning.optString(keys[i]), i != 0 && i != 3);
+      inputs.add(input);
+      card.addView(input);
+    }
+    LinearLayout actions = a.row();
+    actions.addView(
+        a.button(
+            "取消编辑",
+            v -> {
+              editingMeanings.remove(id);
+              a.render();
+            }));
+    actions.addView(
+        a.button(
+            "保存本条修改",
+            v -> {
+              try {
+                JSONObject fields = new JSONObject();
+                for (int i = 0; i < keys.length; i++)
+                  fields.put(keys[i], inputs.get(i).getText().toString());
+                JSONObject updated =
+                    QueryWorkflow.editMeaning(a.session.getJSONObject("query_results"), id, fields);
+                editingMeanings.remove(id);
+                updateResult(updated);
+              } catch (Exception error) {
+                a.error(error);
+              }
+            }));
+    card.addView(actions);
   }
 
   void deleteConversation(JSONObject s) {
+    a.titles.remove(s.optString("id"));
     if (a.session != null && s.optString("id").equals(a.session.optString("id"))) {
       a.cancel();
       a.session = null;
@@ -904,6 +998,7 @@ final class QueryUi {
                 Library.put(meta, "title", t);
                 Library.put(meta, "retention", "saved");
               }
+              a.titles.manual(a.session);
               a.library.touchSession(a.session, false);
               a.persist();
               a.render();
@@ -927,6 +1022,9 @@ final class QueryUi {
     type.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
     type.setBackground(a.shape(a.inputBg, 12, 0));
     wordRow.addView(type);
+    Button enrich = a.chip("AI 补充", false, v -> supplement());
+    enrich.setEnabled(a.active == null);
+    wordRow.addView(enrich);
     if (a.library.local(r.optString("word")) != null) {
       TextView saved = a.text("✓ 已在笔记中", 12, true);
       saved.setTextColor(a.accent);
@@ -949,6 +1047,9 @@ final class QueryUi {
     if (!r.optString("recognized_text").isEmpty())
       heading.addView(a.text("识别文字：" + r.optString("recognized_text"), 14, false));
     JSONArray ms = r.optJSONArray("meanings");
+    if (a.session.has("auto_record_error"))
+      a.body.addView(
+          a.text("自动记录未完成：" + a.session.optString("auto_record_error") + "。可整理后手动保存。", 12, false));
     TextView section = a.text("释义与例句 (" + (ms == null ? 0 : ms.length()) + " 条)", 13, true);
     section.setTextColor(a.muted);
     LinearLayout.LayoutParams sectionLp = new LinearLayout.LayoutParams(-1, -2);
@@ -973,6 +1074,7 @@ final class QueryUi {
         partLp.leftMargin = a.dp(8);
         meaningHeader.addView(part, partLp);
         c.addView(meaningHeader);
+        if (organizing) addMeaningControls(c, m);
         for (String f : new String[] {"zh_definition", "en_definition"})
           if (!m.optString(f).isEmpty()) {
             LinearLayout definition = a.column();
@@ -1030,7 +1132,36 @@ final class QueryUi {
               a.screen = "assistant";
               a.render();
             }));
-    actions.addView(a.primaryButton("整理笔记", v -> a.notebooks.saveDialog(r)));
+    if (!organizing)
+      actions.addView(
+          a.primaryButton(
+              "整理笔记",
+              v -> {
+                organizing = true;
+                a.render();
+              }));
+    else {
+      LinearLayout organizeHeader = a.row();
+      organizeHeader.addView(
+          a.text("整理模式 · 仅控制笔记显示", 12, true), new LinearLayout.LayoutParams(0, -2, 1));
+      organizeHeader.addView(
+          a.button(
+              "退出整理",
+              v -> {
+                organizing = false;
+                editingMeanings.clear();
+                a.render();
+              }));
+      actions.addView(organizeHeader);
+      LinearLayout organizeActions = a.row();
+      organizeActions.addView(
+          a.outlineButton("添加到默认笔记", v -> a.notebooks.saveDefault(r)),
+          new LinearLayout.LayoutParams(0, a.dp(44), 1));
+      organizeActions.addView(
+          a.primaryButton("选择添加笔记", v -> a.notebooks.saveDialog(r)),
+          new LinearLayout.LayoutParams(0, a.dp(44), 1));
+      actions.addView(organizeActions);
+    }
   }
 
   void guess() {

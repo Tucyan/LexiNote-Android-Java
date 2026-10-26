@@ -12,5 +12,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <provider android:name=".CameraOutputProvider"
+            android:authorities="com.lexinote.nativeapp.camera"
+            android:exported="false" android:grantUriPermissions="true" />
     </application>
 </manifest>

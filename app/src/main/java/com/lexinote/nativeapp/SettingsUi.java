@@ -168,6 +168,16 @@ final class SettingsUi {
     densities.setLayoutParams(densitiesLp);
     appearance.addView(densities);
     LinearLayout notebook = a.card("查询偏好");
+    Switch auto = new Switch(a);
+    auto.setText("查询结果自动记录到默认笔记");
+    auto.setTextColor(a.foreground);
+    auto.setChecked(prefs.optBoolean("auto_record_extra_info"));
+    auto.setOnCheckedChangeListener(
+        (button, checked) ->
+            a.change(() -> Library.put(a.library.settings(), "auto_record_extra_info", checked)));
+    notebook.addView(auto);
+    notebook.addView(a.text("仅成功生成并确认的词条自动入库；聊天、失败和本地命中不会重复记录。", 12, false));
+    notebook.addView(a.button("默认记录显示字段", v -> defaultFields()));
     String defaultId = prefs.optString("default_notebook_id", "");
     JSONObject defaultNote = a.library.find("notebooks", defaultId);
     notebook.addView(
@@ -202,6 +212,7 @@ final class SettingsUi {
                           try {
                             a.cancel();
                             a.library = a.repository.rollback();
+                            a.titles.reset();
                             a.committed = a.library.snapshot();
                             a.session = null;
                             a.render();
@@ -238,5 +249,32 @@ final class SettingsUi {
                             "default_notebook_id",
                             leaves.get(w).optString("id"))))
         .show();
+  }
+
+  void defaultFields() {
+    try {
+      JSONObject chosen = QueryWorkflow.defaultFields(a.library.settings());
+      String[] labels = {"中文释义", "英文释义", "音标", "例句", "来源", "图片", "批注", "备注"};
+      boolean[] values = new boolean[labels.length];
+      for (int i = 0; i < values.length; i++)
+        values[i] = chosen.optBoolean(QueryWorkflow.FIELDS[i]);
+      new AlertDialog.Builder(a)
+          .setTitle("默认笔记显示字段（完整数据仍保留）")
+          .setMultiChoiceItems(labels, values, (dialog, index, checked) -> values[index] = checked)
+          .setNegativeButton("取消", null)
+          .setPositiveButton(
+              "保存",
+              (dialog, which) ->
+                  a.change(
+                      () -> {
+                        JSONObject fields = new JSONObject();
+                        for (int i = 0; i < values.length; i++)
+                          Library.put(fields, QueryWorkflow.FIELDS[i], values[i]);
+                        Library.put(a.library.settings(), "default_fields_to_save", fields);
+                      }))
+          .show();
+    } catch (Exception error) {
+      a.error(error);
+    }
   }
 }

@@ -8,7 +8,9 @@ import org.json.*;
 
 final class NotebookUi {
   final MainActivity a;
-  String selected = null, filter = "", typeFilter = "全部";
+  String selected = null, filter = "", typeFilter = "全部", tagFilter = "全部";
+  boolean selecting = false;
+  final LinkedHashSet<String> selectedVocabularyIds = new LinkedHashSet<>();
 
   NotebookUi(MainActivity a) {
     this.a = a;
@@ -25,6 +27,7 @@ final class NotebookUi {
       if (!typeFilter.equals("全部")
           && !v.optString("type", "word").equals(typeFilter.equals("短语") ? "phrase" : "word"))
         continue;
+      if (!tagFilter.equals("全部") && !contains(v.optJSONArray("tags"), tagFilter)) continue;
       if (!Library.normalized(v.toString()).contains(Library.normalized(filter))) continue;
       out.add(v);
     }
@@ -130,6 +133,35 @@ final class NotebookUi {
                 a.render();
               }));
     controls.addView(types);
+    LinearLayout tags = a.row();
+    tags.setPadding(a.dp(14), a.dp(4), a.dp(14), a.dp(4));
+    LinkedHashSet<String> availableTags = new LinkedHashSet<>();
+    JSONArray allVocab = a.library.array("vocabularies");
+    for (int i = 0; i < allVocab.length(); i++) {
+      JSONArray ts = allVocab.optJSONObject(i).optJSONArray("tags");
+      for (int j = 0; ts != null && j < ts.length(); j++) availableTags.add(ts.optString(j));
+    }
+    tags.addView(
+        a.chip(
+            "标签: 全部",
+            tagFilter.equals("全部"),
+            view -> {
+              tagFilter = "全部";
+              a.render();
+            }));
+    for (String tag : availableTags)
+      tags.addView(
+          a.chip(
+              "#" + tag,
+              tagFilter.equals(tag),
+              view -> {
+                tagFilter = tag;
+                a.render();
+              }));
+    HorizontalScrollView tagScroll = new HorizontalScrollView(a);
+    tagScroll.setHorizontalScrollBarEnabled(false);
+    tagScroll.addView(tags);
+    controls.addView(tagScroll);
     if (selected != null) {
       JSONObject n = a.library.find("notebooks", selected);
       if (n == null) {
@@ -147,6 +179,39 @@ final class NotebookUi {
                 }));
     }
     List<JSONObject> rows = visible();
+    pruneSelection(rows);
+    LinearLayout selectionBar = a.row();
+    selectionBar.setPadding(a.dp(14), a.dp(4), a.dp(14), a.dp(4));
+    selectionBar.addView(
+        a.chip(
+            selecting ? "退出选择" : "批量选择",
+            selecting,
+            view -> {
+              selecting = !selecting;
+              selectedVocabularyIds.clear();
+              a.render();
+            }));
+    if (selecting) {
+      selectionBar.addView(
+          a.chip(
+              "全选当前筛选",
+              false,
+              view -> {
+                for (JSONObject item : visible()) selectedVocabularyIds.add(item.optString("id"));
+                a.render();
+              }));
+      selectionBar.addView(
+          a.chip(
+              "清空",
+              false,
+              view -> {
+                selectedVocabularyIds.clear();
+                a.render();
+              }));
+      selectionBar.addView(
+          a.chip("操作 (" + selectedVocabularyIds.size() + ")", true, view -> batchMenu()));
+    }
+    controls.addView(selectionBar);
     if (selected != null) {
       JSONArray children =
           selectedNote == null ? null : selectedNote.optJSONArray("child_notebook_ids");
@@ -200,7 +265,13 @@ final class NotebookUi {
   void renderVocabularyListCard(JSONObject vocabulary, JSONObject display) {
     LinearLayout card = a.card(null);
     card.setPadding(a.dp(12), a.dp(12), a.dp(12), a.dp(12));
-    card.setOnClickListener(view -> detail(vocabulary));
+    card.setOnClickListener(
+        view -> {
+          if (selecting) {
+            toggleSelected(vocabulary.optString("id"));
+            a.render();
+          } else detail(vocabulary);
+        });
     card.setOnLongClickListener(
         view -> {
           showVocabularyActions(vocabulary);
@@ -209,6 +280,16 @@ final class NotebookUi {
 
     LinearLayout top = a.row();
     top.setGravity(Gravity.CENTER_VERTICAL);
+    if (selecting) {
+      CheckBox selectedBox = new CheckBox(a);
+      selectedBox.setChecked(selectedVocabularyIds.contains(vocabulary.optString("id")));
+      selectedBox.setOnCheckedChangeListener(
+          (button, checked) -> {
+            toggleSelected(vocabulary.optString("id"));
+            a.render();
+          });
+      top.addView(selectedBox);
+    }
     TextView word = a.text(vocabulary.optString("content"), 16, true);
     top.addView(word, new LinearLayout.LayoutParams(0, -2, 1));
 
@@ -237,10 +318,16 @@ final class NotebookUi {
       LinearLayout.LayoutParams tagRowLp = new LinearLayout.LayoutParams(-1, -2);
       tagRowLp.topMargin = a.dp(3);
       for (int i = 0; i < tags.length(); i++) {
-        TextView tag = a.text("#" + tags.optString(i), 11, true);
+        String tagValue = tags.optString(i);
+        TextView tag = a.text("#" + tagValue, 11, true);
         tag.setTextColor(a.accent);
         tag.setPadding(a.dp(7), a.dp(3), a.dp(7), a.dp(3));
         tag.setBackground(a.shape((a.accent & 0x00FFFFFF) | 0x1A000000, 16, 0));
+        tag.setOnClickListener(
+            view -> {
+              tagFilter = tagValue;
+              a.render();
+            });
         LinearLayout.LayoutParams tagLp = new LinearLayout.LayoutParams(-2, -2);
         tagLp.rightMargin = a.dp(5);
         tagRow.addView(tag, tagLp);
@@ -360,14 +447,128 @@ final class NotebookUi {
     new AlertDialog.Builder(a)
         .setTitle("导出当前筛选")
         .setItems(
-            new String[] {"JSON", "CSV"},
+            new String[] {"Markdown", "JSON", "CSV"},
             (d, w) -> {
               List<JSONObject> rows = visible();
               if (w == 0) {
+                JSONObject note = selected == null ? null : a.library.find("notebooks", selected);
+                a.export(
+                    "lexinote-filter.md",
+                    "text/markdown",
+                    NotebookExport.markdownForNotebook(rows, note));
+              } else if (w == 1) {
                 JSONArray arr = new JSONArray();
                 for (JSONObject r : rows) arr.put(r);
                 a.export("lexinote-filter.json", "application/json", arr.toString());
               } else a.export("lexinote-filter.csv", "text/csv", "\uFEFF" + a.library.csv(rows));
+            })
+        .show();
+  }
+
+  void toggleSelected(String id) {
+    if (!selectedVocabularyIds.add(id)) selectedVocabularyIds.remove(id);
+  }
+
+  void pruneSelection(List<JSONObject> scope) {
+    HashSet<String> visibleIds = new HashSet<>();
+    for (JSONObject vocab : scope) visibleIds.add(vocab.optString("id"));
+    NotebookSelection.pruneToScope(selectedVocabularyIds, visibleIds);
+  }
+
+  boolean selectionInCurrentScope() {
+    HashSet<String> visibleIds = new HashSet<>();
+    for (JSONObject vocab : visible()) visibleIds.add(vocab.optString("id"));
+    return NotebookSelection.isWithinScope(selectedVocabularyIds, visibleIds);
+  }
+
+  void batchMenu() {
+    if (selectedVocabularyIds.isEmpty()) {
+      a.say("请先选择词汇");
+      return;
+    }
+    if (!selectionInCurrentScope()) {
+      a.say("筛选范围已变化，请重新选择词汇");
+      selectedVocabularyIds.clear();
+      a.render();
+      return;
+    }
+    List<String> options = new ArrayList<>();
+    if (selected != null) {
+      options.add("移动到笔记");
+      options.add("复制引用到笔记");
+      options.add("从当前笔记移除引用");
+    } else {
+      options.add("复制引用到笔记");
+    }
+    options.add("全局删除词汇（所有笔记）");
+    new AlertDialog.Builder(a)
+        .setTitle("批量操作 · " + selectedVocabularyIds.size() + " 项")
+        .setItems(
+            options.toArray(new String[0]),
+            (dialog, which) -> {
+              String action = options.get(which);
+              if (action.startsWith("移动") || action.startsWith("复制"))
+                chooseBatchTargets(action.startsWith("复制"));
+              else if (action.startsWith("从当前"))
+                confirmBatch(
+                    "仅移除这些词汇在当前笔记中的引用，实体和其他笔记保持不变。",
+                    () -> a.library.removeReferences(selected, ids()));
+              else
+                confirmBatch(
+                    "永久删除所选词汇实体，并从所有笔记中移除引用。此操作无法恢复。",
+                    () -> a.library.deleteVocabularyEverywhere(ids()));
+            })
+        .show();
+  }
+
+  String[] ids() {
+    if (!selectionInCurrentScope()) throw new IllegalStateException("所选词汇已不在当前筛选范围");
+    return selectedVocabularyIds.toArray(new String[0]);
+  }
+
+  void confirmBatch(String message, Runnable action) {
+    new AlertDialog.Builder(a)
+        .setMessage(message)
+        .setNegativeButton("取消", null)
+        .setPositiveButton(
+            "确认",
+            (d, w) -> {
+              if (a.change(action::run)) {
+                selectedVocabularyIds.clear();
+                selecting = false;
+              }
+            })
+        .show();
+  }
+
+  void chooseBatchTargets(boolean copy) {
+    List<JSONObject> targets = leaves();
+    String[] names = new String[targets.size()];
+    boolean[] checked = new boolean[targets.size()];
+    for (int i = 0; i < targets.size(); i++) {
+      names[i] = targets.get(i).optString("name");
+      checked[i] = targets.get(i).optString("id").equals(selected);
+    }
+    new AlertDialog.Builder(a)
+        .setTitle(copy ? "复制引用到目标笔记" : "移动到目标笔记")
+        .setMultiChoiceItems(names, checked, (dlg, index, value) -> checked[index] = value)
+        .setNegativeButton("取消", null)
+        .setPositiveButton(
+            "执行",
+            (dlg, w) -> {
+              List<String> targetIds = new ArrayList<>();
+              for (int i = 0; i < checked.length; i++)
+                if (checked[i]) targetIds.add(targets.get(i).optString("id"));
+              if (targetIds.isEmpty()) {
+                a.say("至少选择一个目标笔记");
+                return;
+              }
+              String sourceId = selected == null ? "nb_global_root" : selected;
+              confirmBatch(
+                  copy ? "将共享词汇引用复制到所选笔记，并保留各笔记显示设置。" : "将引用移动到所选笔记，并保留显示设置。",
+                  () ->
+                      a.library.batchReferences(
+                          sourceId, ids(), targetIds.toArray(new String[0]), copy));
             })
         .show();
   }
@@ -648,7 +849,77 @@ final class NotebookUi {
     box.addView(content);
     EditText tags = a.input("标签，以逗号分隔", tags(v.optJSONArray("tags")), false);
     box.addView(tags);
-    renderMeanings(box, v, null, true);
+    box.addView(a.text("长按下方字段选中文字，可添加批注。", 12, false));
+    JSONArray detailMeanings = v.optJSONArray("meanings");
+    for (int i = 0; detailMeanings != null && i < detailMeanings.length(); i++) {
+      JSONObject meaning = detailMeanings.optJSONObject(i);
+      box.addView(a.text("释义 " + (i + 1) + "  " + meaning.optString("part_of_speech"), 16, true));
+      if (!meaning.optString("phonetic").isEmpty())
+        box.addView(a.text(meaning.optString("phonetic"), 14, false));
+      String[] fields = {"zh_definition", "en_definition", "example", "source", "remarks"};
+      String[] labels = {"中文释义", "英文释义", "例句", "来源", "备注"};
+      for (int fieldIndex = 0; fieldIndex < fields.length; fieldIndex++) {
+        String field = fields[fieldIndex];
+        String value = meaning.optString(field);
+        if (value.isEmpty()) continue;
+        box.addView(a.text(labels[fieldIndex] + "：", 12, true));
+        TextView selectable = a.text(value, 13, false);
+        selectable.setTextIsSelectable(true);
+        selectable.setCustomSelectionActionModeCallback(
+            new ActionMode.Callback() {
+              final int annotationActionId = View.generateViewId();
+
+              @Override
+              public boolean onCreateActionMode(ActionMode mode, Menu menu) {
+                menu.add(Menu.NONE, annotationActionId, Menu.NONE, "批注选中文字");
+                return true;
+              }
+
+              @Override
+              public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
+                return false;
+              }
+
+              @Override
+              public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
+                if (!AnnotationActionIds.isAnnotationAction(item.getItemId(), annotationActionId))
+                  return false;
+                int start = selectable.getSelectionStart(), end = selectable.getSelectionEnd();
+                String selectedText =
+                    start >= 0 && end > start
+                        ? selectable.getText().subSequence(start, end).toString()
+                        : "";
+                mode.finish();
+                annotationDialog(meaning, field, selectedText, null);
+                return true;
+              }
+
+              @Override
+              public void onDestroyActionMode(ActionMode mode) {}
+            });
+        box.addView(selectable);
+      }
+      JSONArray images = meaning.optJSONArray("source_images");
+      for (int j = 0; images != null && j < images.length(); j++) {
+        ImageView image = new ImageView(a);
+        image.setImageURI(android.net.Uri.parse(images.optString(j)));
+        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        box.addView(image, new LinearLayout.LayoutParams(-1, a.dp(140)));
+      }
+      JSONArray notes = meaning.optJSONArray("annotations");
+      for (int j = 0; notes != null && j < notes.length(); j++) {
+        JSONObject note = notes.optJSONObject(j);
+        box.addView(
+            a.button(
+                "批注：" + note.optString("content"),
+                view ->
+                    annotationDialog(
+                        meaning,
+                        note.optString("target_field", "zh_definition"),
+                        note.optString("target_text"),
+                        note)));
+      }
+    }
     box.addView(a.button("编辑释义 / 批注", view -> meanings(v)));
     box.addView(a.button("调整多个笔记归属", view -> membership(v)));
     box.addView(a.button("配置各笔记显示", view -> displayConfig(v)));
@@ -764,6 +1035,53 @@ final class NotebookUi {
                       }
                     }))
         .show();
+  }
+
+  void annotationDialog(
+      JSONObject meaning, String defaultField, String targetText, JSONObject existing) {
+    String[] fields = {"zh_definition", "en_definition", "example", "source", "remarks"};
+    String[] labels = {"中文释义", "英文释义", "例句", "来源", "备注"};
+    int selectedField = 0;
+    for (int i = 0; i < fields.length; i++) if (fields[i].equals(defaultField)) selectedField = i;
+    Spinner spinner = new Spinner(a);
+    spinner.setAdapter(
+        new ArrayAdapter<>(a, android.R.layout.simple_spinner_dropdown_item, labels));
+    spinner.setSelection(selectedField);
+    EditText target = a.input("目标字词 / 片段", targetText, false);
+    EditText content = a.input("批注内容", existing == null ? "" : existing.optString("content"), true);
+    LinearLayout box = a.column();
+    box.addView(spinner);
+    box.addView(target);
+    box.addView(content);
+    AlertDialog.Builder builder =
+        new AlertDialog.Builder(a)
+            .setTitle(existing == null ? "添加字段批注" : "编辑字段批注")
+            .setView(box)
+            .setNegativeButton("取消", null)
+            .setPositiveButton(
+                "保存",
+                (d, w) ->
+                    a.change(
+                        () -> {
+                          int index = spinner.getSelectedItemPosition();
+                          if (existing == null)
+                            Annotations.add(
+                                meaning,
+                                fields[index],
+                                target.getText().toString(),
+                                content.getText().toString());
+                          else
+                            Annotations.edit(
+                                meaning,
+                                existing.optString("id"),
+                                fields[index],
+                                target.getText().toString(),
+                                content.getText().toString());
+                        }));
+    if (existing != null)
+      builder.setNeutralButton(
+          "删除", (d, w) -> a.change(() -> Annotations.remove(meaning, existing.optString("id"))));
+    builder.show();
   }
 
   void membership(JSONObject v) {

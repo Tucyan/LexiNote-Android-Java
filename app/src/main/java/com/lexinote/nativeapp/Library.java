@@ -225,25 +225,29 @@ public final class Library {
       array("vocabularies").put(v);
     }
     JSONArray target = v.optJSONArray("meanings"), incoming = r.optJSONArray("meanings");
+    Map<Integer, JSONObject> matchedDrafts = new LinkedHashMap<>();
     for (int i = 0; i < incoming.length(); i++) {
       JSONObject m = copy(incoming.optJSONObject(i));
-      boolean exists = false;
+      JSONObject matched = null;
       for (int j = 0; j < target.length(); j++) {
         JSONObject old = target.optJSONObject(j);
         if (old.optString("part_of_speech").equals(m.optString("part_of_speech"))
             && old.optString("zh_definition").equals(m.optString("zh_definition"))
             && old.optString("en_definition").equals(m.optString("en_definition"))) {
-          exists = true;
+          matched = old;
           mergeMeaning(old, m);
+          break;
         }
       }
-      if (!exists) {
+      if (matched == null) {
         put(m, "id", id());
         put(m, "created_at", now());
         put(m, "updated_at", now());
         if (!m.has("annotations")) put(m, "annotations", new JSONArray());
         target.put(m);
+        matched = m;
       }
+      matchedDrafts.put(i, matched);
     }
     String phonetic = r.optString("phonetic").trim();
     if (v.optString("phonetic").trim().isEmpty() && !phonetic.isEmpty())
@@ -270,6 +274,21 @@ public final class Library {
       if (nb.optJSONObject("vocabulary_display") == null)
         put(nb, "vocabulary_display", new JSONObject());
       JSONObject d = copy(display);
+      JSONArray shown = new JSONArray();
+      JSONObject meaningFields = new JSONObject();
+      for (int i = 0; i < incoming.length(); i++) {
+        JSONObject draft = incoming.optJSONObject(i), entity = matchedDrafts.get(i);
+        if (draft.optBoolean("selected", true)) shown.put(entity.optString("id"));
+        JSONObject fields = new JSONObject();
+        if (draft.has("save_zh")) put(fields, "zh_definition", draft.optBoolean("save_zh"));
+        if (draft.has("save_en")) put(fields, "en_definition", draft.optBoolean("save_en"));
+        if (draft.has("save_example")) put(fields, "example", draft.optBoolean("save_example"));
+        if (fields.length() > 0) put(meaningFields, entity.optString("id"), fields);
+      }
+      if (incoming.length() > 0) {
+        put(d, "meaning_ids", shown);
+        if (meaningFields.length() > 0) put(d, "meaning_fields", meaningFields);
+      }
       if (!d.has("meaning_ids")) {
         JSONArray ids = new JSONArray();
         for (int i = 0; i < target.length(); i++) ids.put(target.optJSONObject(i).optString("id"));
@@ -366,6 +385,90 @@ public final class Library {
     JSONArray a = array(key);
     for (int i = a.length() - 1; i >= 0; i--)
       if (id.equals(a.optJSONObject(i).optString("id"))) a.remove(i);
+  }
+
+  /** Batch reference operations keep vocabulary entities shared between notebooks. */
+  public void batchReferences(
+      String sourceId, String[] vocabularyIds, String[] targetIds, boolean copy) {
+    JSONObject source = find("notebooks", sourceId);
+    boolean globalSource = systemGlobal(source);
+    if (source == null
+        || globalSource && !copy
+        || !globalSource && source.optJSONArray("child_notebook_ids").length() > 0)
+      throw new IllegalArgumentException("请选择末级来源笔记");
+    List<JSONObject> targets = new ArrayList<>();
+    for (String targetId : targetIds) {
+      if (!copy && sourceId.equals(targetId)) throw new IllegalArgumentException("移动目标不能是来源笔记");
+      JSONObject target = find("notebooks", targetId);
+      if (target == null
+          || target.optJSONArray("child_notebook_ids").length() > 0
+          || target.optBoolean("is_global_root")) throw new IllegalArgumentException("请选择末级目标笔记");
+      targets.add(target);
+    }
+    JSONArray sourceIds = source.optJSONArray("vocabulary_ids");
+    for (String vocabularyId : vocabularyIds) {
+      if (!contains(sourceIds, vocabularyId)) continue;
+      JSONObject vocab = find("vocabularies", vocabularyId);
+      if (vocab == null) continue;
+      JSONObject sourceDisplay = display(source, vocabularyId);
+      for (JSONObject target : targets) {
+        JSONArray refs = target.optJSONArray("vocabulary_ids");
+        boolean newReference = !contains(refs, vocabularyId);
+        if (newReference) refs.put(vocabularyId);
+        if (newReference && sourceDisplay != null)
+          put(displayMap(target), vocabularyId, copy(sourceDisplay));
+      }
+      if (!copy) {
+        removeValue(sourceIds, vocabularyId);
+        JSONObject map = source.optJSONObject("vocabulary_display");
+        if (map != null) map.remove(vocabularyId);
+      }
+    }
+    rebuildGlobal();
+  }
+
+  public void removeReferences(String notebookId, String[] vocabularyIds) {
+    JSONObject note = find("notebooks", notebookId);
+    if (note == null || note.optBoolean("is_global_root"))
+      throw new IllegalArgumentException("不能从系统笔记移除词汇");
+    for (String id : vocabularyIds) removeValue(note.optJSONArray("vocabulary_ids"), id);
+    JSONObject displays = note.optJSONObject("vocabulary_display");
+    if (displays != null) for (String id : vocabularyIds) displays.remove(id);
+  }
+
+  /** Permanently deletes selected vocabulary entities and every notebook reference. */
+  public void deleteVocabularyEverywhere(String[] vocabularyIds) {
+    for (String id : vocabularyIds) {
+      delete("vocabularies", id);
+      JSONArray notes = array("notebooks");
+      for (int i = 0; i < notes.length(); i++) {
+        JSONObject note = notes.optJSONObject(i);
+        removeValue(note.optJSONArray("vocabulary_ids"), id);
+        JSONObject displays = note.optJSONObject("vocabulary_display");
+        if (displays != null) displays.remove(id);
+      }
+    }
+    rebuildGlobal();
+  }
+
+  private static JSONObject display(JSONObject note, String id) {
+    JSONObject map = note.optJSONObject("vocabulary_display");
+    return map == null ? null : map.optJSONObject(id);
+  }
+
+  private static JSONObject displayMap(JSONObject note) {
+    JSONObject map = note.optJSONObject("vocabulary_display");
+    if (map == null) {
+      map = new JSONObject();
+      put(note, "vocabulary_display", map);
+    }
+    return map;
+  }
+
+  private static boolean contains(JSONArray values, String id) {
+    if (values == null) return false;
+    for (int i = 0; i < values.length(); i++) if (id.equals(values.optString(i))) return true;
+    return false;
   }
 
   public JSONObject backup() {

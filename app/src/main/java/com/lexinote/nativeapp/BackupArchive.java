@@ -196,7 +196,11 @@ public final class BackupArchive {
       while (keys.hasNext()) {
         String key = keys.next();
         Object child = object.get(key);
-        if (key.equals("source_images") || key.equals("input_images")) {
+        // Presentation/default-field maps also use this name for a visibility flag.
+        if (key.equals("source_images") && child instanceof Boolean) continue;
+        if (key.equals("source_images")
+            || key.equals("input_images")
+            || key.equals("native_selected_images")) {
           check(child instanceof JSONArray, "图片列表格式无效");
           consumer.accept((JSONArray) child);
         } else visit(child, consumer);

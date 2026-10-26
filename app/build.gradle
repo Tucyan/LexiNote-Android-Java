@@ -9,7 +9,7 @@ android {
         targetSdk 36
         versionCode 1
         versionName '1.0.0-native'
-        testInstrumentationRunner 'com.lexinote.nativeapp.SmokeInstrumentation'
+        testInstrumentationRunner providers.gradleProperty('deviceRunner').getOrElse('com.lexinote.nativeapp.SmokeInstrumentation')
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17

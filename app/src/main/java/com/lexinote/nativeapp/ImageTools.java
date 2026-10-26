@@ -20,12 +20,22 @@ public final class ImageTools {
   private static final int MAX_EDGE = 1600;
 
   public static Uri persist(Context context, Uri source) throws Exception {
-    Bitmap bitmap = decode(context, source);
-    try {
-      return saveBitmap(context, bitmap);
-    } finally {
-      bitmap.recycle();
+    if (!"content".equals(source.getScheme()) && !"file".equals(source.getScheme()))
+      throw new IOException("请选择本机图片");
+    File directory = new File(context.getFilesDir(), "images");
+    if (!directory.isDirectory() && !directory.mkdirs()) throw new IOException("无法创建图片目录");
+    File file = new File(directory, UUID.randomUUID() + ".source");
+    try (InputStream in = open(context, source);
+        FileOutputStream out = new FileOutputStream(file)) {
+      byte[] buffer = new byte[32 * 1024];
+      int count;
+      while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+      out.getFD().sync();
+    } catch (Exception failure) {
+      if (!file.delete()) file.deleteOnExit();
+      throw failure;
     }
+    return Uri.fromFile(file);
   }
 
   public static Uri saveBitmap(Context context, Bitmap bitmap) throws Exception {
@@ -68,7 +78,7 @@ public final class ImageTools {
         || options.outWidth > 100000
         || options.outHeight > 100000) throw new IOException("无法读取图片，请选择 JPEG 或 PNG 图片");
     int sample = 1;
-    while (Math.max(options.outWidth, options.outHeight) / sample > MAX_EDGE * 2) sample *= 2;
+    while (Math.max(options.outWidth, options.outHeight) / sample > MAX_EDGE) sample *= 2;
     options.inSampleSize = sample;
     options.inJustDecodeBounds = false;
     options.inPreferredConfig = Bitmap.Config.ARGB_8888;

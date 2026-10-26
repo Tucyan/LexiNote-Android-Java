@@ -11,6 +11,33 @@ import org.json.JSONObject;
 import org.junit.Test;
 
 public class BackupArchiveTest {
+  @Test
+  public void sourceImageDisplayFlagsAreNotImageReferences() throws Exception {
+    Library library = new Library();
+    library.settings().put("default_fields_to_save", new JSONObject().put("source_images", true));
+    library.saveResult(
+        new JSONObject(
+            "{\"word\":\"photo\",\"type\":\"word\",\"meanings\":[{\"id\":\"m\",\"zh_definition\":\"照片\",\"source_images\":[\"file:///image.jpg\"]}]}"),
+        new String[] {"nb_default"},
+        new JSONObject().put("fields", new JSONObject().put("source_images", false)));
+    BackupArchive.Prepared prepared =
+        BackupArchive.decode(BackupArchive.encode(library.backup(), uri -> new byte[] {1}));
+    assertEquals(1, prepared.assets.size());
+    assertTrue(
+        prepared
+            .backup
+            .getJSONObject("settings")
+            .getJSONObject("default_fields_to_save")
+            .getBoolean("source_images"));
+    assertFalse(
+        new Library(prepared.backup)
+            .find("notebooks", "nb_default")
+            .getJSONObject("vocabulary_display")
+            .getJSONObject(library.local("photo").getString("id"))
+            .getJSONObject("fields")
+            .getBoolean("source_images"));
+  }
+
   private JSONObject fixture() throws Exception {
     Library library = new Library();
     JSONObject word =

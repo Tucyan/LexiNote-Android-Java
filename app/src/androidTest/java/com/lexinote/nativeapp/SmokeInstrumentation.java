@@ -91,6 +91,9 @@ public final class SmokeInstrumentation extends Instrumentation {
             () -> {
               try {
                 activity.library = new Library(before);
+                activity.session = null;
+                activity.query.assistantView = null;
+                activity.titles.reset();
                 activity.repository.save(activity.library);
                 activity.finish();
               } catch (Exception ignored) {
@@ -296,12 +299,18 @@ public final class SmokeInstrumentation extends Instrumentation {
     selected.recycle();
     crop.rotate();
     Bitmap rotated = crop.crop();
-    check(rotated.getWidth() == 100 && rotated.getHeight() == 100, "Rotation lost dimensions");
+    check(
+        Math.abs(rotated.getWidth() - 60) <= 1 && Math.abs(rotated.getHeight() - 60) <= 1,
+        "Rotation did not preserve the selected region");
     rotated.recycle();
+    crop.reset();
+    Bitmap full = crop.crop();
+    check(full.getWidth() == 100 && full.getHeight() == 100, "Reset did not restore full image");
+    full.recycle();
     down.recycle();
     move.recycle();
     up.recycle();
-    bitmap.recycle();
+    crop.release();
   }
 
   private void testCorruptDataRecovery() {

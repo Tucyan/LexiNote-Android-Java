@@ -9,6 +9,7 @@ import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CancellationException;
+import java.util.function.Consumer;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -37,6 +38,36 @@ public final class AiClient {
 
   public JSONObject agent(JSONArray messages, String text, String imageDataUrl) throws Exception {
     return AgentProtocol.parse(chat(AGENT_PROMPT, messages, text, imageDataUrl));
+  }
+
+  /**
+   * Streams only plain message-field text for display; the complete JSON is still validated before
+   * use.
+   */
+  public JSONObject agent(
+      JSONArray messages, String text, String imageDataUrl, Consumer<String> safeMessagePreview)
+      throws Exception {
+    return AgentProtocol.parse(
+        chat(AGENT_PROMPT, messages, text, imageDataUrl, safeMessagePreview));
+  }
+
+  /**
+   * Suggests a short display title. Caller must apply TitleSuggestionGuard before persisting it.
+   */
+  public String suggestTitle(String firstUserMessage, String firstAssistantMessage)
+      throws Exception {
+    String raw =
+        chat(
+            "根据对话内容生成一个简短标题，只输出标题文本，最多12个汉字或英文单词，不加引号。",
+            new JSONArray(),
+            "用户：" + limit(firstUserMessage, 1200) + "\n助手：" + limit(firstAssistantMessage, 1600),
+            null);
+    return TitleSuggestionGuard.clean(raw);
+  }
+
+  private static String limit(String value, int maximum) {
+    String text = value == null ? "" : value;
+    return text.substring(0, Math.min(maximum, text.length()));
   }
 
   public JSONObject lookup(String target, String context, String imageDataUrl) throws Exception {
@@ -85,6 +116,16 @@ public final class AiClient {
 
   private String chat(String system, JSONArray history, String text, String image)
       throws Exception {
+    return chat(system, history, text, image, null);
+  }
+
+  private String chat(
+      String system,
+      JSONArray history,
+      String text,
+      String image,
+      Consumer<String> safeMessagePreview)
+      throws Exception {
     checkCancelled();
     if (apiKey.isEmpty()) throw new IllegalStateException("请先在设置中填写 API Key 和模型");
     String endpoint = AgentProtocol.endpoint(provider.optString("base_url"));
@@ -121,7 +162,10 @@ public final class AiClient {
     }
     messages.put(new JSONObject().put("role", "user").put("content", content));
     JSONObject payload =
-        new JSONObject().put("model", model).put("messages", messages).put("stream", false);
+        new JSONObject()
+            .put("model", model)
+            .put("messages", messages)
+            .put("stream", safeMessagePreview != null);
     String effort = provider.optString("reasoning_effort", "off");
     if (java.util.Arrays.asList("low", "medium", "high").contains(effort))
       payload.put("reasoning_effort", effort);
@@ -136,7 +180,9 @@ public final class AiClient {
       connection.setInstanceFollowRedirects(false);
       connection.setDoOutput(true);
       connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-      connection.setRequestProperty("Accept", "application/json");
+      connection.setRequestProperty(
+          "Accept",
+          safeMessagePreview == null ? "application/json" : "text/event-stream, application/json");
       connection.setRequestProperty("Authorization", "Bearer " + apiKey);
       connection.setFixedLengthStreamingMode(bytes.length);
       try (OutputStream out = connection.getOutputStream()) {
@@ -150,8 +196,21 @@ public final class AiClient {
         throw new IOException("模型接口请求失败（HTTP " + code + "），请检查地址和模型 ID");
       }
       String raw;
+      String responseType = connection.getContentType();
       try (InputStream in = connection.getInputStream()) {
-        raw = read(in);
+        if (safeMessagePreview != null
+            && responseType != null
+            && responseType.toLowerCase(java.util.Locale.ROOT).contains("text/event-stream")) {
+          SseDecoder.Result stream =
+              SseDecoder.decode(in, safeMessagePreview, this::checkCancelled);
+          if (stream.content.isEmpty()) throw new IOException("模型未返回回答，请检查接口协议");
+          if (!stream.done && stream.finishReason == null)
+            throw new IOException("模型流式回复未正常结束，未应用不完整回答");
+          if (stream.finishReason != null && !"stop".equals(stream.finishReason))
+            throw new IOException("模型流式回复被截断或过滤（" + stream.finishReason + "），请重试");
+          checkCancelled();
+          return stream.content;
+        } else raw = read(in);
       }
       JSONObject response = new JSONObject(raw);
       JSONArray choices = response.optJSONArray("choices");
