@@ -6,6 +6,8 @@ LexiNote 的独立 Android 原生迁移首版。应用界面、业务规则和�
 
 这是已可编译、安装和离线使用的迁移首版，尚未达到全部 Expo 功能和交互的逐项一致。详细覆盖范围与差异见 [迁移说明](docs/MIGRATION.md)。
 
+已完成一次同模拟器界面对比与主要布局对齐，保留原版 / 调整前 / 调整后截图及可重复的离线数据。见 [界面对比报告](docs/ui-parity/REPORT.md) 和 [五页面对照图](docs/ui-parity/after-comparison.png)。
+
 ## 使用
 
 Android Studio 打开本目录，使用 Java 17。项目配置：Gradle 8.13 / Android Gradle Plugin 8.13.2 / compileSdk 36 / targetSdk 36 / minSdk 26（Android 8.0）。依赖优先使用阿里云 Maven 镜像，Gradle Wrapper 使用官方发行地址；现有本机缓存可离线构建。
@@ -28,16 +30,16 @@ macOS/Linux：`bash ./gradlew testDebugUnitTest lintDebug assembleDebug`。
 
 应用包名 `com.lexinote.nativeapp`，与原版 `com.lexinote.app` 可同时安装。Debug APK 由 Android 默认调试密钥签名，仅用于体验和开发；商店发布前请配置正式签名。没有在仓库中存放密钥、API Key 或本机 SDK 路径。
 
-启动后可在「笔记」手动新增词汇，并在「查询」离线查找；本地命中无需配置 AI。调用 AI 前，在「设置」填写 HTTPS OpenAI 兼容接口、模型 ID 和 API Key；图片请求还须开启视觉支持。API Key 留空表示保留，另有明确的清除按钮。网络请求可取消，使用同步 HTTP JSON 响应，由后台线程执行；没有自动重试或收费模型测试。
+启动后可在「笔记 → 管理」手动新增词汇，并在「查询记录」离线查找；本地命中无需配置 AI。调用 AI 前，在「我的 → 高级设置」填写 HTTPS OpenAI 兼容接口、模型 ID 和 API Key；图片请求还须开启视觉支持。API Key 留空表示保留，另有明确的清除按钮。网络请求可取消，使用同步 HTTP JSON 响应，由后台线程执行；没有自动重试或收费模型测试。
 
 ## 已实现
 
 - 查询：文本 / 图片 / 图文、图库和系统相机缩略图、原生裁剪/旋转/双指缩放、本地词库优先、澄清候选、目标确认、独立词条页和助手页、最近 10 条快照。
-- 会话：5 条临时会话上限、保存会话不受此限制、手动命名/按名称搜索/删除、动态追问只填入不自动发送、基本 Markdown 文本显示。
+- 会话：5 条临时会话上限、保存会话不受此限制、手动命名/按名称搜索/日期范围筛选/删除、动态追问只填入不自动发送、基本 Markdown 文本显示。
 - 笔记：树形笔记、同级子项类型一致、默认笔记与全局索引、词汇多笔记共享引用、完整保存及每笔记独立显示、释义编辑/批注/备注/标签、手动新增、筛选 JSON/CSV 导出。
 - 猜词：四阶段 AI 引导、图文语境、最终结果转入查询草稿后显式提交。
-- 复习：词卡/看义猜词、笔记范围、答案揭示、再次入队/困难/简单评分和本机保存。
-- 设置和数据：自定义供应商、视觉开关、深浅色/系统主题/字号、Keystore 加密凭据、原子文件保存、备份导入前确认和恢复前回退、损坏文件恢复入口。
+- 复习：词卡/看义猜词、笔记范围、10/20/50组量、答案揭示、再次入队/困难/简单评分和本机保存。
+- 设置和数据：自定义供应商、视觉开关、深浅色/系统主题/字号/强调色、Keystore 加密凭据、原子文件保存、备份导入前确认和恢复前回退、损坏文件恢复入口。
 
 ## 从 Expo 版迁移数据
 
@@ -54,7 +56,7 @@ macOS/Linux：`bash ./gradlew testDebugUnitTest lintDebug assembleDebug`。
 
 - 44 项 JVM 测试：协议、模拟 HTTP、共享引用、树结构、会话隔离、系统根重建、旧部分释义兼容、ZIP 与原编码器互通、损坏拒绝。
 - `lintDebug`、Java 编译、Debug APK 构建通过。部分 Lint 警告是固定工具版本与单语言 UI 提示；没有屏蔽构建错误。
-- Pixel 9a / Android API 37 的设备检查涵盖五入口、离线查词、复习、Keystore、裁剪、持久化/回退与损坏文件恢复。见 [设备日志](docs/verification/device-smoke.txt)。最低 Android 8.0 尚未进行真机验收。
+- Pixel 9a / Android API 37 的10组设备检查涵盖五入口、查询区尺寸、离线查词、图片隔离、猜词状态、复习、Keystore、裁剪、持久化/回退与损坏文件恢复。见 [设备日志](docs/verification/ui-device-smoke.txt)。最低 Android 8.0 尚未进行真机验收。
 - 模型的网络协议使用无网络模拟测试验证，未使用用户真实凭据调用远端 AI。
 
 复跑设备检查：

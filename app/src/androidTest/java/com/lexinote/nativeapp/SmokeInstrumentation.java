@@ -41,12 +41,16 @@ public final class SmokeInstrumentation extends Instrumentation {
       main(() -> before = activity.library.snapshot());
       main(this::testNavigation);
       record("five native tabs");
+      testQueryLayoutContract();
+      record("52dp header, 62dp icon tabs and equal-height 312dp query modes");
       main(this::testOfflineQueryAndSharedNotebooks);
       record("offline query, shared vocabulary references, result navigation");
       main(this::testConfirmationAndSessionImageIsolation);
       record("assistant proposals require hub confirmation and session images stay isolated");
       main(this::testReview);
       record("review answer and persisted grade");
+      main(this::testModeAndEmptyScopeRecovery);
+      record("hidden image exclusion, guess mode reset and empty review scope recovery");
       testCredentialEncryption();
       record("Android Keystore API key roundtrip");
       main(this::testCrop);
@@ -97,13 +101,48 @@ public final class SmokeInstrumentation extends Instrumentation {
   }
 
   private void testNavigation() {
-    String[] labels = {"查询", "猜词", "笔记", "复习", "设置"};
+    String[] labels = {"查询记录", "猜词辅助", "笔记", "复习", "我的"};
     for (int i = 0; i < labels.length; i++) {
       Button button = findButton(activity.nav, labels[i]);
       check(button != null, "Missing tab " + labels[i]);
       button.performClick();
       check(activity.page == i, "Tab did not navigate");
     }
+  }
+
+  private void testQueryLayoutContract() {
+    for (String mode : new String[] {"text", "image", "both"}) {
+      main(
+          () -> {
+            activity.screen = "tabs";
+            activity.page = 0;
+            activity.query.homeMode = mode;
+            activity.render();
+          });
+      main(
+          () -> {
+            View queryCard = activity.root.findViewWithTag("query-input-card");
+            check(queryCard != null, "Query mode has no shared input card");
+            check(
+                Math.abs(queryCard.getHeight() - activity.dp(312)) <= 1,
+                "Query modes do not preserve 312dp height");
+            check(
+                activity.nav.getHeight() == activity.dp(62),
+                "Bottom tab height diverged from reference");
+            check(
+                activity.root.findViewWithTag("page-header").getHeight() == activity.dp(52),
+                "Query header height diverged from reference");
+            for (int i = 0; i < activity.nav.getChildCount(); i++)
+              check(
+                  ((Button) activity.nav.getChildAt(i)).getCompoundDrawables()[1] != null,
+                  "Tab icon missing");
+          });
+    }
+    main(
+        () -> {
+          activity.query.homeMode = "text";
+          activity.render();
+        });
   }
 
   private void testOfflineQueryAndSharedNotebooks() {
@@ -124,7 +163,8 @@ public final class SmokeInstrumentation extends Instrumentation {
       check(activity.persist(), "Fixture persistence failed");
       activity.screen = "tabs";
       activity.page = 0;
-      activity.image = null;
+      activity.image = Uri.parse("file:///hidden-mode-image.jpg");
+      activity.query.homeMode = "text";
       activity.query.draft = "native smoke";
       activity.render();
       activity.query.submit();
@@ -133,6 +173,22 @@ public final class SmokeInstrumentation extends Instrumentation {
           activity.session.getJSONObject("query_results").getBoolean("is_from_local"),
           "Lookup was not local");
       check(findText(activity.body, "原生离线测试"), "Result definition is not visible");
+      check(
+          activity.session.optJSONArray("input_images") == null
+              || activity.session.optJSONArray("input_images").length() == 0,
+          "Text mode sent a hidden image");
+      JSONObject resultMeaning =
+          activity.session.getJSONObject("query_results").getJSONArray("meanings").getJSONObject(0);
+      check(
+          resultMeaning.optJSONArray("source_images") == null
+              || resultMeaning.optJSONArray("source_images").length() == 0,
+          "Hidden image polluted a text result");
+      check(
+          activity.image == null, "Text query retained an image for subsequent assistant requests");
+      check(activity.nav == null, "Result page unexpectedly shows tab navigation");
+      check(
+          activity.footer.getChildCount() > 0 && activity.footer.getParent() == activity.root,
+          "Result actions are not fixed outside scroll content");
       activity.screen = "tabs";
       activity.page = 0;
       activity.render();
@@ -144,17 +200,39 @@ public final class SmokeInstrumentation extends Instrumentation {
   private void testReview() {
     activity.page = 3;
     activity.render();
-    Button start = findButton(activity.body, "开始 / 重新开始");
+    Button start = findButton(activity.body, "开启本组复习");
     check(start != null, "Review start missing");
     start.performClick();
-    Button reveal = findButton(activity.body, "显示答案");
+    Button reveal = findButton(activity.root, "显示答案");
     check(reveal != null, "Review card missing");
     reveal.performClick();
-    Button grade = findButton(activity.body, "简单");
+    Button grade = findButton(activity.root, "简单");
     check(grade != null, "Review grade missing");
     grade.performClick();
     check(
         activity.library.local("native smoke").optInt("review_count") == 1, "Grade not persisted");
+  }
+
+  private void testModeAndEmptyScopeRecovery() {
+    activity.screen = "tabs";
+    activity.page = 1;
+    activity.query.guessMode = "image";
+    activity.query.stage = 2;
+    activity.query.guessReply = new JSONObject();
+    activity.render();
+    findButton(activity.body, "直接输入语境句").performClick();
+    check(
+        activity.query.stage == 0 && activity.query.guessReply == null,
+        "Guess mode retained the previous source's clues");
+    String empty = activity.library.createNotebook("Empty scope", null);
+    activity.page = 3;
+    activity.review.notebook = empty;
+    activity.render();
+    Button reset = findButton(activity.body, "返回全部复习范围");
+    check(reset != null, "Empty scope has no recovery action");
+    reset.performClick();
+    check(activity.review.notebook == null, "Empty scope could not return to all words");
+    activity.query.guessMode = "image";
   }
 
   private void testConfirmationAndSessionImageIsolation() {

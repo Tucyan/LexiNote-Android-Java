@@ -16,3 +16,5 @@ captures/
 
 .test-classes/
 *.class
+docs/ui-parity/current.xml
+docs/ui-parity/source-current.xml

@@ -22,7 +22,9 @@ public final class MainActivity extends Activity {
   Library library;
   Repository repository;
   SecureSettings secure;
-  LinearLayout root, body, nav;
+  LinearLayout root, body, nav, footer;
+  ScrollView scroll;
+  Typeface iconTypeface;
   int page = 0;
   String screen = "tabs";
   JSONObject session;
@@ -36,7 +38,7 @@ public final class MainActivity extends Activity {
   NotebookUi notebooks;
   ReviewUi review;
   SettingsUi settingsUi;
-  int background, foreground, muted, card, accent;
+  int background, foreground, muted, card, accent, inputBg, border, subtle;
   float scale = 1;
   File pendingExport;
   boolean recoveryOnly;
@@ -93,15 +95,19 @@ public final class MainActivity extends Activity {
             || mode.equals("system")
                 && (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
                     == Configuration.UI_MODE_NIGHT_YES;
-    background = Color.parseColor(dark ? "#111F20" : "#F7F8F1");
-    foreground = Color.parseColor(dark ? "#EDF6F2" : "#183C38");
-    muted = Color.parseColor(dark ? "#A4BAB4" : "#657C74");
-    card = Color.parseColor(dark ? "#203434" : "#FFFFFF");
-    accent = Color.parseColor(dark ? "#80D8C0" : "#087E70");
-    String f = library.settings().optString("font_size", "medium");
-    scale = f.equals("large") ? 1.2f : f.equals("small") ? .9f : 1;
-    getWindow().setStatusBarColor(background);
-    getWindow().setNavigationBarColor(background);
+    background = Color.parseColor(dark ? "#0F172A" : "#F8FAFC");
+    foreground = Color.parseColor(dark ? "#F8FAFC" : "#0F172A");
+    muted = Color.parseColor(dark ? "#94A3B8" : "#475569");
+    subtle = Color.parseColor(dark ? "#64748B" : "#94A3B8");
+    card = Color.parseColor(dark ? "#1E293B" : "#FFFFFF");
+    inputBg = Color.parseColor(dark ? "#0F172A" : "#F1F5F9");
+    border = Color.parseColor(dark ? "#334155" : "#E2E8F0");
+    String color = library.settings().optString("accent_color", "#10B981");
+    accent = Color.parseColor(color.matches("#[0-9a-fA-F]{6}") ? color : "#10B981");
+    String size = library.settings().optString("font_size", "medium");
+    scale = size.equals("large") ? 1.15f : size.equals("small") ? .9f : 1;
+    getWindow().setStatusBarColor(card);
+    getWindow().setNavigationBarColor(card);
     getWindow()
         .getDecorView()
         .setSystemUiVisibility(
@@ -114,8 +120,7 @@ public final class MainActivity extends Activity {
     if (library == null) return;
     palette();
     root = column();
-    root.setBackgroundColor(background);
-    root.setPadding(dp(16), dp(8), dp(16), 0);
+    root.setBackgroundColor(card);
     root.setOnApplyWindowInsetsListener(
         (view, insets) -> {
           int left, top, right, bottom;
@@ -125,55 +130,46 @@ public final class MainActivity extends Activity {
             top = bars.top;
             right = bars.right;
             bottom = bars.bottom;
+            if (insets.isVisible(WindowInsets.Type.ime()))
+              bottom = Math.max(bottom, insets.getInsets(WindowInsets.Type.ime()).bottom);
           } else {
             left = insets.getSystemWindowInsetLeft();
             top = insets.getSystemWindowInsetTop();
             right = insets.getSystemWindowInsetRight();
             bottom = insets.getSystemWindowInsetBottom();
           }
-          view.setPadding(dp(16) + left, dp(8) + top, dp(16) + right, bottom);
+          view.setPadding(left, top, right, bottom);
           return insets;
         });
-    root.requestApplyInsets();
     setContentView(root);
+    root.requestApplyInsets();
     if (recoveryOnly) {
-      root.addView(text("恢复本地数据", 27, true));
+      root.setPadding(dp(16), dp(60), dp(16), dp(16));
+      root.addView(text("恢复本地数据", 22, true));
       root.addView(text("数据读取失败，原文件保留。可以选择有效备份恢复；确认恢复时会额外保留损坏文件副本。\n" + loadFailure, 16, false));
       root.addView(button("选择 ZIP / JSON 备份恢复", v -> restore()));
       root.addView(button("退出", v -> finish()));
       return;
     }
-    if (!screen.equals("tabs")) {
-      LinearLayout bar = row();
-      bar.addView(
-          button(
-              "‹ 返回",
-              v -> {
-                screen = "tabs";
-                render();
-              }));
-      bar.addView(text(screen.equals("assistant") ? "AI 助手" : "词汇详情", 21, true));
-      root.addView(bar);
-    } else {
-      root.addView(text(new String[] {"LexiNote", "猜词辅助", "我的笔记", "每日复习", "设置"}[page], 27, true));
-      root.addView(
-          text(
-              new String[] {
-                    "从一个词，连接更多理解", "先思考，再逐步揭晓答案", "完整词库 · 共享引用 · 树形整理", "让掌握的词汇留下来", "本地优先，按需连接 AI"
-                  }
-                  [page],
-              13,
-              false));
-    }
-    ScrollView scroll = new ScrollView(this);
+    renderHeader();
+    scroll = new ScrollView(this);
+    scroll.setBackgroundColor(background);
     scroll.setFillViewport(true);
+    scroll.setClipToPadding(false);
     body = column();
-    body.setPadding(0, dp(12), 0, dp(20));
+    body.setTag("page-body");
+    int padding = page == 0 || !screen.equals("tabs") ? 14 : 16;
+    body.setPadding(dp(padding), dp(14), dp(padding), dp(32));
+    body.setBackgroundColor(background);
     scroll.addView(body);
     root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+    footer = column();
+    footer.setTag("fixed-footer");
+    footer.setBackground(shape(card, 0, 0));
+    footer.setVisibility(View.GONE);
     if (screen.equals("assistant")) query.assistant();
     else if (screen.equals("result")) query.result();
-    else {
+    else
       switch (page) {
         case 0:
           query.home();
@@ -190,33 +186,118 @@ public final class MainActivity extends Activity {
         default:
           settingsUi.show();
       }
-      nav = row();
-      String[] labels = {"查询", "猜词", "笔记", "复习", "设置"};
-      for (int i = 0; i < 5; i++) {
-        final int tab = i;
-        Button b =
-            button(
-                labels[i],
-                v -> {
-                  page = tab;
-                  render();
-                });
-        b.setTextSize(12 * scale);
-        b.setTextColor(i == page ? accent : muted);
-        nav.addView(b, new LinearLayout.LayoutParams(0, dp(58), 1));
-      }
-      root.addView(nav);
-    }
+    root.addView(footer, new LinearLayout.LayoutParams(-1, -2));
+    if (screen.equals("tabs")) renderNavigation();
+    else nav = null;
   }
 
-  int dp(float v) {
-    return Math.round(v * getResources().getDisplayMetrics().density);
+  void renderHeader() {
+    LinearLayout bar = row();
+    bar.setTag("page-header");
+    bar.setPadding(dp(16), 0, dp(16), 0);
+    bar.setBackgroundColor(card);
+    String title;
+    if (!screen.equals("tabs")) {
+      TextView back = icon("chevron-back", 24, foreground);
+      back.setContentDescription("返回");
+      back.setOnClickListener(
+          v -> {
+            screen = "tabs";
+            render();
+          });
+      bar.addView(back, new LinearLayout.LayoutParams(dp(40), dp(48)));
+      JSONObject result = session == null ? null : session.optJSONObject("query_results");
+      title =
+          screen.equals("assistant")
+              ? session != null && query.saved(session) ? query.title(session) : "AI 助手"
+              : result == null ? "查询信息" : result.optString("word", "查询信息");
+    } else title = new String[] {"LexiNote · 查询和记录", "语境猜词辅助", "笔记管理与词库", "复习中心", "设置与数据管理"}[page];
+    TextView heading = text(title, 17, true);
+    heading.setSingleLine(true);
+    heading.setTag("page-title");
+    boolean homeHeader = screen.equals("tabs") && page == 0;
+    bar.addView(
+        heading, new LinearLayout.LayoutParams(homeHeader ? -2 : 0, -2, homeHeader ? 0 : 1));
+    if (screen.equals("assistant")) {
+      Button save =
+          button(
+              session != null && query.saved(session) ? "修改名称" : "保存会话",
+              v -> query.saveConversation());
+      save.setEnabled(
+          session != null
+              && session.optJSONArray("ai_messages") != null
+              && session.optJSONArray("ai_messages").length() > 0);
+      bar.addView(save);
+    }
+    if (screen.equals("tabs") && page == 0) {
+      TextView version = text("v1.3", 11, true);
+      version.setTextColor(accent);
+      version.setPadding(dp(6), dp(3), dp(6), dp(3));
+      version.setBackground(shape((accent & 0xFFFFFF) | 0x1A000000, 6, 0));
+      LinearLayout.LayoutParams versionLp = new LinearLayout.LayoutParams(-2, -2);
+      versionLp.leftMargin = dp(8);
+      bar.addView(version, versionLp);
+      bar.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
+      LinearLayout recent = row();
+      recent.setGravity(Gravity.CENTER);
+      recent.addView(icon("time-outline", 17, foreground));
+      TextView count = text(" 最近查询 (" + library.array("recent_queries").length() + ")", 12, false);
+      count.setTextColor(foreground);
+      count.setTextIsSelectable(false);
+      recent.addView(count);
+      recent.setContentDescription("最近查询");
+      recent.setOnClickListener(v -> query.showRecent());
+      bar.addView(recent, new LinearLayout.LayoutParams(-2, dp(48)));
+    }
+    root.addView(
+        bar, new LinearLayout.LayoutParams(-1, dp(screen.equals("tabs") && page == 0 ? 52 : 56)));
+    View line = new View(this);
+    line.setBackgroundColor(border);
+    root.addView(line, new LinearLayout.LayoutParams(-1, dp(1)));
+  }
+
+  void renderNavigation() {
+    nav = row();
+    nav.setTag("bottom-navigation");
+    nav.setBackgroundColor(card);
+    String[] labels = {"查询记录", "猜词辅助", "笔记", "复习", "我的"};
+    String[] glyphs = {
+      "search", "bulb-outline", "book-outline", "repeat-outline", "settings-outline"
+    };
+    for (int i = 0; i < labels.length; i++) {
+      final int index = i;
+      Button b =
+          button(
+              labels[i],
+              v -> {
+                page = index;
+                render();
+              });
+      b.setTag("tab-" + i);
+      b.setTextSize(11 * scale);
+      b.setTextColor(i == page ? accent : subtle);
+      b.setMinWidth(0);
+      b.setMinimumWidth(0);
+      b.setPadding(0, dp(6), 0, dp(7));
+      b.setCompoundDrawablePadding(dp(2));
+      b.setCompoundDrawables(
+          null, new GlyphDrawable(glyphs[i], 24, i == page ? accent : subtle), null, null);
+      b.setBackground(shape(Color.TRANSPARENT, 0, 0));
+      nav.addView(b, new LinearLayout.LayoutParams(0, dp(62), 1));
+    }
+    View line = new View(this);
+    line.setBackgroundColor(border);
+    root.addView(line, new LinearLayout.LayoutParams(-1, dp(1)));
+    root.addView(nav, new LinearLayout.LayoutParams(-1, dp(62)));
+  }
+
+  int dp(float value) {
+    return Math.round(value * getResources().getDisplayMetrics().density);
   }
 
   LinearLayout column() {
     LinearLayout l = new LinearLayout(this);
     l.setOrientation(LinearLayout.VERTICAL);
-    l.setBackgroundColor(background);
     return l;
   }
 
@@ -227,79 +308,182 @@ public final class MainActivity extends Activity {
     return l;
   }
 
-  TextView text(String s, int size, boolean bold) {
-    TextView t = new TextView(this);
-    t.setText(s);
-    t.setTextColor(bold ? foreground : muted);
-    t.setTextSize(size * scale);
-    t.setPadding(0, dp(5), 0, dp(5));
-    if (bold) t.setTypeface(null, Typeface.BOLD);
-    t.setTextIsSelectable(true);
-    return t;
+  void passiveLabels(View view) {
+    if (view instanceof TextView && !(view instanceof Button))
+      ((TextView) view).setTextIsSelectable(false);
+    if (view instanceof ViewGroup) {
+      ViewGroup group = (ViewGroup) view;
+      for (int i = 0; i < group.getChildCount(); i++) passiveLabels(group.getChildAt(i));
+    }
   }
 
-  Button button(String s, View.OnClickListener click) {
-    Button b = new Button(this);
-    b.setText(s);
-    b.setAllCaps(false);
-    b.setTextSize(14 * scale);
-    b.setTextColor(accent);
-    b.setMinHeight(dp(48));
-    b.setMinimumHeight(dp(48));
-    b.setElevation(0);
-    b.setStateListAnimator(null);
-    GradientDrawable shape = new GradientDrawable();
-    shape.setCornerRadius(dp(12));
-    shape.setColor((accent & 0x00FFFFFF) | 0x14000000);
-    b.setBackgroundTintList(null);
-    b.setBackground(
+  TextView text(String value, int size, boolean bold) {
+    TextView view = new TextView(this);
+    view.setText(value);
+    view.setTextColor(bold ? foreground : muted);
+    view.setTextSize(size * scale);
+    if (bold) view.setTypeface(null, Typeface.BOLD);
+    view.setTextIsSelectable(true);
+    return view;
+  }
+
+  GradientDrawable shape(int color, int radius, int stroke) {
+    GradientDrawable value = new GradientDrawable();
+    value.setColor(color);
+    value.setCornerRadius(dp(radius));
+    if (stroke != 0) value.setStroke(dp(1), stroke);
+    return value;
+  }
+
+  Button button(String label, View.OnClickListener click) {
+    Button value = new Button(this);
+    value.setText(label);
+    value.setAllCaps(false);
+    value.setTextSize(14 * scale);
+    value.setTextColor(accent);
+    value.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+    value.setMinHeight(dp(36));
+    value.setMinimumHeight(dp(36));
+    value.setMinWidth(0);
+    value.setMinimumWidth(0);
+    value.setElevation(0);
+    value.setStateListAnimator(null);
+    value.setBackgroundTintList(null);
+    value.setBackground(
         new android.graphics.drawable.RippleDrawable(
-            android.content.res.ColorStateList.valueOf((accent & 0x00FFFFFF) | 0x33000000),
-            shape,
+            android.content.res.ColorStateList.valueOf((accent & 0xFFFFFF) | 0x26000000),
+            shape(Color.TRANSPARENT, 10, 0),
             null));
-    b.setPadding(dp(10), dp(8), dp(10), dp(8));
-    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-    lp.setMargins(dp(3), dp(3), dp(3), dp(3));
-    b.setLayoutParams(lp);
-    b.setOnClickListener(click);
-    return b;
+    value.setPadding(dp(10), dp(8), dp(10), dp(8));
+    value.setOnClickListener(click);
+    value.setLayoutParams(new LinearLayout.LayoutParams(-2, -2));
+    return value;
+  }
+
+  Button primaryButton(String label, View.OnClickListener click) {
+    Button value = button(label, click);
+    value.setTextColor(Color.WHITE);
+    value.setBackground(shape(accent, 10, 0));
+    value.setMinHeight(dp(44));
+    value.setMinimumHeight(dp(44));
+    value.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(44)));
+    return value;
+  }
+
+  Button outlineButton(String label, View.OnClickListener click) {
+    Button value = button(label, click);
+    value.setTextColor(foreground);
+    value.setBackground(shape(Color.TRANSPARENT, 10, border));
+    value.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(44)));
+    return value;
+  }
+
+  Button chip(String label, boolean selected, View.OnClickListener click) {
+    Button value = button(label, click);
+    value.setTextSize(12 * scale);
+    value.setTextColor(selected ? accent : muted);
+    value.setBackground(
+        shape(
+            selected ? (accent & 0xFFFFFF) | 0x1A000000 : inputBg, 10, selected ? accent : border));
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(36));
+    lp.rightMargin = dp(8);
+    value.setLayoutParams(lp);
+    return value;
   }
 
   EditText input(String hint, String value, boolean multiline) {
-    EditText e = new EditText(this);
-    e.setHint(hint);
-    e.setText(value);
-    e.setTextColor(foreground);
-    e.setHintTextColor(muted);
-    e.setTextSize(16 * scale);
-    e.setSingleLine(!multiline);
+    EditText edit = new EditText(this);
+    edit.setHint(hint);
+    edit.setText(value);
+    edit.setTextColor(foreground);
+    edit.setHintTextColor(subtle);
+    edit.setTextSize(14 * scale);
+    edit.setSingleLine(!multiline);
+    edit.setMinHeight(dp(44));
     if (multiline) {
-      e.setMinLines(2);
-      e.setGravity(Gravity.TOP);
+      edit.setMinLines(2);
+      edit.setGravity(Gravity.TOP);
     }
-    e.setPadding(dp(12), dp(10), dp(12), dp(10));
-    GradientDrawable shape = new GradientDrawable();
-    shape.setColor(card);
-    shape.setCornerRadius(dp(12));
-    shape.setStroke(dp(1), muted);
-    e.setBackground(shape);
-    e.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-    return e;
+    edit.setPadding(dp(12), dp(9), dp(12), dp(9));
+    edit.setBackground(shape(inputBg, 10, border));
+    edit.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+    return edit;
   }
 
   LinearLayout card(String title) {
-    LinearLayout c = column();
-    c.setPadding(dp(14), dp(12), dp(14), dp(12));
-    GradientDrawable shape = new GradientDrawable();
-    shape.setColor(card);
-    shape.setCornerRadius(dp(16));
-    c.setBackground(shape);
+    LinearLayout value = column();
+    value.setPadding(dp(14), dp(14), dp(14), dp(14));
+    value.setBackground(shape(card, 16, border));
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-    lp.bottomMargin = dp(12);
-    c.setLayoutParams(lp);
-    if (title != null) c.addView(text(title, 18, true));
-    body.addView(c);
-    return c;
+    lp.bottomMargin = dp(14);
+    value.setLayoutParams(lp);
+    if (title != null) {
+      TextView heading = text(title, 16, true);
+      LinearLayout.LayoutParams h = new LinearLayout.LayoutParams(-1, -2);
+      h.bottomMargin = dp(12);
+      value.addView(heading, h);
+    }
+    body.addView(value);
+    return value;
+  }
+
+  LinearLayout fixedFooter() {
+    footer.setVisibility(View.VISIBLE);
+    footer.setPadding(dp(14), dp(10), dp(14), dp(10));
+    return footer;
+  }
+
+  View gap(int height) {
+    View view = new View(this);
+    view.setLayoutParams(new LinearLayout.LayoutParams(1, dp(height)));
+    return view;
+  }
+
+  Typeface icons() {
+    if (iconTypeface == null)
+      iconTypeface = Typeface.createFromAsset(getAssets(), "fonts/Ionicons.ttf");
+    return iconTypeface;
+  }
+
+  TextView icon(String name, int size, int color) {
+    TextView value = new TextView(this);
+    value.setTypeface(icons());
+    value.setText(new String(Character.toChars(IconGlyphs.VALUES.getOrDefault(name, 0xF55F))));
+    value.setTextSize(size);
+    value.setTextColor(color);
+    value.setGravity(Gravity.CENTER);
+    value.setIncludeFontPadding(false);
+    return value;
+  }
+
+  final class GlyphDrawable extends android.graphics.drawable.Drawable {
+    final String glyph;
+    final int size, color;
+
+    GlyphDrawable(String name, int size, int color) {
+      this.glyph = new String(Character.toChars(IconGlyphs.VALUES.getOrDefault(name, 0xF55F)));
+      this.size = dp(size);
+      this.color = color;
+      setBounds(0, 0, this.size, this.size);
+    }
+
+    public void draw(android.graphics.Canvas canvas) {
+      android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+      p.setTypeface(icons());
+      p.setTextSize(size);
+      p.setColor(color);
+      p.setTextAlign(android.graphics.Paint.Align.CENTER);
+      android.graphics.Paint.FontMetrics fm = p.getFontMetrics();
+      canvas.drawText(glyph, size / 2f, (size - fm.ascent - fm.descent) / 2f, p);
+    }
+
+    public void setAlpha(int alpha) {}
+
+    public void setColorFilter(android.graphics.ColorFilter filter) {}
+
+    public int getOpacity() {
+      return android.graphics.PixelFormat.TRANSLUCENT;
+    }
   }
 
   void say(String s) {
@@ -439,6 +623,20 @@ public final class MainActivity extends Activity {
               }
             })
         .show();
+  }
+
+  void chooseImage(boolean camera) {
+    try {
+      if (camera) startActivityForResult(new Intent(MediaStore.ACTION_IMAGE_CAPTURE), 102);
+      else {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.setType("image/*");
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        startActivityForResult(intent, 101);
+      }
+    } catch (Exception e) {
+      error(e);
+    }
   }
 
   @Override

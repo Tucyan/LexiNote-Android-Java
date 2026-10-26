@@ -8,7 +8,7 @@ import org.json.*;
 
 final class NotebookUi {
   final MainActivity a;
-  String selected = null, filter = "";
+  String selected = null, filter = "", typeFilter = "全部";
 
   NotebookUi(MainActivity a) {
     this.a = a;
@@ -22,6 +22,9 @@ final class NotebookUi {
     for (int i = 0; i < vs.length(); i++) {
       JSONObject v = vs.optJSONObject(i);
       if (refs != null && !contains(refs, v.optString("id"))) continue;
+      if (!typeFilter.equals("全部")
+          && !v.optString("type", "word").equals(typeFilter.equals("短语") ? "phrase" : "word"))
+        continue;
       if (!Library.normalized(v.toString()).contains(Library.normalized(filter))) continue;
       out.add(v);
     }
@@ -34,11 +37,40 @@ final class NotebookUi {
   }
 
   void show() {
-    a.body.addView(a.button("+ 离线添加词汇", v -> manual()));
-    LinearLayout scope = a.card(selected == null ? "全局词库" : path(selected));
-    scope.addView(
-        a.button(
-            "全局词库（永久）",
+    // Keep category controls above the scrolling vocabulary list, as in the source app.
+    LinearLayout controls = a.column();
+    controls.setBackgroundColor(a.card);
+    a.root.addView(controls, a.root.indexOfChild(a.scroll));
+    a.body.setPadding(a.dp(14), 0, a.dp(14), a.dp(32));
+    LinearLayout tools = a.row();
+    tools.setPadding(a.dp(14), a.dp(8), a.dp(14), a.dp(8));
+    EditText f = a.input("搜索词汇、含义或例句…", filter, false);
+    f.setTextSize(13 * a.scale);
+    f.setMinHeight(0);
+    f.setPadding(a.dp(10), 0, a.dp(8), 0);
+    f.setCompoundDrawables(a.new GlyphDrawable("search-outline", 16, a.subtle), null, null, null);
+    f.setCompoundDrawablePadding(a.dp(6));
+    tools.addView(f, new LinearLayout.LayoutParams(0, a.dp(36), 1));
+    Button export = a.chip("导出", true, v -> exportMenu());
+    export.setCompoundDrawables(
+        a.new GlyphDrawable("share-outline", 16, a.accent), null, null, null);
+    export.setCompoundDrawablePadding(a.dp(4));
+    LinearLayout.LayoutParams exportLp = new LinearLayout.LayoutParams(-2, a.dp(36));
+    exportLp.leftMargin = a.dp(8);
+    tools.addView(export, exportLp);
+    controls.addView(tools);
+    f.setOnEditorActionListener(
+        (v, action, event) -> {
+          filter = f.getText().toString();
+          a.render();
+          return true;
+        });
+    LinearLayout cats = a.row();
+    cats.setPadding(a.dp(14), a.dp(7), a.dp(14), a.dp(7));
+    cats.addView(
+        a.chip(
+            "全部词汇 (" + a.library.array("vocabularies").length() + ")",
+            selected == null,
             v -> {
               selected = null;
               a.render();
@@ -47,98 +79,332 @@ final class NotebookUi {
     for (int i = 0; i < ns.length(); i++) {
       JSONObject n = ns.optJSONObject(i);
       if (Library.systemGlobal(n)) continue;
-      String parent = n.optString("parent_id", "");
-      if (parent.equals("null")) parent = "";
-      if ((selected == null && parent.isEmpty()) || selected != null && parent.equals(selected))
-        scope.addView(
-            a.button(
-                "▸ " + n.optString("name"),
-                v -> {
-                  selected = n.optString("id");
-                  a.render();
-                }));
+      cats.addView(
+          a.chip(
+              n.optString("name") + " (" + n.optJSONArray("vocabulary_ids").length() + ")",
+              n.optString("id").equals(selected),
+              v -> {
+                selected = n.optString("id");
+                a.render();
+              }));
     }
+    cats.addView(a.chip("＋ 新建分类", false, v -> create()));
+    HorizontalScrollView catScroll = new HorizontalScrollView(a);
+    catScroll.setHorizontalScrollBarEnabled(false);
+    catScroll.addView(cats);
+    controls.addView(catScroll);
+    JSONObject selectedNote = selected == null ? null : a.library.find("notebooks", selected);
+    LinearLayout active = a.row();
+    active.setPadding(a.dp(14), a.dp(5), a.dp(14), a.dp(5));
+    active.addView(
+        a.icon(selectedNote == null ? "planet-outline" : "folder-outline", 20, a.accent));
+    active.addView(
+        a.text(" " + (selectedNote == null ? "全部词汇" : path(selected)), 15, true),
+        new LinearLayout.LayoutParams(0, -2, 1));
+    active.addView(
+        a.chip(
+            "信息",
+            false,
+            v ->
+                new AlertDialog.Builder(a)
+                    .setTitle("分类信息")
+                    .setMessage(
+                        (selectedNote == null ? "全部词汇" : path(selected))
+                            + " · "
+                            + visible().size()
+                            + " 条词汇\n词汇实体可被多个笔记共享引用。")
+                    .setPositiveButton("确定", null)
+                    .show()));
+    active.addView(a.chip("管理", false, v -> manage(selectedNote)));
+    controls.addView(active);
+    LinearLayout types = a.row();
+    types.setPadding(a.dp(14), a.dp(5), a.dp(14), a.dp(5));
+    types.setBackgroundColor(a.background);
+    for (String t : new String[] {"全部", "单词", "短语"})
+      types.addView(
+          a.chip(
+              t,
+              typeFilter.equals(t),
+              v -> {
+                typeFilter = t;
+                a.render();
+              }));
+    controls.addView(types);
     if (selected != null) {
       JSONObject n = a.library.find("notebooks", selected);
       if (n == null) {
         selected = null;
         return;
       }
-      scope.addView(
-          a.button(
-              "↑ 上一级",
-              v -> {
-                String p = n.optString("parent_id", "");
-                selected = p.isEmpty() || p.equals("null") ? null : p;
-                a.render();
-              }));
-      scope.addView(a.button("重命名", v -> rename(n)));
-      scope.addView(
-          a.button(
-              "删除笔记树（保留词汇实体）",
-              v ->
-                  new AlertDialog.Builder(a)
-                      .setMessage("删除当前笔记及其全部子笔记？词汇仍在全局词库。")
-                      .setNegativeButton("取消", null)
-                      .setPositiveButton(
-                          "删除",
-                          (d, w) ->
-                              a.change(
-                                  () -> {
-                                    a.library.deleteNotebook(selected);
-                                    selected = null;
-                                  }))
-                      .show()));
+      String p = n.optString("parent_id", "");
+      if (!p.isEmpty() && !p.equals("null"))
+        a.body.addView(
+            a.button(
+                "↑ 上一级",
+                v -> {
+                  selected = p;
+                  a.render();
+                }));
     }
-    JSONObject selectedNote = selected == null ? null : a.library.find("notebooks", selected);
-    if (selectedNote == null || !selectedNote.optBoolean("is_default"))
-      scope.addView(a.button(selected == null ? "创建笔记树" : "创建子笔记", v -> create()));
-    LinearLayout search = a.card("词汇筛选");
-    EditText f = a.input("搜索词汇、释义、标签、类型", filter, false);
-    search.addView(f);
-    search.addView(
-        a.button(
-            "筛选",
-            v -> {
-              filter = f.getText().toString();
-              a.render();
-            }));
     List<JSONObject> rows = visible();
-    search.addView(a.text(rows.size() + " 条词汇", 14, false));
-    search.addView(
-        a.button(
-            "导出当前筛选 JSON",
-            v -> {
-              JSONArray arr = new JSONArray();
-              for (JSONObject r : rows) arr.put(r);
-              a.export("lexinote-filter.json", "application/json", arr.toString());
-            }));
-    search.addView(
-        a.button(
-            "导出当前筛选 CSV",
-            v -> a.export("lexinote-filter.csv", "text/csv", "\uFEFF" + a.library.csv(rows))));
+    if (selected != null) {
+      JSONArray children =
+          selectedNote == null ? null : selectedNote.optJSONArray("child_notebook_ids");
+      if (children != null && children.length() > 0) {
+        LinearLayout grid = a.row();
+        for (int i = 0; i < children.length(); i++) {
+          JSONObject child = a.library.find("notebooks", children.optString(i));
+          if (child == null) continue;
+          int count =
+              child.optJSONArray("vocabulary_ids") == null
+                  ? 0
+                  : child.optJSONArray("vocabulary_ids").length();
+          Button b =
+              a.button(
+                  "▣  " + child.optString("name") + "\n" + count + " 条",
+                  v -> {
+                    selected = child.optString("id");
+                    a.render();
+                  });
+          grid.addView(b, new LinearLayout.LayoutParams(0, a.dp(72), 1));
+          if (i % 2 == 1) {
+            a.body.addView(grid);
+            grid = a.row();
+          }
+        }
+        if (grid.getChildCount() > 0) a.body.addView(grid);
+      }
+    }
     for (JSONObject v : rows) {
-      LinearLayout c = a.card(v.optString("content"));
       JSONObject display = null;
       JSONObject n = selected == null ? null : a.library.find("notebooks", selected);
       if (n != null && n.optJSONObject("vocabulary_display") != null)
         display = n.optJSONObject("vocabulary_display").optJSONObject(v.optString("id"));
-      renderMeanings(c, v, display, false);
-      c.addView(a.button("编辑 / 归属 / 显示配置", view -> detail(v)));
-      if (selected != null)
-        c.addView(
-            a.button(
-                "从此笔记移除引用",
-                view ->
-                    a.change(
-                        () ->
-                            Library.removeValue(
-                                a.library
-                                    .find("notebooks", selected)
-                                    .optJSONArray("vocabulary_ids"),
-                                v.optString("id")))));
+      renderVocabularyListCard(v, display);
     }
-    if (rows.isEmpty()) a.card("还没有词汇").addView(a.text("先在查询中获取词条，再选择保存到笔记。", 15, false));
+    if (rows.isEmpty()) {
+      LinearLayout empty = a.column();
+      empty.setGravity(Gravity.CENTER);
+      empty.addView(a.icon("file-tray-outline", 48, a.subtle));
+      empty.addView(a.gap(12));
+      empty.addView(a.text("此分类暂无词汇记录", 16, true));
+      empty.addView(a.gap(6));
+      TextView hint = a.text("在「查询和记录」页面查询后，点击整理笔记即可保存到此处。", 13, false);
+      hint.setGravity(Gravity.CENTER);
+      hint.setPadding(a.dp(16), 0, a.dp(16), 0);
+      empty.addView(hint);
+      a.body.addView(empty, new LinearLayout.LayoutParams(-1, a.dp(260)));
+    }
+  }
+
+  void renderVocabularyListCard(JSONObject vocabulary, JSONObject display) {
+    LinearLayout card = a.card(null);
+    card.setPadding(a.dp(12), a.dp(12), a.dp(12), a.dp(12));
+    card.setOnClickListener(view -> detail(vocabulary));
+    card.setOnLongClickListener(
+        view -> {
+          showVocabularyActions(vocabulary);
+          return true;
+        });
+
+    LinearLayout top = a.row();
+    top.setGravity(Gravity.CENTER_VERTICAL);
+    TextView word = a.text(vocabulary.optString("content"), 16, true);
+    top.addView(word, new LinearLayout.LayoutParams(0, -2, 1));
+
+    String type = vocabulary.optString("type", "word").equals("phrase") ? "短语" : "单词";
+    TextView typeBadge = a.text(type, 11, true);
+    typeBadge.setTextColor(a.muted);
+    typeBadge.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
+    typeBadge.setBackground(a.shape(a.inputBg, 16, 0));
+    LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(-2, -2);
+    badgeLp.rightMargin = a.dp(6);
+    top.addView(typeBadge, badgeLp);
+
+    ImageButton edit = new ImageButton(a);
+    edit.setImageResource(android.R.drawable.ic_menu_edit);
+    edit.setColorFilter(a.accent);
+    edit.setContentDescription("编辑词汇");
+    edit.setBackground(a.shape(android.graphics.Color.TRANSPARENT, 8, 0));
+    edit.setPadding(a.dp(7), a.dp(7), a.dp(7), a.dp(7));
+    edit.setOnClickListener(view -> detail(vocabulary));
+    top.addView(edit, new LinearLayout.LayoutParams(a.dp(32), a.dp(32)));
+    card.addView(top);
+
+    JSONArray tags = vocabulary.optJSONArray("tags");
+    if (tags != null && tags.length() > 0) {
+      LinearLayout tagRow = a.row();
+      LinearLayout.LayoutParams tagRowLp = new LinearLayout.LayoutParams(-1, -2);
+      tagRowLp.topMargin = a.dp(3);
+      for (int i = 0; i < tags.length(); i++) {
+        TextView tag = a.text("#" + tags.optString(i), 11, true);
+        tag.setTextColor(a.accent);
+        tag.setPadding(a.dp(7), a.dp(3), a.dp(7), a.dp(3));
+        tag.setBackground(a.shape((a.accent & 0x00FFFFFF) | 0x1A000000, 16, 0));
+        LinearLayout.LayoutParams tagLp = new LinearLayout.LayoutParams(-2, -2);
+        tagLp.rightMargin = a.dp(5);
+        tagRow.addView(tag, tagLp);
+      }
+      card.addView(tagRow, tagRowLp);
+    }
+
+    JSONArray meanings = vocabulary.optJSONArray("meanings");
+    JSONObject fields = display == null ? null : display.optJSONObject("fields");
+    JSONObject perMeaning = display == null ? null : display.optJSONObject("meaning_fields");
+    JSONArray visibleIds = display == null ? null : display.optJSONArray("meaning_ids");
+    int visibleCount = 0;
+    int annotationCount = 0;
+    for (int i = 0; meanings != null && i < meanings.length(); i++) {
+      JSONObject meaning = meanings.optJSONObject(i);
+      if (visibleIds != null && !contains(visibleIds, meaning.optString("id"))) continue;
+      visibleCount++;
+      JSONObject localFields =
+          perMeaning == null ? null : perMeaning.optJSONObject(meaning.optString("id"));
+      boolean showZh = displayField(fields, localFields, "zh_definition");
+      boolean showEn = displayField(fields, localFields, "en_definition");
+      boolean showExample = displayField(fields, localFields, "example");
+      String definition = showZh ? meaning.optString("zh_definition").trim() : "";
+      if (definition.isEmpty() && showEn) definition = meaning.optString("en_definition").trim();
+      if (definition.isEmpty()) continue;
+
+      LinearLayout meaningBlock = a.column();
+      LinearLayout.LayoutParams meaningLp = new LinearLayout.LayoutParams(-1, -2);
+      meaningLp.topMargin = a.dp(4);
+      TextView definitionText = a.text("", 13, false);
+      android.text.SpannableStringBuilder line = new android.text.SpannableStringBuilder();
+      line.append(String.valueOf(i + 1)).append(". ");
+      String pos = meaning.optString("part_of_speech").trim();
+      if (!pos.isEmpty()) {
+        int start = line.length();
+        line.append(pos);
+        line.setSpan(
+            new android.text.style.ForegroundColorSpan(a.accent),
+            start,
+            line.length(),
+            android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        line.setSpan(
+            new android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+            start,
+            line.length(),
+            android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        line.append("  ");
+      }
+      line.append(definition);
+      definitionText.setText(line);
+      meaningBlock.addView(definitionText);
+      String example = showExample ? meaning.optString("example").trim() : "";
+      if (!example.isEmpty()) {
+        TextView exampleText = a.text("例：" + example, 11, false);
+        exampleText.setTextColor(a.muted);
+        exampleText.setMaxLines(2);
+        LinearLayout.LayoutParams exampleLp = new LinearLayout.LayoutParams(-1, -2);
+        exampleLp.leftMargin = a.dp(16);
+        meaningBlock.addView(exampleText, exampleLp);
+      }
+      JSONArray annotations = meaning.optJSONArray("annotations");
+      if (annotations != null) annotationCount += annotations.length();
+      card.addView(meaningBlock, meaningLp);
+    }
+
+    LinearLayout footer = a.row();
+    LinearLayout.LayoutParams footerLp = new LinearLayout.LayoutParams(-1, -2);
+    footerLp.topMargin = a.dp(5);
+    footer.addView(a.text("共 " + visibleCount + " 条释义", 11, false));
+    if (annotationCount > 0) {
+      TextView annotations = a.text("  ·  " + annotationCount + " 条批注", 11, false);
+      annotations.setTextColor(a.accent);
+      footer.addView(annotations);
+    }
+    card.addView(footer, footerLp);
+    a.passiveLabels(card);
+  }
+
+  boolean displayField(JSONObject fields, JSONObject localFields, String key) {
+    return localFields != null
+        ? localFields.optBoolean(key, fields == null || fields.optBoolean(key, true))
+        : fields == null || fields.optBoolean(key, true);
+  }
+
+  void showVocabularyActions(JSONObject vocabulary) {
+    String noteId = selected;
+    String[] actions =
+        noteId == null ? new String[] {"查看详情与管理"} : new String[] {"查看详情与管理", "从此笔记移除引用"};
+    new AlertDialog.Builder(a)
+        .setItems(
+            actions,
+            (dialog, which) -> {
+              if (which == 0) {
+                detail(vocabulary);
+              } else if (noteId != null) {
+                new AlertDialog.Builder(a)
+                    .setMessage("仅从此笔记移除此词汇引用，词汇本身和其他笔记不受影响。")
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton(
+                        "移除",
+                        (confirmation, button) ->
+                            a.change(
+                                () -> {
+                                  JSONObject note = a.library.find("notebooks", noteId);
+                                  if (note != null)
+                                    Library.removeValue(
+                                        note.optJSONArray("vocabulary_ids"),
+                                        vocabulary.optString("id"));
+                                }))
+                    .show();
+              }
+            })
+        .show();
+  }
+
+  void exportMenu() {
+    new AlertDialog.Builder(a)
+        .setTitle("导出当前筛选")
+        .setItems(
+            new String[] {"JSON", "CSV"},
+            (d, w) -> {
+              List<JSONObject> rows = visible();
+              if (w == 0) {
+                JSONArray arr = new JSONArray();
+                for (JSONObject r : rows) arr.put(r);
+                a.export("lexinote-filter.json", "application/json", arr.toString());
+              } else a.export("lexinote-filter.csv", "text/csv", "\uFEFF" + a.library.csv(rows));
+            })
+        .show();
+  }
+
+  void manage(JSONObject n) {
+    List<String> options = new ArrayList<>();
+    List<Runnable> actions = new ArrayList<>();
+    if (n != null) {
+      options.add("重命名");
+      actions.add(() -> rename(n));
+      options.add("删除笔记树");
+      actions.add(
+          () ->
+              new AlertDialog.Builder(a)
+                  .setMessage("删除当前笔记及其全部子笔记？词汇仍在全局词库。")
+                  .setNegativeButton("取消", null)
+                  .setPositiveButton(
+                      "删除",
+                      (d, w) ->
+                          a.change(
+                              () -> {
+                                a.library.deleteNotebook(selected);
+                                selected = null;
+                              }))
+                  .show());
+      options.add("创建子分类");
+      actions.add(() -> create());
+    } else {
+      options.add("创建分类");
+      actions.add(() -> create());
+    }
+    options.add("离线添加词汇");
+    actions.add(() -> manual());
+    new AlertDialog.Builder(a)
+        .setTitle("分类管理")
+        .setItems(options.toArray(new String[0]), (d, w) -> actions.get(w).run())
+        .show();
   }
 
   String path(String id) {
@@ -299,6 +565,45 @@ final class NotebookUi {
               }
             })
         .show();
+  }
+
+  void saveDefault(JSONObject result) {
+    String id = a.library.settings().optString("default_notebook_id", "");
+    JSONObject n = a.library.find("notebooks", id);
+    if (n == null || Library.systemGlobal(n) || n.optJSONArray("child_notebook_ids").length() > 0) {
+      a.say("请先在设置中选择默认末级笔记");
+      return;
+    }
+    try {
+      JSONObject fields = new JSONObject();
+      for (String f :
+          new String[] {
+            "zh_definition",
+            "en_definition",
+            "phonetic",
+            "example",
+            "source",
+            "source_images",
+            "annotations",
+            "remarks"
+          }) Library.put(fields, f, true);
+      JSONObject display = new JSONObject();
+      Library.put(display, "fields", fields);
+      String vocabId = a.library.saveResult(result, new String[] {id}, display);
+      if (a.session != null && a.session.optJSONObject("query_results") == result) {
+        JSONObject saved = new JSONObject();
+        Library.put(saved, "saved", true);
+        Library.put(saved, "vocabulary_id", vocabId);
+        Library.put(saved, "notebook_ids", new JSONArray().put(id));
+        Library.put(a.session, "saved_content", saved);
+        a.library.touchSession(a.session, true);
+      }
+      a.persist();
+      a.say("已保存到" + n.optString("name"));
+      a.render();
+    } catch (Exception e) {
+      a.error(e);
+    }
   }
 
   void renderMeanings(LinearLayout box, JSONObject v, JSONObject display, boolean full) {

@@ -1,0 +1,312 @@
+{
+  "version": "2.2",
+  "export_date": "2026-10-26T00:00:00.000Z",
+  "vocabularies": [
+    {
+      "id": "ui-fixture-resilient",
+      "type": "word",
+      "content": "resilient",
+      "created_at": "2026-10-26T00:00:00.000Z",
+      "updated_at": "2026-10-26T00:00:00.000Z",
+      "tags": [
+        "character",
+        "recovery"
+      ],
+      "meanings": [
+        {
+          "id": "ui-fixture-resilient-meaning-1",
+          "created_at": "2026-10-26T00:00:00.000Z",
+          "updated_at": "2026-10-26T00:00:00.000Z",
+          "part_of_speech": "adjective",
+          "zh_definition": "有韧性的；能迅速恢复的",
+          "en_definition": "able to recover quickly after difficulty or change",
+          "phonetic": "/rɪˈzɪliənt/",
+          "example": "Children are often remarkably resilient.",
+          "source": "UI parity fixture",
+          "annotations": []
+        },
+        {
+          "id": "ui-fixture-resilient-meaning-2",
+          "created_at": "2026-10-26T00:00:00.000Z",
+          "updated_at": "2026-10-26T00:00:00.000Z",
+          "part_of_speech": "adjective",
+          "zh_definition": "有弹性的；恢复原状的",
+          "en_definition": "returning to its original shape after being bent or stretched",
+          "phonetic": "/rɪˈzɪliənt/",
+          "example": "Resilient materials can withstand repeated stress.",
+          "source": "UI parity fixture",
+          "annotations": []
+        }
+      ]
+    }
+  ],
+  "notebooks": [
+    {
+      "id": "nb_default",
+      "name": "默认笔记",
+      "created_at": "2026-10-26T00:00:00.000Z",
+      "updated_at": "2026-10-26T00:00:00.000Z",
+      "is_default": true,
+      "children_type": "vocabulary",
+      "child_notebook_ids": [],
+      "vocabulary_ids": [
+        "ui-fixture-resilient"
+      ],
+      "tags": [
+        "默认"
+      ]
+    },
+    {
+      "id": "nb_global_root",
+      "name": "全部词汇",
+      "created_at": "2026-10-26T00:00:00.000Z",
+      "updated_at": "2026-10-26T00:00:00.000Z",
+      "is_global_root": true,
+      "children_type": "vocabulary",
+      "child_notebook_ids": [],
+      "vocabulary_ids": [
+        "ui-fixture-resilient"
+      ],
+      "tags": [
+        "全局视图"
+      ]
+    }
+  ],
+  "recent_queries": [
+    {
+      "id": "ui-fixture-resilient-session",
+      "created_at": "2026-10-26T00:00:00.000Z",
+      "query_type": "text",
+      "input_text": "resilient",
+      "query_results": {
+        "word": "resilient",
+        "type": "word",
+        "phonetic": "/rɪˈzɪliənt/",
+        "meanings": [
+          {
+            "id": "ui-fixture-resilient-meaning-1",
+            "part_of_speech": "adjective",
+            "zh_definition": "有韧性的；能迅速恢复的",
+            "en_definition": "able to recover quickly after difficulty or change",
+            "example": "Children are often remarkably resilient.",
+            "selected": true,
+            "definition_choice": "zh",
+            "save_zh": true,
+            "save_en": true,
+            "save_example": true
+          },
+          {
+            "id": "ui-fixture-resilient-meaning-2",
+            "part_of_speech": "adjective",
+            "zh_definition": "有弹性的；恢复原状的",
+            "en_definition": "returning to its original shape after being bent or stretched",
+            "example": "Resilient materials can withstand repeated stress.",
+            "selected": true,
+            "definition_choice": "zh",
+            "save_zh": true,
+            "save_en": true,
+            "save_example": true
+          }
+        ],
+        "is_from_local": true,
+        "local_vocabulary_id": "ui-fixture-resilient",
+        "follow_up_questions": [
+          "Resilient vs resistant?"
+        ]
+      },
+      "ai_messages": [
+        {
+          "id": "ui-fixture-user-message",
+          "role": "user",
+          "content": "What does “resilient” mean here?",
+          "created_at": "2026-10-26T00:00:00.000Z"
+        },
+        {
+          "id": "ui-fixture-assistant-message",
+          "role": "assistant",
+          "content": "“Resilient” describes someone or something that recovers quickly after difficulty. It can also describe a material that returns to its original shape.",
+          "created_at": "2026-10-26T00:00:00.000Z",
+          "query_result": {
+            "word": "resilient",
+            "type": "word",
+            "phonetic": "/rɪˈzɪliənt/",
+            "meanings": [
+              {
+                "id": "ui-fixture-resilient-meaning-1",
+                "part_of_speech": "adjective",
+                "zh_definition": "有韧性的；能迅速恢复的",
+                "en_definition": "able to recover quickly after difficulty or change",
+                "example": "Children are often remarkably resilient.",
+                "selected": true,
+                "definition_choice": "zh",
+                "save_zh": true,
+                "save_en": true,
+                "save_example": true
+              },
+              {
+                "id": "ui-fixture-resilient-meaning-2",
+                "part_of_speech": "adjective",
+                "zh_definition": "有弹性的；恢复原状的",
+                "en_definition": "returning to its original shape after being bent or stretched",
+                "example": "Resilient materials can withstand repeated stress.",
+                "selected": true,
+                "definition_choice": "zh",
+                "save_zh": true,
+                "save_en": true,
+                "save_example": true
+              }
+            ],
+            "is_from_local": true,
+            "local_vocabulary_id": "ui-fixture-resilient",
+            "follow_up_questions": [
+              "Resilient vs resistant?"
+            ]
+          }
+        }
+      ],
+      "revision": 1,
+      "session_state": "ready",
+      "saved_content": {
+        "saved": true,
+        "vocabulary_id": "ui-fixture-resilient",
+        "notebook_ids": [
+          "nb_default"
+        ],
+        "saved_at": "2026-10-26T00:00:00.000Z"
+      }
+    }
+  ],
+  "conversations": [
+    {
+      "id": "ui-fixture-resilient-session",
+      "created_at": "2026-10-26T00:00:00.000Z",
+      "query_type": "text",
+      "input_text": "resilient",
+      "query_results": {
+        "word": "resilient",
+        "type": "word",
+        "phonetic": "/rɪˈzɪliənt/",
+        "meanings": [
+          {
+            "id": "ui-fixture-resilient-meaning-1",
+            "part_of_speech": "adjective",
+            "zh_definition": "有韧性的；能迅速恢复的",
+            "en_definition": "able to recover quickly after difficulty or change",
+            "example": "Children are often remarkably resilient.",
+            "selected": true,
+            "definition_choice": "zh",
+            "save_zh": true,
+            "save_en": true,
+            "save_example": true
+          },
+          {
+            "id": "ui-fixture-resilient-meaning-2",
+            "part_of_speech": "adjective",
+            "zh_definition": "有弹性的；恢复原状的",
+            "en_definition": "returning to its original shape after being bent or stretched",
+            "example": "Resilient materials can withstand repeated stress.",
+            "selected": true,
+            "definition_choice": "zh",
+            "save_zh": true,
+            "save_en": true,
+            "save_example": true
+          }
+        ],
+        "is_from_local": true,
+        "local_vocabulary_id": "ui-fixture-resilient",
+        "follow_up_questions": [
+          "Resilient vs resistant?"
+        ]
+      },
+      "ai_messages": [
+        {
+          "id": "ui-fixture-user-message",
+          "role": "user",
+          "content": "What does “resilient” mean here?",
+          "created_at": "2026-10-26T00:00:00.000Z"
+        },
+        {
+          "id": "ui-fixture-assistant-message",
+          "role": "assistant",
+          "content": "“Resilient” describes someone or something that recovers quickly after difficulty. It can also describe a material that returns to its original shape.",
+          "created_at": "2026-10-26T00:00:00.000Z",
+          "query_result": {
+            "word": "resilient",
+            "type": "word",
+            "phonetic": "/rɪˈzɪliənt/",
+            "meanings": [
+              {
+                "id": "ui-fixture-resilient-meaning-1",
+                "part_of_speech": "adjective",
+                "zh_definition": "有韧性的；能迅速恢复的",
+                "en_definition": "able to recover quickly after difficulty or change",
+                "example": "Children are often remarkably resilient.",
+                "selected": true,
+                "definition_choice": "zh",
+                "save_zh": true,
+                "save_en": true,
+                "save_example": true
+              },
+              {
+                "id": "ui-fixture-resilient-meaning-2",
+                "part_of_speech": "adjective",
+                "zh_definition": "有弹性的；恢复原状的",
+                "en_definition": "returning to its original shape after being bent or stretched",
+                "example": "Resilient materials can withstand repeated stress.",
+                "selected": true,
+                "definition_choice": "zh",
+                "save_zh": true,
+                "save_en": true,
+                "save_example": true
+              }
+            ],
+            "is_from_local": true,
+            "local_vocabulary_id": "ui-fixture-resilient",
+            "follow_up_questions": [
+              "Resilient vs resistant?"
+            ]
+          }
+        }
+      ],
+      "revision": 1,
+      "session_state": "ready",
+      "saved_content": {
+        "saved": true,
+        "vocabulary_id": "ui-fixture-resilient",
+        "notebook_ids": [
+          "nb_default"
+        ],
+        "saved_at": "2026-10-26T00:00:00.000Z"
+      },
+      "metadata": {
+        "title": "Resilient 的含义与用法",
+        "title_source": "user",
+        "title_revision": 1,
+        "retention": "saved",
+        "origin": "query",
+        "created_at": "2026-10-26T00:00:00.000Z",
+        "last_used_at": "2026-10-26T00:00:00.000Z",
+        "updated_at": "2026-10-26T00:00:00.000Z",
+        "saved_at": "2026-10-26T00:00:00.000Z"
+      }
+    }
+  ],
+  "settings": {
+    "theme_mode": "light",
+    "font_size": "medium",
+    "density": "comfortable",
+    "accent_color": "#10B981",
+    "default_notebook_id": "nb_default",
+    "auto_record_extra_info": false,
+    "default_fields_to_save": {
+      "zh_definition": true,
+      "en_definition": true,
+      "phonetic": true,
+      "example": true,
+      "source": true,
+      "source_images": true,
+      "annotations": true,
+      "remarks": true
+    }
+  }
+}

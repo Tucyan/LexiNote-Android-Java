@@ -16,6 +16,10 @@ final class QueryUi {
       guessTarget = "",
       guessContext = "",
       sessionFilter = "";
+  String homeMode = "text", guessMode = "image";
+  String startDate = "", endDate = "", dateField = "created_at";
+  int savedLimit = 10;
+  boolean showDateFields = false;
   int stage = 0;
   JSONObject guessReply;
 
@@ -37,38 +41,158 @@ final class QueryUi {
   }
 
   void home() {
-    LinearLayout c = a.card("今天想理解什么？");
-    EditText input = a.input("输入单词、短语或问题", draft, true);
-    track(
-        input,
-        s -> {
-          if (!draft.equals(s)) a.invalidateDraft();
-          draft = s;
-        });
-    c.addView(input);
-    EditText ctx = a.input("可选：原句或查询要求", context, true);
-    track(
-        ctx,
-        s -> {
-          if (!context.equals(s)) a.invalidateDraft();
-          context = s;
-        });
-    c.addView(ctx);
-    image(c);
-    LinearLayout row = a.row();
-    row.addView(a.button("图片 / 相机", v -> a.chooseImage()));
-    row.addView(a.button("查询", v -> submit()));
-    row.addView(
-        a.button(
-            "新建助手",
-            v -> {
-              a.cancel();
-              a.image = null;
-              a.session = a.library.newSession("");
-              a.screen = "assistant";
-              a.render();
-            }));
-    c.addView(row);
+    LinearLayout queryCard = a.card(null);
+    queryCard.setTag("query-input-card");
+    queryCard.setPadding(a.dp(12), a.dp(12), a.dp(12), a.dp(12));
+    LinearLayout.LayoutParams queryLp = new LinearLayout.LayoutParams(-1, a.dp(312));
+    queryLp.bottomMargin = a.dp(30);
+    queryCard.setLayoutParams(queryLp);
+
+    LinearLayout modes = a.row();
+    modes.setPadding(a.dp(4), a.dp(3), a.dp(4), a.dp(3));
+    android.graphics.drawable.GradientDrawable modeBg =
+        new android.graphics.drawable.GradientDrawable();
+    modeBg.setColor(a.inputBg);
+    modeBg.setCornerRadius(a.dp(13));
+    modes.setBackground(modeBg);
+    String[] modeIds = {"text", "image", "both"};
+    String[] modeLabels = {"文本查询", "图片查询", "图文+提问"};
+    for (int i = 0; i < modeIds.length; i++) {
+      String mode = modeIds[i];
+      Button button =
+          a.button(
+              modeLabels[i],
+              v -> {
+                homeMode = mode;
+                a.render();
+              });
+      button.setTextSize(12 * a.scale);
+      String[] modeIcons = {"text-outline", "image-outline", "color-wand-outline"};
+      button.setCompoundDrawables(
+          a.new GlyphDrawable(modeIcons[i], 15, mode.equals(homeMode) ? a.accent : a.muted),
+          null,
+          null,
+          null);
+      button.setCompoundDrawablePadding(a.dp(3));
+      button.setPadding(a.dp(8), 0, a.dp(6), 0);
+      button.setMinHeight(a.dp(36));
+      button.setMinimumHeight(a.dp(36));
+      if (mode.equals(homeMode)) {
+        android.graphics.drawable.GradientDrawable active =
+            new android.graphics.drawable.GradientDrawable();
+        active.setColor(a.card);
+        active.setCornerRadius(a.dp(12));
+        active.setStroke(a.dp(1), a.border);
+        button.setBackground(active);
+        button.setTextColor(a.accent);
+      } else {
+        button.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        button.setTextColor(a.muted);
+      }
+      modes.addView(button, new LinearLayout.LayoutParams(0, a.dp(36), 1));
+    }
+    queryCard.addView(modes);
+    queryCard.addView(new View(a), new LinearLayout.LayoutParams(1, a.dp(8)));
+
+    if (!homeMode.equals("image")) {
+      String hint =
+          homeMode.equals("both") ? "可输入目标词汇或问题" : "输入英文单词或短语，如 serendipity, break a leg...";
+      EditText target = a.input(hint, draft, false);
+      target.setCompoundDrawables(
+          a
+          .new GlyphDrawable(
+              homeMode.equals("both") ? "color-wand-outline" : "search-outline", 17, a.accent),
+          null,
+          null,
+          null);
+      target.setCompoundDrawablePadding(a.dp(8));
+      track(
+          target,
+          value -> {
+            if (!draft.equals(value)) a.invalidateDraft();
+            draft = value;
+          });
+      queryCard.addView(target, new LinearLayout.LayoutParams(-1, a.dp(42)));
+    }
+
+    if (homeMode.equals("text")) {
+      LinearLayout contextBox = a.column();
+      contextBox.setPadding(a.dp(8), a.dp(7), a.dp(8), a.dp(7));
+      android.graphics.drawable.GradientDrawable contextBg =
+          new android.graphics.drawable.GradientDrawable();
+      contextBg.setColor(a.inputBg);
+      contextBg.setCornerRadius(a.dp(12));
+      contextBg.setStroke(a.dp(1), a.border);
+      contextBox.setBackground(contextBg);
+      TextView contextLabel = a.text("上下文例句 / 提问说明（选填）", 12, false);
+      contextLabel.setTextColor(a.muted);
+      contextBox.addView(contextLabel);
+      EditText ctx = a.input("粘贴包含该词的原句段落或特定要求，帮助 AI 精准契合语境解析…", context, true);
+      ctx.setTextSize(13 * a.scale);
+      ctx.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+      ctx.setPadding(0, a.dp(4), 0, 0);
+      track(
+          ctx,
+          value -> {
+            if (!context.equals(value)) a.invalidateDraft();
+            context = value;
+          });
+      LinearLayout.LayoutParams contextLp = new LinearLayout.LayoutParams(-1, 0, 1);
+      contextLp.topMargin = a.dp(8);
+      contextLp.bottomMargin = a.dp(8);
+      queryCard.addView(contextBox, contextLp);
+      contextBox.addView(ctx, new LinearLayout.LayoutParams(-1, 0, 1));
+    } else if (homeMode.equals("image")) {
+      if (a.image == null) {
+        LinearLayout tiles = a.row();
+        tiles.addView(
+            imageTile("拍摄照片", "拍照识别书籍 / 屏幕", "camera-outline", () -> a.chooseImage(true)),
+            new LinearLayout.LayoutParams(0, -1, 1));
+        tiles.addView(
+            imageTile("相册选取", "选择手机截图或照片", "images-outline", () -> a.chooseImage(false)),
+            new LinearLayout.LayoutParams(0, -1, 1));
+        ((LinearLayout.LayoutParams) tiles.getChildAt(1).getLayoutParams()).leftMargin = a.dp(8);
+        LinearLayout.LayoutParams tilesLp = new LinearLayout.LayoutParams(-1, 0, 1);
+        tilesLp.bottomMargin = a.dp(8);
+        queryCard.addView(tiles, tilesLp);
+      } else {
+        ImageView preview = new ImageView(a);
+        preview.setImageURI(a.image);
+        preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        LinearLayout.LayoutParams previewLp = new LinearLayout.LayoutParams(-1, 0, 1);
+        queryCard.addView(preview, previewLp);
+        queryCard.addView(a.button("更换图片", v -> a.chooseImage(false)));
+      }
+    } else {
+      LinearLayout both = a.row();
+      if (a.image == null) {
+        both.addView(
+            imageTile("拍摄照片", "识别书页 / 屏幕", "camera-outline", () -> a.chooseImage(true)),
+            new LinearLayout.LayoutParams(0, -1, 1));
+        both.addView(
+            imageTile("相册选取", "选择手机截图或照片", "images-outline", () -> a.chooseImage(false)),
+            new LinearLayout.LayoutParams(0, -1, 1));
+        ((LinearLayout.LayoutParams) both.getChildAt(1).getLayoutParams()).leftMargin = a.dp(8);
+      } else {
+        ImageView preview = new ImageView(a);
+        preview.setImageURI(a.image);
+        preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        both.addView(preview, new LinearLayout.LayoutParams(0, a.dp(74), 1));
+        both.addView(
+            a.button(
+                "移除",
+                v -> {
+                  a.image = null;
+                  a.render();
+                }));
+      }
+      LinearLayout.LayoutParams bothLp = new LinearLayout.LayoutParams(-1, 0, 1);
+      bothLp.topMargin = a.dp(8);
+      bothLp.bottomMargin = a.dp(8);
+      queryCard.addView(both, bothLp);
+    }
+    queryCard.addView(a.primaryButton("✦  智能查询", v -> submit()));
+
     if (pending() != null) {
       JSONObject pending = pending();
       LinearLayout p = a.card("待确认查询");
@@ -88,20 +212,278 @@ final class QueryUi {
                 a.render();
               }));
     }
-    LinearLayout recent = a.card("最近查询 · 最多 10 条");
+    renderSessionLists();
+  }
+
+  View imageTile(String title, String subtitle, String iconName, Runnable action) {
+    LinearLayout tile = a.column();
+    tile.setGravity(Gravity.CENTER);
+    android.graphics.drawable.GradientDrawable background =
+        new android.graphics.drawable.GradientDrawable();
+    background.setColor(a.inputBg);
+    background.setCornerRadius(a.dp(12));
+    background.setStroke(a.dp(1), a.border);
+    tile.setBackground(background);
+    TextView tileIcon = a.icon(iconName, 22, a.accent);
+    tileIcon.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 22, 0));
+    tile.addView(tileIcon, new LinearLayout.LayoutParams(a.dp(44), a.dp(44)));
+    tile.addView(a.gap(8));
+    TextView tileTitle = a.text(title, 13, true);
+    tileTitle.setGravity(Gravity.CENTER);
+    tile.addView(tileTitle);
+    tile.addView(a.gap(4));
+    TextView tileSubtitle = a.text(subtitle, 10, false);
+    tileSubtitle.setGravity(Gravity.CENTER);
+    tile.addView(tileSubtitle);
+    tile.setOnClickListener(v -> action.run());
+    a.passiveLabels(tile);
+    return tile;
+  }
+
+  void renderSessionLists() {
+    JSONArray conversations = a.library.array("conversations");
+    List<JSONObject> savedItems = new ArrayList<>(), temporaryItems = new ArrayList<>();
+    for (int i = conversations.length() - 1; i >= 0; i--) {
+      JSONObject item = conversations.optJSONObject(i);
+      if (item == null) continue;
+      if (saved(item)) savedItems.add(item);
+      else temporaryItems.add(item);
+    }
+
+    LinearLayout savedCard = a.card(null);
+    TextView savedTitle = a.text("AI 会话 · 已保存", 17, true);
+    LinearLayout.LayoutParams savedTitleLp = new LinearLayout.LayoutParams(-1, -2);
+    savedTitleLp.bottomMargin = a.dp(12);
+    savedCard.addView(savedTitle, savedTitleLp);
+    LinearLayout searchRow = a.row();
+    EditText filter = a.input("搜索会话名称", sessionFilter, false);
+    searchRow.addView(filter, new LinearLayout.LayoutParams(0, a.dp(44), 1));
+    TextView dateFilter = a.text("日期筛选", 14, false);
+    dateFilter.setTextColor(a.accent);
+    dateFilter.setTypeface(null, android.graphics.Typeface.NORMAL);
+    dateFilter.setPadding(a.dp(8), 0, 0, 0);
+    dateFilter.setOnClickListener(v -> showDateFilter());
+    searchRow.addView(dateFilter);
+    savedCard.addView(searchRow);
+    track(
+        filter,
+        value -> {
+          sessionFilter = value;
+          savedLimit = 10;
+        });
+    filter.setOnEditorActionListener(
+        (v, action, event) -> {
+          sessionFilter = filter.getText().toString();
+          savedLimit = 10;
+          a.render();
+          return true;
+        });
+    if (showDateFields) addDateFields(savedCard);
+
+    int shown = 0, matched = 0;
+    for (JSONObject item : savedItems) {
+      if (!Library.normalized(title(item)).contains(Library.normalized(sessionFilter))
+          || !matchesDate(item)) continue;
+      matched++;
+      if (shown++ < savedLimit) addConversationRow(savedCard, item);
+    }
+    if (matched == 0) {
+      TextView empty =
+          a.text(
+              sessionFilter.isEmpty() && startDate.isEmpty() && endDate.isEmpty()
+                  ? "在 AI 助手中点击“保存会话”，即可在这里继续交流。"
+                  : "没有符合条件的会话。",
+              13,
+              false);
+      empty.setPadding(0, a.dp(16), 0, a.dp(16));
+      savedCard.addView(empty);
+    }
+    if (matched > savedLimit)
+      savedCard.addView(
+          a.button(
+              "查看更多（共 " + matched + " 个）",
+              v -> {
+                savedLimit += 10;
+                a.render();
+              }));
+
+    LinearLayout tempCard = a.card(null);
+    LinearLayout tempHeader = a.row();
+    tempHeader.addView(
+        a.text("临时 AI 会话（" + temporaryItems.size() + "/5）", 17, true),
+        new LinearLayout.LayoutParams(0, -2, 1));
+    tempHeader.addView(
+        a.button(
+            "＋ 新建",
+            v -> {
+              a.cancel();
+              a.image = null;
+              a.session = a.library.newSession("");
+              a.screen = "assistant";
+              a.render();
+            }));
+    tempCard.addView(tempHeader);
+    TextView temporaryNote = a.text("自动命名，最多保留 5 个；保存后的会话不占名额。", 11, false);
+    LinearLayout.LayoutParams temporaryNoteLp = new LinearLayout.LayoutParams(-1, -2);
+    temporaryNoteLp.topMargin = a.dp(8);
+    temporaryNoteLp.bottomMargin = a.dp(8);
+    tempCard.addView(temporaryNote, temporaryNoteLp);
+    if (temporaryItems.isEmpty()) {
+      TextView empty = a.text("直接开始对话，无需先查词。", 13, false);
+      empty.setTextColor(a.subtle);
+      empty.setPadding(0, a.dp(10), 0, a.dp(10));
+      tempCard.addView(empty);
+    } else for (JSONObject item : temporaryItems) addConversationRow(tempCard, item);
+  }
+
+  void addConversationRow(LinearLayout parent, JSONObject item) {
+    LinearLayout row = a.row();
+    LinearLayout info = a.column();
+    info.setPadding(a.dp(2), a.dp(8), a.dp(2), a.dp(8));
+    info.addView(
+        a.button(
+            title(item),
+            v -> {
+              open(item);
+              a.screen = "assistant";
+              a.render();
+            }));
+    info.addView(a.text("最近使用 " + sessionDate(item, "last_used_at"), 11, false));
+    info.addView(a.text("创建于 " + sessionDate(item, "created_at"), 10, false));
+    row.addView(info, new LinearLayout.LayoutParams(0, -2, 1));
+    row.addView(a.button("删除", v -> a.change(() -> deleteConversation(item))));
+    parent.addView(row);
+  }
+
+  String sessionDate(JSONObject item, String field) {
+    JSONObject metadata = item.optJSONObject("metadata");
+    String value = metadata == null ? "" : metadata.optString(field);
+    if (value.isEmpty())
+      value = item.optString(field.equals("last_used_at") ? "updated_at" : "created_at");
+    return value.isEmpty() ? "—" : value.replace('T', ' ').replace("Z", "");
+  }
+
+  boolean matchesDate(JSONObject item) {
+    String date = sessionDate(item, dateField);
+    if (date.length() < 10) return startDate.isEmpty() && endDate.isEmpty();
+    String day = date.substring(0, 10);
+    return (startDate.isEmpty() || day.compareTo(startDate) >= 0)
+        && (endDate.isEmpty() || day.compareTo(endDate) <= 0);
+  }
+
+  void showDateFilter() {
+    LinearLayout box = a.column();
+    box.addView(a.text("日期范围（含首尾日期）", 14, true));
+    RadioGroup group = new RadioGroup(a);
+    int createdId = View.generateViewId();
+    int usedId = View.generateViewId();
+    RadioButton created = new RadioButton(a);
+    created.setText("创建日期");
+    created.setTextColor(a.foreground);
+    created.setId(createdId);
+    RadioButton used = new RadioButton(a);
+    used.setText("最近使用日期");
+    used.setTextColor(a.foreground);
+    used.setId(usedId);
+    group.addView(created);
+    group.addView(used);
+    group.check(dateField.equals("created_at") ? createdId : usedId);
+    box.addView(group);
+    EditText start = a.input("开始日期 YYYY-MM-DD", startDate, false);
+    EditText end = a.input("结束日期 YYYY-MM-DD（含当天）", endDate, false);
+    box.addView(start);
+    box.addView(end);
+    new AlertDialog.Builder(a)
+        .setTitle("日期筛选")
+        .setView(box)
+        .setNeutralButton(
+            "清除",
+            (d, w) -> {
+              startDate = "";
+              endDate = "";
+              showDateFields = false;
+              a.render();
+            })
+        .setNegativeButton("取消", null)
+        .setPositiveButton(
+            "应用",
+            (d, w) -> {
+              String from = start.getText().toString().trim(), to = end.getText().toString().trim();
+              if ((!from.isEmpty() && !validDate(from))
+                  || (!to.isEmpty() && !validDate(to))
+                  || (!from.isEmpty() && !to.isEmpty() && from.compareTo(to) > 0)) {
+                a.say("请输入有效日期范围（YYYY-MM-DD）");
+                return;
+              }
+              dateField = group.getCheckedRadioButtonId() == usedId ? "last_used_at" : "created_at";
+              startDate = from;
+              endDate = to;
+              showDateFields = !from.isEmpty() || !to.isEmpty();
+              savedLimit = 10;
+              a.render();
+            })
+        .show();
+  }
+
+  boolean validDate(String value) {
+    if (!value.matches("\\d{4}-\\d{2}-\\d{2}")) return false;
+    java.text.SimpleDateFormat format = new java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US);
+    format.setLenient(false);
+    try {
+      format.parse(value);
+      return true;
+    } catch (java.text.ParseException error) {
+      return false;
+    }
+  }
+
+  void addDateFields(LinearLayout parent) {
+    parent.addView(
+        a.text(
+            (dateField.equals("created_at") ? "创建日期" : "最近使用")
+                + " · "
+                + (startDate.isEmpty() ? "不限" : startDate)
+                + " 至 "
+                + (endDate.isEmpty() ? "不限" : endDate),
+            11,
+            false));
+    parent.addView(
+        a.button(
+            "清除日期筛选",
+            v -> {
+              startDate = "";
+              endDate = "";
+              showDateFields = false;
+              a.render();
+            }));
+  }
+
+  void showRecent() {
     JSONArray history = a.library.array("recent_queries");
-    if (history.length() == 0) recent.addView(a.text("提交后可在这里继续查询", 14, false));
+    AlertDialog dialog =
+        new AlertDialog.Builder(a).setTitle("最近查询").setPositiveButton("完成", null).create();
+    LinearLayout box = a.column();
     for (int i = history.length() - 1; i >= 0; i--) {
       JSONObject s = history.optJSONObject(i);
-      LinearLayout rowH = a.row();
-      rowH.addView(a.button(title(s), v -> open(s)), new LinearLayout.LayoutParams(0, -2, 1));
-      rowH.addView(
+      LinearLayout row = a.row();
+      row.addView(
+          a.button(
+              s.optJSONObject("query_results") == null
+                  ? title(s)
+                  : s.optJSONObject("query_results").optString("word", title(s)),
+              v -> {
+                dialog.dismiss();
+                open(s);
+              }),
+          new LinearLayout.LayoutParams(0, -2, 1));
+      row.addView(
           a.button(
               "删除", v -> a.change(() -> a.library.delete("recent_queries", s.optString("id")))));
-      recent.addView(rowH);
+      box.addView(row);
     }
+    if (history.length() == 0) box.addView(a.text("暂无最近查询", 14, false));
     if (history.length() > 0)
-      recent.addView(
+      box.addView(
           a.button(
               "清空最近查询",
               v ->
@@ -116,33 +498,10 @@ final class QueryUi {
                                     while (history.length() > 0) history.remove(0);
                                   }))
                       .show()));
-    LinearLayout conversations = a.card("保存和临时会话");
-    EditText filter = a.input("按会话名称筛选", sessionFilter, false);
-    conversations.addView(filter);
-    conversations.addView(
-        a.button(
-            "筛选",
-            v -> {
-              sessionFilter = filter.getText().toString();
-              a.render();
-            }));
-    JSONArray list = a.library.array("conversations");
-    for (int i = list.length() - 1; i >= 0; i--) {
-      JSONObject s = list.optJSONObject(i);
-      if (!Library.normalized(title(s)).contains(Library.normalized(sessionFilter))) continue;
-      LinearLayout rr = a.row();
-      rr.addView(
-          a.button(
-              (saved(s) ? "★ " : "◷ ") + title(s),
-              v -> {
-                open(s);
-                a.screen = "assistant";
-                a.render();
-              }),
-          new LinearLayout.LayoutParams(0, -2, 1));
-      rr.addView(a.button("删除", v -> a.change(() -> deleteConversation(s))));
-      conversations.addView(rr);
-    }
+    ScrollView scroll = new ScrollView(a);
+    scroll.addView(box);
+    dialog.setView(scroll);
+    dialog.show();
   }
 
   String title(JSONObject s) {
@@ -172,17 +531,21 @@ final class QueryUi {
       a.say("请等待当前请求或取消");
       return;
     }
-    if (draft.trim().isEmpty() && a.image == null) {
+    String queryText = homeMode.equals("image") ? "" : draft;
+    String queryContext = homeMode.equals("image") ? "" : context;
+    Uri queryImage = homeMode.equals("text") ? null : a.image;
+    if (queryText.trim().isEmpty() && queryImage == null) {
       a.say("请输入内容或选择图片");
       return;
     }
-    a.session = a.library.newSession(draft.trim());
-    Library.put(a.session, "source_context", context);
-    if (a.image != null) {
-      Library.put(a.session, "input_images", new JSONArray().put(a.image.toString()));
-      Library.put(a.session, "query_type", draft.isEmpty() ? "image" : "both");
+    a.session = a.library.newSession(queryText.trim());
+    a.image = queryImage;
+    Library.put(a.session, "source_context", queryContext);
+    if (queryImage != null) {
+      Library.put(a.session, "input_images", new JSONArray().put(queryImage.toString()));
+      Library.put(a.session, "query_type", queryText.isEmpty() ? "image" : "both");
     } else Library.put(a.session, "query_type", "text");
-    JSONObject local = a.image == null ? a.library.local(draft) : null;
+    JSONObject local = queryImage == null ? a.library.local(queryText) : null;
     if (local != null) {
       JSONObject r = Library.copy(local);
       Library.put(r, "word", local.optString("content"));
@@ -191,7 +554,7 @@ final class QueryUi {
       finishResult(r);
       a.persist();
       a.render();
-    } else send(draft + (context.isEmpty() ? "" : "\n语境/要求：" + context), true);
+    } else send(queryText + (queryContext.isEmpty() ? "" : "\n语境/要求：" + queryContext), true);
   }
 
   JSONArray messages() {
@@ -240,7 +603,8 @@ final class QueryUi {
     if (a.session == null) a.session = a.library.newSession(text);
     final JSONObject target = a.session;
     final String explicitTarget = draft;
-    final boolean hasImage = a.image != null;
+    final Uri requestImage = fromHub && homeMode.equals("text") ? null : a.image;
+    final boolean hasImage = requestImage != null;
     JSONArray previous = copyMessages();
     JSONObject resultContext = target.optJSONObject("query_results");
     if (resultContext != null) {
@@ -254,7 +618,9 @@ final class QueryUi {
     a.library.touchSession(target, true);
     if (!a.persist()) return;
     a.request(
-        client -> client.agent(previous, text, a.imageData()),
+        client ->
+            client.agent(
+                previous, text, requestImage == null ? null : ImageTools.dataUrl(a, requestImage)),
         reply -> {
           if (a.session != target) return;
           applyReply(
@@ -332,7 +698,8 @@ final class QueryUi {
   }
 
   void finishResult(JSONObject r) {
-    if (a.image != null) {
+    JSONArray sessionImages = a.session.optJSONArray("input_images");
+    if (sessionImages != null && sessionImages.length() > 0) {
       JSONArray ms = r.optJSONArray("meanings");
       if (ms != null)
         for (int i = 0; i < ms.length(); i++) {
@@ -342,7 +709,10 @@ final class QueryUi {
             images = new JSONArray();
             Library.put(meaning, "source_images", images);
           }
-          if (!NotebookUi.contains(images, a.image.toString())) images.put(a.image.toString());
+          for (int j = 0; j < sessionImages.length(); j++) {
+            String sourceImage = sessionImages.optString(j);
+            if (!NotebookUi.contains(images, sourceImage)) images.put(sourceImage);
+          }
         }
     }
     Library.put(a.session, "query_results", r);
@@ -369,24 +739,40 @@ final class QueryUi {
 
   void assistant() {
     if (a.session == null) a.session = a.library.newSession("");
-    LinearLayout header = a.card(title(a.session));
-    header.addView(a.button(saved(a.session) ? "重命名会话" : "保存会话（与保存词汇独立）", v -> saveConversation()));
-    if (a.session.optJSONObject("query_results") != null)
-      header.addView(
-          a.button(
-              "查看词条",
-              v -> {
-                a.screen = "result";
-                a.render();
-              }));
+    a.body.setBackgroundColor(a.card);
+    a.scroll.setBackgroundColor(a.card);
+    a.body.setGravity(Gravity.BOTTOM);
+    a.body.setPadding(a.dp(14), a.dp(14), a.dp(14), a.dp(56));
+    image(a.body);
     JSONArray m = messages();
-    if (m.length() == 0) header.addView(a.text("可以查词、翻译、问语法，也可以先上传图片。", 15, false));
+    if (m.length() == 0) {
+      LinearLayout empty = a.column();
+      empty.setGravity(Gravity.CENTER);
+      TextView prompt = a.text("开始提问吧。可以聊英语学习，也可以告诉我想了解的词或表达。", 14, false);
+      prompt.setGravity(Gravity.CENTER);
+      prompt.setPadding(0, a.dp(40), 0, a.dp(40));
+      empty.addView(prompt);
+      a.body.addView(empty, new LinearLayout.LayoutParams(-1, -2));
+    }
     for (int i = 0; i < m.length(); i++) {
       JSONObject msg = m.optJSONObject(i);
-      LinearLayout card = a.card(msg.optString("role").equals("user") ? "我" : "LexiNote AI");
-      TextView messageView = a.text(msg.optString("content"), 16, false);
+      boolean mine = msg.optString("role").equals("user");
+      LinearLayout line = a.row();
+      line.setGravity(mine ? Gravity.RIGHT : Gravity.LEFT);
+      LinearLayout card = a.column();
+      card.setPadding(a.dp(14), a.dp(14), a.dp(14), a.dp(14));
+      card.setBackground(a.shape(mine ? a.accent : a.inputBg, 16, mine ? 0 : a.border));
+      TextView messageView = a.text(msg.optString("content"), 14, false);
+      messageView.setMaxWidth(
+          (int) (a.getResources().getDisplayMetrics().widthPixels * .88f) - a.dp(28));
+      messageView.setLineSpacing(a.dp(3), 1);
+      messageView.setTextColor(mine ? -1 : a.foreground);
       MarkdownText.apply(messageView, msg.optString("content"));
       card.addView(messageView);
+      line.addView(card, new LinearLayout.LayoutParams(mine ? -2 : -1, -2));
+      LinearLayout.LayoutParams lineLp = new LinearLayout.LayoutParams(-1, -2);
+      lineLp.bottomMargin = a.dp(12);
+      a.body.addView(line, lineLp);
       JSONObject action = msg.optJSONObject("action");
       if (action == null) continue;
       JSONArray choices = action.optJSONArray("choices");
@@ -415,6 +801,24 @@ final class QueryUi {
                   }));
         }
     }
+    JSONObject resultSuggestions = a.session.optJSONObject("query_results");
+    if (resultSuggestions != null
+        && resultSuggestions.optJSONArray("follow_up_questions") != null) {
+      JSONArray questions = resultSuggestions.optJSONArray("follow_up_questions");
+      for (int i = 0; i < questions.length(); i++) {
+        String question = questions.optString(i);
+        Button suggestion =
+            a.outlineButton(
+                question,
+                v -> {
+                  follow = question;
+                  a.render();
+                });
+        LinearLayout.LayoutParams suggestionLp = new LinearLayout.LayoutParams(-2, a.dp(44));
+        suggestionLp.topMargin = a.dp(8);
+        a.body.addView(suggestion, suggestionLp);
+      }
+    }
     JSONObject pending = pending();
     if (pending != null) {
       LinearLayout confirm = a.card("确认查询 · " + pending.optString("target"));
@@ -432,20 +836,41 @@ final class QueryUi {
                 a.render();
               }));
     }
-    LinearLayout send = a.card("继续交流");
-    image(send);
-    EditText f = a.input("输入追问，候选只填入不自动发送", follow, true);
-    track(f, s -> follow = s);
-    send.addView(f);
-    send.addView(a.button("图片", v -> a.chooseImage()));
-    send.addView(
-        a.button(
-            "发送",
-            v -> {
-              String value = follow;
-              follow = "";
-              send(value);
-            }));
+    LinearLayout send = a.fixedFooter();
+    send.setBackground(a.shape(a.card, 0, a.border));
+    send.setPadding(a.dp(12), a.dp(12), a.dp(12), a.dp(12));
+    EditText f = a.input("继续提问，或说明你想了解什么…", follow, true);
+    f.setMinHeight(a.dp(48));
+    f.setMinLines(1);
+    f.setBackground(a.shape(a.inputBg, 18, a.border));
+    f.setOnLongClickListener(
+        v -> {
+          a.chooseImage();
+          return true;
+        });
+    LinearLayout composer = a.row();
+    composer.addView(f, new LinearLayout.LayoutParams(0, a.dp(48), 1));
+    TextView sendButton = a.icon("arrow-up", 22, -1);
+    sendButton.setContentDescription("发送给助手");
+    sendButton.setBackground(a.shape(a.accent, 24, 0));
+    sendButton.setAlpha(follow.trim().isEmpty() ? .4f : 1f);
+    track(
+        f,
+        s -> {
+          follow = s;
+          sendButton.setAlpha(s.trim().isEmpty() ? .4f : 1f);
+        });
+    sendButton.setOnClickListener(
+        v -> {
+          if (follow.trim().isEmpty()) return;
+          String value = follow;
+          follow = "";
+          send(value);
+        });
+    LinearLayout.LayoutParams sendLp = new LinearLayout.LayoutParams(a.dp(48), a.dp(48));
+    sendLp.leftMargin = a.dp(10);
+    composer.addView(sendButton, sendLp);
+    send.addView(composer);
     if (a.session.has("last_error"))
       send.addView(a.text("上次请求：" + a.session.optString("last_error") + "。可重新发送。", 13, false));
   }
@@ -492,72 +917,225 @@ final class QueryUi {
       a.body.addView(a.text("暂无词条", 18, true));
       return;
     }
-    LinearLayout heading = a.card(r.optString("word", r.optString("content")));
-    heading.addView(
-        a.text(
-            r.optString("phonetic") + (r.optBoolean("is_from_local") ? " · 本地词库" : ""), 16, false));
+    LinearLayout heading = a.card(null);
+    heading.setPadding(a.dp(20), a.dp(16), a.dp(20), a.dp(16));
+    LinearLayout wordRow = a.row();
+    wordRow.addView(
+        a.text(r.optString("word", r.optString("content")), 24, true),
+        new LinearLayout.LayoutParams(0, -2, 1));
+    TextView type = a.text(r.optString("type").equals("phrase") ? "短语" : "单词", 11, true);
+    type.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
+    type.setBackground(a.shape(a.inputBg, 12, 0));
+    wordRow.addView(type);
+    if (a.library.local(r.optString("word")) != null) {
+      TextView saved = a.text("✓ 已在笔记中", 12, true);
+      saved.setTextColor(a.accent);
+      saved.setPadding(a.dp(8), a.dp(5), a.dp(8), a.dp(5));
+      saved.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 8, a.accent));
+      LinearLayout.LayoutParams savedLp = new LinearLayout.LayoutParams(-2, -2);
+      savedLp.leftMargin = a.dp(8);
+      wordRow.addView(saved, savedLp);
+    }
+    heading.addView(wordRow);
+    if (r.optBoolean("is_from_local")) {
+      TextView local = a.text("本地词库记录", 11, true);
+      local.setTextColor(a.accent);
+      local.setPadding(a.dp(8), a.dp(3), a.dp(8), a.dp(3));
+      local.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 12, 0));
+      heading.addView(local, new LinearLayout.LayoutParams(-2, -2));
+    }
+    heading.addView(a.gap(8));
+    heading.addView(a.text(r.optString("phonetic"), 16, false));
     if (!r.optString("recognized_text").isEmpty())
       heading.addView(a.text("识别文字：" + r.optString("recognized_text"), 14, false));
     JSONArray ms = r.optJSONArray("meanings");
+    TextView section = a.text("释义与例句 (" + (ms == null ? 0 : ms.length()) + " 条)", 13, true);
+    section.setTextColor(a.muted);
+    LinearLayout.LayoutParams sectionLp = new LinearLayout.LayoutParams(-1, -2);
+    sectionLp.topMargin = a.dp(12);
+    sectionLp.bottomMargin = a.dp(12);
+    a.body.addView(section, sectionLp);
     if (ms != null)
       for (int i = 0; i < ms.length(); i++) {
         JSONObject m = ms.optJSONObject(i);
-        LinearLayout c = a.card(m.optString("part_of_speech", "释义 " + (i + 1)));
-        for (String f :
-            new String[] {"zh_definition", "en_definition", "example", "source", "remarks"})
-          if (!m.optString(f).isEmpty()) c.addView(a.text(m.optString(f), 16, false));
+        LinearLayout c = a.card(null);
+        LinearLayout meaningHeader = a.row();
+        TextView number = a.text(String.valueOf(i + 1), 12, true);
+        number.setGravity(Gravity.CENTER);
+        number.setTextColor(-1);
+        number.setBackground(a.shape(a.accent, 12, 0));
+        meaningHeader.addView(number, new LinearLayout.LayoutParams(a.dp(24), a.dp(24)));
+        TextView part = a.text(m.optString("part_of_speech", "释义 " + (i + 1)), 12, true);
+        part.setTextColor(a.accent);
+        part.setPadding(a.dp(8), a.dp(3), a.dp(8), a.dp(3));
+        part.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 12, 0));
+        LinearLayout.LayoutParams partLp = new LinearLayout.LayoutParams(-2, -2);
+        partLp.leftMargin = a.dp(8);
+        meaningHeader.addView(part, partLp);
+        c.addView(meaningHeader);
+        for (String f : new String[] {"zh_definition", "en_definition"})
+          if (!m.optString(f).isEmpty()) {
+            LinearLayout definition = a.column();
+            definition.setPadding(a.dp(10), a.dp(10), a.dp(10), a.dp(10));
+            definition.setBackground(a.shape(a.inputBg, 10, a.border));
+            definition.addView(a.text(f.equals("zh_definition") ? "中文释义" : "英文释义", 11, true));
+            TextView value = a.text(m.optString(f), 15, f.equals("zh_definition"));
+            value.setLineSpacing(a.dp(3), 1);
+            if (f.equals("en_definition"))
+              value.setTypeface(null, android.graphics.Typeface.ITALIC);
+            definition.addView(value);
+            LinearLayout.LayoutParams definitionLp = new LinearLayout.LayoutParams(-1, -2);
+            definitionLp.topMargin = a.dp(8);
+            c.addView(definition, definitionLp);
+          }
+        if (!m.optString("example").isEmpty()) {
+          LinearLayout example = a.row();
+          example.setBackground(a.shape(a.inputBg, 5, 0));
+          View stripe = new View(a);
+          stripe.setBackgroundColor(a.accent);
+          example.addView(stripe, new LinearLayout.LayoutParams(a.dp(3), -1));
+          LinearLayout contents = a.column();
+          contents.setPadding(a.dp(10), a.dp(10), a.dp(10), a.dp(10));
+          contents.addView(a.text("典型例句:", 11, true));
+          TextView ex = a.text("\"" + m.optString("example") + "\"", 14, false);
+          ex.setTypeface(null, android.graphics.Typeface.ITALIC);
+          contents.addView(ex);
+          example.addView(contents, new LinearLayout.LayoutParams(0, -2, 1));
+          LinearLayout.LayoutParams exampleLp = new LinearLayout.LayoutParams(-1, -2);
+          exampleLp.topMargin = a.dp(12);
+          c.addView(example, exampleLp);
+        }
+        for (String f : new String[] {"source", "remarks"})
+          if (!m.optString(f).isEmpty()) c.addView(a.text(m.optString(f), 13, false));
+        JSONArray sourceImages = m.optJSONArray("source_images");
+        if (sourceImages != null)
+          for (int j = 0; j < sourceImages.length(); j++) {
+            ImageView sourceImage = new ImageView(a);
+            sourceImage.setImageURI(Uri.parse(sourceImages.optString(j)));
+            sourceImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            c.addView(sourceImage, new LinearLayout.LayoutParams(-1, a.dp(160)));
+          }
+        JSONArray annotations = m.optJSONArray("annotations");
+        if (annotations != null)
+          for (int j = 0; j < annotations.length(); j++)
+            c.addView(a.text("批注：" + annotations.optJSONObject(j).optString("content"), 13, false));
       }
     if (!r.optString("raw_explanation").isEmpty())
       a.card("补充说明").addView(a.text(r.optString("raw_explanation"), 15, false));
-    LinearLayout actions = a.card("整理笔记");
-    actions.addView(a.button("选择笔记并保存完整词汇", v -> a.notebooks.saveDialog(r)));
+    LinearLayout actions = a.fixedFooter();
     actions.addView(
         a.button(
-            "询问 AI / 补充释义",
+            "打开 AI 助手继续提问",
             v -> {
               a.screen = "assistant";
               a.render();
             }));
+    actions.addView(a.primaryButton("整理笔记", v -> a.notebooks.saveDialog(r)));
   }
 
   void guess() {
-    LinearLayout c = a.card("四阶段启发");
-    EditText target = a.input("目标词汇", guessTarget, false);
-    track(
-        target,
-        s -> {
-          if (!guessTarget.equals(s)) {
-            stage = 0;
-            guessReply = null;
-          }
-          guessTarget = s;
-        });
-    c.addView(target);
-    EditText ctx = a.input("包含目标词的原句或语境", guessContext, true);
-    track(
-        ctx,
-        s -> {
-          if (!guessContext.equals(s)) {
-            stage = 0;
-            guessReply = null;
-          }
-          guessContext = s;
-        });
-    c.addView(ctx);
-    image(c);
-    c.addView(a.button("图片 / 相机", v -> a.chooseImage()));
-    c.addView(a.text("1 语境线索 → 2 结构提示 → 3 推理提示 → 4 最终解析", 14, false));
-    c.addView(
-        a.button(
-            stage == 0 ? "获取第一条提示" : stage < 4 ? "下一阶段提示" : "重新开始",
+    LinearLayout principle = a.card(null);
+    principle.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 12, 0));
+    TextView principleTitle = a.text("✦  猜词辅助核心原则", 14, true);
+    principleTitle.setTextColor(a.accent);
+    principle.addView(principleTitle);
+    principle.addView(a.gap(4));
+    principle.addView(
+        a.text("不直接给出释义，而是通过语境线索、语义联想、词根词缀等 4 个阶段逐步引导，助你培养像母语者一样的语境解码能力。", 12, false));
+    LinearLayout intro = a.column();
+    a.body.addView(intro);
+    LinearLayout modes = a.row();
+    modes.setPadding(a.dp(3), a.dp(3), a.dp(3), a.dp(3));
+    modes.setBackground(a.shape(a.inputBg, 10, 0));
+    for (String mode : new String[] {"image", "text"}) {
+      String label = mode.equals("image") ? "拍照 / 图片勾画" : "直接输入语境句";
+      Button b =
+          a.button(
+              label,
+              v -> {
+                if (!guessMode.equals(mode)) {
+                  a.cancel();
+                  stage = 0;
+                  guessReply = null;
+                }
+                guessMode = mode;
+                a.render();
+              });
+      if (mode.equals(guessMode)) {
+        b.setBackground(a.shape(a.card, 8, 0));
+        b.setTextColor(a.accent);
+      }
+      b.setTextSize(13 * a.scale);
+      modes.addView(b, new LinearLayout.LayoutParams(0, a.dp(36), 1));
+    }
+    intro.addView(modes);
+    intro.addView(a.gap(12));
+    if (guessMode.equals("image")) {
+      if (a.image == null) {
+        LinearLayout photo = a.column();
+        photo.setGravity(Gravity.CENTER);
+        photo.setBackground(a.shape(a.card, 12, a.border));
+        photo.addView(a.icon("image-outline", 40, a.muted));
+        photo.addView(a.gap(12));
+        photo.addView(a.text("拍摄英文读物页面或截取屏幕文字", 13, false));
+        photo.addView(a.gap(12));
+        LinearLayout picks = a.row();
+        picks.setGravity(Gravity.CENTER);
+        picks.addView(
+            a.outlineButton("拍照", v -> a.chooseImage(true)),
+            new LinearLayout.LayoutParams(-2, a.dp(36)));
+        picks.addView(
+            a.outlineButton("从相册选", v -> a.chooseImage(false)),
+            new LinearLayout.LayoutParams(-2, a.dp(36)));
+        photo.addView(picks);
+        ((TextView) photo.getChildAt(2)).setGravity(Gravity.CENTER);
+        intro.addView(photo, new LinearLayout.LayoutParams(-1, a.dp(220)));
+      } else {
+        image(intro);
+        intro.addView(a.button("更换图片", v -> a.chooseImage()));
+      }
+    } else {
+      EditText target = a.input("目标词汇（选填）", guessTarget, false);
+      track(
+          target,
+          s -> {
+            if (!guessTarget.equals(s)) {
+              stage = 0;
+              guessReply = null;
+            }
+            guessTarget = s;
+          });
+      intro.addView(target);
+      EditText ctx = a.input("包含目标词的原句或语境（必填）", guessContext, true);
+      track(
+          ctx,
+          s -> {
+            if (!guessContext.equals(s)) {
+              stage = 0;
+              guessReply = null;
+            }
+            guessContext = s;
+          });
+      intro.addView(ctx);
+    }
+    a.body.addView(a.gap(28));
+    a.body.addView(
+        a.primaryButton(
+            stage == 0 ? "开启猜词推理" : stage < 4 ? "下一阶段提示" : "重新开始",
             v -> {
-              if (guessTarget.trim().isEmpty() && a.image == null) {
-                a.say("请输入目标或选择图片");
+              if (guessMode.equals("image") && a.image == null
+                  || guessMode.equals("text") && guessContext.trim().isEmpty()) {
+                a.say(guessMode.equals("image") ? "请先选择图片" : "请输入包含目标词的语境句");
                 return;
               }
               int next = stage >= 4 ? 1 : stage + 1;
               a.request(
-                  client -> client.guess(guessTarget, guessContext, next, a.imageData()),
+                  client ->
+                      client.guess(
+                          guessTarget,
+                          guessContext,
+                          next,
+                          guessMode.equals("image") ? a.imageData() : null),
                   reply -> {
                     guessReply = reply;
                     stage = next;
@@ -577,10 +1155,12 @@ final class QueryUi {
               hint.addView(a.text(finalData.optString(field), 16, false));
         hint.addView(
             a.button(
-                "转入查询并保存",
+                "转入查询",
                 v -> {
                   draft = guessReply.optString("target_word", guessTarget);
                   context = guessContext;
+                  homeMode = "text";
+                  a.invalidateDraft();
                   a.page = 0;
                   a.screen = "tabs";
                   a.render();

@@ -1,7 +1,9 @@
 ApplicationId: com.lexinote.nativeapp
 Artifact: app/build/outputs/apk/debug/app-debug.apk
-Bytes: 1007138
-SHA256: 95441DD54088AD0F1F05BAF795D149A360D5E9A7D3C8FC8B2E48ADA9526FCE6F
-Lint: 0 errors, 6 warnings
-Device: Pixel_9a emulator, Android API 37
+Bytes: 1362883
+SHA256: D28BB6387C74E68B3F310458A21298E2137A81DCCBC8A06596AAAFF6FE12AD2C
+Lint: 0 errors, 8 warnings
+Device: Pixel_9a emulator, Android API 37, 1080x2424, 420dpi
 Source baseline: d465b969b76f9baaba3d098fb89342916e7efce9
+UI checkpoint: 62f4f5a
+UI evidence: docs/ui-parity/REPORT.md

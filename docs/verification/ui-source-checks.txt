@@ -1,0 +1,4 @@
+Source baseline d465b969b76f9baaba3d098fb89342916e7efce9
+npm run lint: exit 0
+node_modules/.bin/tsc.cmd --noEmit: exit 0
+Original checkout unchanged; release APK built offline and installed for UI reference.
