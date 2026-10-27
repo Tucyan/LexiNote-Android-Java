@@ -1,5 +1,7 @@
 # Selected feature migration
 
+2026-10-27 follow-up: fresh actual-screen and experience comparison completed. See docs/ui-parity-2026-10-27/REPORT.md:16 actual screenshot pairs, identical testfixture, source-backed experience gaps and corrected prior spelling/drag claims. App data/settings restored; application source unchanged in this audit.
+
 Current continuation (2026-10-27): native model configuration + real emulator/API use completed. Execution plan: docs/plans/2026-10-27-model-configuration.md. Prior four-group checklist below remains completed. Profiles/catalog/UI integration, spec and quality review,101 JVM tests,19 offline device groups and real DeepSeek use passed. Final delivery: commit and sync.
 
 Baseline: b76b137. Scope: user annotation 1, four feature groups only. Keep the sibling Expo checkout unchanged. Continue on codex/android-native-java in this already independent repository.
