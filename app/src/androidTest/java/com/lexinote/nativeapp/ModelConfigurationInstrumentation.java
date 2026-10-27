@@ -199,7 +199,7 @@ public final class ModelConfigurationInstrumentation extends Instrumentation {
           a.page = 4;
           a.screen = "tabs";
           a.render();
-          edit(a.root, "API Key（留空保留当前供应商密钥）").setText("draft-only-fixture");
+          edit(a.root, "留空保留当前供应商密钥").setText("draft-only-fixture");
           edit(a.root, "模型 ID").setText("draft-model");
           button(a.root, "获取模型列表").performClick();
         });
@@ -212,7 +212,7 @@ public final class ModelConfigurationInstrumentation extends Instrumentation {
           check(
               !a.secure.getProvider().optString("model_id").equals("draft-model"),
               "Discovery implicitly saved draft");
-          button(a.root, "选择模型（1）").performClick();
+          button(a.root, "draft-model").performClick();
         });
     waitForIdleSync();
     clickAccessible("Fixture Flash");
@@ -276,7 +276,7 @@ public final class ModelConfigurationInstrumentation extends Instrumentation {
           a.render();
           edit(a.root, "Base URL").setText("https://api.deepseek.com");
           edit(a.root, "模型 ID").setText("deepseek-flash");
-          edit(a.root, "API Key（留空保留当前供应商密钥）").setText(credential);
+          edit(a.root, "留空保留当前供应商密钥").setText(credential);
           a.settingsUi.models.draft.set("reasoning_effort", "off");
           a.settingsUi.models.draft.set("supports_vision", true);
           button(a.root, "获取模型列表").performClick();

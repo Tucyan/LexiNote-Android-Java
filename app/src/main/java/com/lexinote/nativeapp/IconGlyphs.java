@@ -42,6 +42,7 @@ final class IconGlyphs {
     VALUES.put("send", 62821);
     VALUES.put("add", 61699);
     VALUES.put("trash-outline", 62966);
+    VALUES.put("create-outline", 62099);
     VALUES.put("checkmark-circle-outline", 61983);
     VALUES.put("hardware-chip-outline", 62309);
     VALUES.put("color-palette-outline", 62078);

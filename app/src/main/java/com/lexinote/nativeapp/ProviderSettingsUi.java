@@ -32,125 +32,138 @@ final class ProviderSettingsUi {
     if (draft == null || !draft.config().optString("id").equals(saved.optString("id")))
       draft = new ProviderDraft(saved);
     JSONObject config = draft.config();
-    LinearLayout panel = a.card("AI 服务连接");
-    panel.addView(a.text(saved.optString("name") + " · " + saved.optString("model_id"), 14, true));
+    boolean tokenDance = "tokendance".equals(saved.optString("id"));
+    LinearLayout summary = a.card(tokenDance ? "AI 服务 · 词元跳动" : "AI 服务连接");
+    summary.addView(a.text("当前服务：" + saved.optString("name") + " · " + saved.optString("model_id"), 14, true));
     String keyState;
     try {
       keyState = a.secure.getApiKey().isEmpty() ? "尚未设置 API Key" : "API Key 已安全保存在本机";
     } catch (Exception e) {
       keyState = "API Key 无法读取，请重新填写";
     }
-    panel.addView(a.text(keyState, 12, false));
-    panel.addView(
-        a.outlineButton(
-            expanded ? "收起模型设置" : "高级设置 · 模型与手动配置",
-            v -> {
-              expanded = !expanded;
-              a.render();
-            }));
+    summary.addView(a.text(keyState, 12, false));
+    summary.addView(a.gap(8));
+    summary.addView(a.text(tokenDance
+        ? "TokenDance 账户授权、充值和调用记录暂未接入；可在高级设置中手动配置服务和密钥。"
+        : "可在高级设置中选择模型、配置服务地址与密钥并测试连接。", 12, false));
+    Button toggle = a.outlineButton(expanded ? "收起高级设置" : "高级设置 · 模型与手动配置", v -> {
+      expanded = !expanded;
+      a.render();
+    });
+    LinearLayout.LayoutParams toggleLayout = new LinearLayout.LayoutParams(-1, a.dp(44));
+    toggleLayout.bottomMargin = a.dp(14);
+    a.body.addView(toggle, toggleLayout);
     if (!expanded) return;
-    panel.addView(a.text("供应商与密钥分别保存；未保存的输入可直接用于连接测试。", 12, false));
-    panel.addView(a.outlineButton("切换供应商", v -> chooseProvider()));
-    panel.addView(a.button("新增兼容服务", v -> addProvider()));
-    addInput(panel, "供应商名称", "name", config.optString("name"));
-    addInput(panel, "Base URL", "base_url", config.optString("base_url"));
-    addInput(panel, "模型 ID", "model_id", config.optString("model_id"));
-    EditText key = a.input("API Key（留空保留当前供应商密钥）", draft.enteredKey(), false);
+
+    LinearLayout panel = a.card("LLM 供应商与模型配置");
+    panel.addView(a.text("选择预设供应商", 12, true));
+    panel.addView(a.gap(6));
+    JSONArray profiles = a.secure.getProviders();
+    for (int i = 0; i < profiles.length(); i += 2) {
+      LinearLayout row = a.row();
+      for (int j = i; j < Math.min(i + 2, profiles.length()); j++) {
+        JSONObject profile = profiles.optJSONObject(j);
+        String id = profile.optString("id");
+        Button chip = a.chip(profile.optString("name"), id.equals(saved.optString("id")), v -> selectProvider(id));
+        chip.setSingleLine(false);
+        LinearLayout.LayoutParams chipLayout = new LinearLayout.LayoutParams(0, a.dp(44), 1);
+        chipLayout.rightMargin = a.dp(6);
+        row.addView(chip, chipLayout);
+      }
+      if (i + 1 >= profiles.length()) row.addView(new View(a), new LinearLayout.LayoutParams(0, 1, 1));
+      panel.addView(row);
+      panel.addView(a.gap(6));
+    }
+    panel.addView(a.button("＋ 新增兼容服务", v -> confirmDiscard(this::addProvider)));
+    panel.addView(a.gap(6));
+    panel.addView(a.text("模型选择", 12, true));
+    panel.addView(a.outlineButton(config.optString("model_id"), v -> {
+      if (catalog.length() > 0 && sameDestination(draft.config(), catalogDestination)) chooseModel();
+      else run("models");
+    }));
+    panel.addView(a.button("获取模型列表", v -> run("models")));
+    TextView visionNotice = a.text(config.optBoolean("supports_vision")
+        ? "当前模型已开启视觉输入，可通过图片测试核对能力。"
+        : "当前模型未开启视觉输入；图片查询需要支持视觉的模型。", 12, false);
+    visionNotice.setTextColor(config.optBoolean("supports_vision") ? a.accent : a.muted);
+    visionNotice.setPadding(a.dp(8), a.dp(8), a.dp(8), a.dp(8));
+    visionNotice.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 8, 0));
+    panel.addView(visionNotice);
+    panel.addView(a.gap(12));
+    panel.addView(a.text("API Key（安全加密存储）", 12, true));
+    EditText key = a.input("留空保留当前供应商密钥", draft.enteredKey(), false);
     key.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
     key.setTransformationMethod(PasswordTransformationMethod.getInstance());
     key.setSaveEnabled(false);
     key.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
-    watch(
-        key,
-        value -> {
-          draft.setKey(value);
-          edited();
-        });
+    watch(key, value -> { draft.setKey(value); edited(); });
     panel.addView(key);
-    panel.addView(a.button("获取模型列表", v -> run("models")));
-    if (catalog.length() > 0 && sameDestination(config, catalogDestination))
-      panel.addView(a.outlineButton("选择模型（" + catalog.length() + "）", v -> chooseModel()));
-    Switch vision = new Switch(a);
-    vision.setText("模型支持视觉输入");
-    vision.setTextColor(a.foreground);
-    vision.setChecked(config.optBoolean("supports_vision"));
-    vision.setOnCheckedChangeListener(
-        (button, checked) -> {
-          draft.set("supports_vision", checked);
-          edited();
-        });
-    panel.addView(vision);
-    panel.addView(
-        a.text(
-            config.has("vision_known") && config.optBoolean("vision_known")
-                ? "模型列表已提供输入能力；也可通过图片测试核对。"
-                : "输入能力尚未由模型列表确认；请核对供应商说明或进行图片测试。",
-            12,
-            false));
-    panel.addView(a.text("思考强度", 13, true));
+    panel.addView(a.gap(8));
+    LinearLayout actions = a.row();
+    LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, a.dp(44), 1);
+    left.rightMargin = a.dp(8);
+    actions.addView(a.primaryButton("保存服务配置", v -> save()), left);
+    actions.addView(a.outlineButton("文本连接测试", v -> run("text")), new LinearLayout.LayoutParams(0, a.dp(44), 1));
+    panel.addView(actions);
+    panel.addView(a.gap(8));
+    panel.addView(a.outlineButton("图片识别测试", v -> run("vision")));
+    panel.addView(a.text("测试使用当前填写的密钥、地址和模型，发送少量请求，可能产生费用；图片测试使用内置色块图。", 12, false));
+    if (active != null) panel.addView(a.outlineButton("取消配置请求", v -> {
+      cancel(); status = "请求已取消"; a.render();
+    }));
+    if (!status.isEmpty()) panel.addView(a.text(status, 13, true));
+    panel.addView(a.gap(12));
+    panel.addView(a.text("推理强度", 12, true));
     String[] efforts = {"off", "low", "medium", "high", "max"};
-    String[] names = {"关闭", "低", "中", "高", "最高"};
+    String[] names = {"关", "低", "中", "高", "最高"};
     JSONArray known = config.optJSONArray("reasoning_levels");
-    LinearLayout row = a.row();
+    LinearLayout effortRow = a.row();
     for (int i = 0; i < efforts.length; i++) {
       String effort = efforts[i];
       if (!effort.equals("off") && known != null && !contains(known, effort)) continue;
-      row.addView(
-          a.chip(
-              names[i],
-              effort.equals(config.optString("reasoning_effort", "off")),
-              v -> {
-                draft.set("reasoning_effort", effort);
-                edited();
-                a.render();
-              }),
-          new LinearLayout.LayoutParams(0, a.dp(42), 1));
+      effortRow.addView(a.chip(names[i], effort.equals(config.optString("reasoning_effort", "off")), v -> {
+        draft.set("reasoning_effort", effort); edited(); a.render();
+      }), new LinearLayout.LayoutParams(0, a.dp(40), 1));
     }
-    panel.addView(row);
-    panel.addView(a.text("获取列表、测试均使用当前输入。连接测试发送少量请求，可能产生费用；图片测试使用内置色块图。", 12, false));
-    panel.addView(a.button("文本连接测试", v -> run("text")));
-    panel.addView(a.button("图片识别测试", v -> run("vision")));
-    if (active != null)
-      panel.addView(
-          a.outlineButton(
-              "取消配置请求",
-              v -> {
-                cancel();
-                status = "请求已取消";
-                a.render();
-              }));
-    if (!status.isEmpty()) panel.addView(a.text(status, 13, true));
-    panel.addView(a.primaryButton("保存服务配置", v -> save()));
-    panel.addView(
-        a.button(
-            "清除当前供应商密钥",
-            v ->
-                new AlertDialog.Builder(a)
-                    .setMessage("清除该供应商在本机保存的 API Key？")
-                    .setNegativeButton("取消", null)
-                    .setPositiveButton(
-                        "清除",
-                        (dialog, which) -> {
-                          try {
-                            cancel();
-                            a.secure.saveProvider(a.secure.getProvider(), "");
-                            draft.setKey("");
-                            status = "当前供应商密钥已清除";
-                            a.render();
-                          } catch (Exception e) {
-                            a.error(e);
-                          }
-                        })
-                    .show()));
+    panel.addView(effortRow);
+    panel.addView(a.text("按供应商保存，开启可能增加耗时和用量；实际支持的档位由模型决定。", 12, false));
+    panel.addView(a.gap(12));
+    panel.addView(a.text("手动配置（修改后保存生效）", 12, true));
+    addInput(panel, "供应商名称", "name", config.optString("name"));
+    panel.addView(a.gap(6));
+    addInput(panel, "Base URL", "base_url", config.optString("base_url"));
+    panel.addView(a.gap(6));
+    addInput(panel, "模型 ID", "model_id", config.optString("model_id"));
+    Switch vision = new Switch(a);
+    vision.setText("多模态视觉识图能力 (Vision)");
+    vision.setTextColor(a.foreground);
+    vision.setChecked(config.optBoolean("supports_vision"));
+    vision.setOnCheckedChangeListener((button, checked) -> { draft.set("supports_vision", checked); edited(); });
+    panel.addView(vision);
+    panel.addView(a.text(config.optBoolean("vision_known")
+        ? "模型列表已提供输入能力；也可通过图片测试核对。"
+        : "输入能力尚未由模型列表确认；请核对供应商说明或进行图片测试。", 12, false));
+    panel.addView(a.gap(8));
+    panel.addView(a.outlineButton("保存服务配置", v -> save()));
+    panel.addView(a.button("清除当前供应商密钥", v ->
+        new AlertDialog.Builder(a).setMessage("清除该供应商在本机保存的 API Key？")
+            .setNegativeButton("取消", null).setPositiveButton("清除", (dialog, which) -> {
+              try {
+                cancel(); a.secure.saveProvider(a.secure.getProvider(), ""); draft.setKey("");
+                status = "当前供应商密钥已清除"; a.render();
+              } catch (Exception e) { a.error(e); }
+            }).show()));
     if (ProviderProfiles.preset(saved.optString("id")) != null)
       panel.addView(
           a.button(
               "恢复当前预设参数",
               v -> {
-                cancel();
-                draft = new ProviderDraft(ProviderProfiles.preset(saved.optString("id")));
-                status = "已恢复预设草稿，保存后生效；密钥保持独立。";
-                a.render();
+                confirmDiscard(() -> {
+                  cancel();
+                  draft = new ProviderDraft(ProviderProfiles.preset(saved.optString("id")));
+                  status = "已恢复预设草稿，保存后生效；密钥保持独立。";
+                  a.render();
+                });
               }));
     else
       panel.addView(
@@ -177,6 +190,7 @@ final class ProviderSettingsUi {
   }
 
   void addInput(LinearLayout panel, String hint, String field, String value) {
+    panel.addView(a.text(hint, 12, true));
     EditText input = a.input(hint, value, false);
     input.setSaveEnabled(false);
     input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
@@ -211,26 +225,27 @@ final class ProviderSettingsUi {
     } else status = "";
   }
 
-  void chooseProvider() {
-    JSONArray profiles = a.secure.getProviders();
-    String[] names = new String[profiles.length()];
-    for (int i = 0; i < names.length; i++) names[i] = profiles.optJSONObject(i).optString("name");
-    new AlertDialog.Builder(a)
-        .setTitle("选择供应商")
-        .setItems(
-            names,
-            (dialog, index) -> {
-              try {
-                cancel();
-                a.titles.reset();
-                a.secure.selectProvider(profiles.optJSONObject(index).optString("id"));
-                clearDraft();
-                a.render();
-              } catch (Exception e) {
-                a.error(e);
-              }
-            })
-        .show();
+  void selectProvider(String id) {
+    if (id.equals(a.secure.getProvider().optString("id"))) return;
+    Runnable select = () -> {
+      try {
+        cancel();
+        a.titles.reset();
+        a.secure.selectProvider(id);
+        clearDraft();
+        a.render();
+      } catch (Exception e) { a.error(e); }
+    };
+    confirmDiscard(select);
+  }
+
+  void confirmDiscard(Runnable action) {
+    boolean dirty = draft != null && (!draft.enteredKey().isEmpty()
+        || !draft.config().toString().equals(a.secure.getProvider().toString()));
+    if (dirty) {
+      new AlertDialog.Builder(a).setMessage("此操作将放弃当前未保存的配置，继续吗？")
+          .setNegativeButton("取消", null).setPositiveButton("继续", (dialog, which) -> action.run()).show();
+    } else action.run();
   }
 
   void addProvider() {

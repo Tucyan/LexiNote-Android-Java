@@ -70,27 +70,27 @@ final class NotebookUi {
         });
     LinearLayout cats = a.row();
     cats.setPadding(a.dp(14), a.dp(7), a.dp(14), a.dp(7));
-    cats.addView(
-        a.chip(
-            "全部词汇 (" + a.library.array("vocabularies").length() + ")",
-            selected == null,
-            v -> {
-              selected = null;
-              a.render();
-            }));
     JSONArray ns = a.library.array("notebooks");
+    boolean hasGlobal = false;
     for (int i = 0; i < ns.length(); i++) {
       JSONObject n = ns.optJSONObject(i);
-      if (Library.systemGlobal(n)) continue;
-      cats.addView(
-          a.chip(
-              n.optString("name") + " (" + n.optJSONArray("vocabulary_ids").length() + ")",
-              n.optString("id").equals(selected),
-              v -> {
-                selected = n.optString("id");
-                a.render();
-              }));
+      boolean global = Library.systemGlobal(n);
+      hasGlobal |= global;
+      String id = global ? null : n.optString("id");
+      JSONArray ids = n.optJSONArray("vocabulary_ids");
+      int count = global ? a.library.array("vocabularies").length() : (ids == null ? 0 : ids.length());
+      Button category = a.chip((global ? "全部词汇" : n.optString("name")) + " (" + count + ")",
+          Objects.equals(id, selected), v -> { selected = id; a.render(); });
+      if (Objects.equals(id, selected)) {
+        category.setTextColor(android.graphics.Color.WHITE);
+        category.setBackground(a.shape(a.accent, 20, a.accent));
+      }
+      category.setOnLongClickListener(v -> { manage(global ? null : n); return true; });
+      cats.addView(category);
     }
+    if (!hasGlobal)
+      cats.addView(a.chip("全部词汇 (" + a.library.array("vocabularies").length() + ")",
+          selected == null, v -> { selected = null; a.render(); }));
     cats.addView(a.chip("＋ 新建分类", false, v -> create()));
     HorizontalScrollView catScroll = new HorizontalScrollView(a);
     catScroll.setHorizontalScrollBarEnabled(false);
@@ -104,64 +104,57 @@ final class NotebookUi {
     active.addView(
         a.text(" " + (selectedNote == null ? "全部词汇" : path(selected)), 15, true),
         new LinearLayout.LayoutParams(0, -2, 1));
-    active.addView(
-        a.chip(
-            "信息",
-            false,
-            v ->
-                new AlertDialog.Builder(a)
-                    .setTitle("分类信息")
-                    .setMessage(
-                        (selectedNote == null ? "全部词汇" : path(selected))
-                            + " · "
-                            + visible().size()
-                            + " 条词汇\n词汇实体可被多个笔记共享引用。")
-                    .setPositiveButton("确定", null)
-                    .show()));
-    active.addView(a.chip("管理", false, v -> manage(selectedNote)));
+    active.addView(a.chip(selectedNote == null ? "信息" : "编辑分类", false,
+        v -> {
+          if (selectedNote != null) { manage(selectedNote); return; }
+          new AlertDialog.Builder(a)
+              .setTitle("分类信息")
+              .setMessage("全部词汇 · " + visible().size() + " 条词汇\n词汇实体可被多个笔记共享引用。")
+              .setNeutralButton("管理", (dialog, which) -> manage(null))
+              .setPositiveButton("确定", null)
+              .show();
+        }));
+    active.addView(a.chip(selecting ? "退出多选" : "批量管理", selecting, v -> {
+      selecting = !selecting;
+      selectedVocabularyIds.clear();
+      a.render();
+    }));
     controls.addView(active);
-    LinearLayout types = a.row();
-    types.setPadding(a.dp(14), a.dp(5), a.dp(14), a.dp(5));
-    types.setBackgroundColor(a.background);
-    for (String t : new String[] {"全部", "单词", "短语"})
-      types.addView(
-          a.chip(
-              t,
-              typeFilter.equals(t),
-              v -> {
-                typeFilter = t;
-                a.render();
-              }));
-    controls.addView(types);
-    LinearLayout tags = a.row();
-    tags.setPadding(a.dp(14), a.dp(4), a.dp(14), a.dp(4));
+    LinearLayout filters = a.row();
+    filters.setPadding(a.dp(14), a.dp(4), a.dp(14), a.dp(4));
+    filters.setBackgroundColor(a.background);
+    for (String t : new String[] {"全部", "单词", "短语"}) {
+      Button chip = a.chip(t, typeFilter.equals(t), v -> { typeFilter = t; a.render(); });
+      chip.setTextSize(11 * a.scale);
+      chip.setPadding(a.dp(8), 0, a.dp(8), 0);
+      LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, a.dp(30));
+      lp.rightMargin = a.dp(4);
+      filters.addView(chip, lp);
+    }
     LinkedHashSet<String> availableTags = new LinkedHashSet<>();
     JSONArray allVocab = a.library.array("vocabularies");
     for (int i = 0; i < allVocab.length(); i++) {
       JSONArray ts = allVocab.optJSONObject(i).optJSONArray("tags");
       for (int j = 0; ts != null && j < ts.length(); j++) availableTags.add(ts.optString(j));
     }
-    tags.addView(
-        a.chip(
-            "标签: 全部",
-            tagFilter.equals("全部"),
-            view -> {
-              tagFilter = "全部";
-              a.render();
-            }));
-    for (String tag : availableTags)
-      tags.addView(
-          a.chip(
-              "#" + tag,
-              tagFilter.equals(tag),
-              view -> {
-                tagFilter = tag;
-                a.render();
-              }));
-    HorizontalScrollView tagScroll = new HorizontalScrollView(a);
-    tagScroll.setHorizontalScrollBarEnabled(false);
-    tagScroll.addView(tags);
-    controls.addView(tagScroll);
+    if (!availableTags.isEmpty()) {
+      List<String> tagOptions = new ArrayList<>();
+      tagOptions.add("全部");
+      tagOptions.addAll(availableTags);
+      for (String tag : tagOptions) {
+        Button chip = a.chip(tag.equals("全部") ? "全部标签" : tag, tagFilter.equals(tag),
+            view -> { tagFilter = tag; a.render(); });
+        chip.setTextSize(11 * a.scale);
+        chip.setPadding(a.dp(8), 0, a.dp(8), 0);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, a.dp(30));
+        lp.rightMargin = a.dp(4);
+        filters.addView(chip, lp);
+      }
+    }
+    HorizontalScrollView filterScroll = new HorizontalScrollView(a);
+    filterScroll.setHorizontalScrollBarEnabled(false);
+    filterScroll.addView(filters);
+    controls.addView(filterScroll);
     if (selected != null) {
       JSONObject n = a.library.find("notebooks", selected);
       if (n == null) {
@@ -182,15 +175,6 @@ final class NotebookUi {
     pruneSelection(rows);
     LinearLayout selectionBar = a.row();
     selectionBar.setPadding(a.dp(14), a.dp(4), a.dp(14), a.dp(4));
-    selectionBar.addView(
-        a.chip(
-            selecting ? "退出选择" : "批量选择",
-            selecting,
-            view -> {
-              selecting = !selecting;
-              selectedVocabularyIds.clear();
-              a.render();
-            }));
     if (selecting) {
       selectionBar.addView(
           a.chip(
@@ -211,7 +195,7 @@ final class NotebookUi {
       selectionBar.addView(
           a.chip("操作 (" + selectedVocabularyIds.size() + ")", true, view -> batchMenu()));
     }
-    controls.addView(selectionBar);
+    if (selecting) controls.addView(selectionBar);
     if (selected != null) {
       JSONArray children =
           selectedNote == null ? null : selectedNote.optJSONArray("child_notebook_ids");
@@ -265,6 +249,9 @@ final class NotebookUi {
   void renderVocabularyListCard(JSONObject vocabulary, JSONObject display) {
     LinearLayout card = a.card(null);
     card.setPadding(a.dp(12), a.dp(12), a.dp(12), a.dp(12));
+    LinearLayout.LayoutParams cardLp = (LinearLayout.LayoutParams) card.getLayoutParams();
+    cardLp.bottomMargin = a.dp(8);
+    card.setLayoutParams(cardLp);
     card.setOnClickListener(
         view -> {
           if (selecting) {
@@ -290,109 +277,87 @@ final class NotebookUi {
           });
       top.addView(selectedBox);
     }
+    LinearLayout title = a.row();
+    title.setGravity(Gravity.CENTER_VERTICAL);
     TextView word = a.text(vocabulary.optString("content"), 16, true);
-    top.addView(word, new LinearLayout.LayoutParams(0, -2, 1));
-
+    title.addView(word);
     String type = vocabulary.optString("type", "word").equals("phrase") ? "短语" : "单词";
     TextView typeBadge = a.text(type, 11, true);
     typeBadge.setTextColor(a.muted);
-    typeBadge.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
+    typeBadge.setPadding(a.dp(7), a.dp(3), a.dp(7), a.dp(3));
     typeBadge.setBackground(a.shape(a.inputBg, 16, 0));
     LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(-2, -2);
-    badgeLp.rightMargin = a.dp(6);
-    top.addView(typeBadge, badgeLp);
-
-    ImageButton edit = new ImageButton(a);
-    edit.setImageResource(android.R.drawable.ic_menu_edit);
-    edit.setColorFilter(a.accent);
-    edit.setContentDescription("编辑词汇");
-    edit.setBackground(a.shape(android.graphics.Color.TRANSPARENT, 8, 0));
-    edit.setPadding(a.dp(7), a.dp(7), a.dp(7), a.dp(7));
-    edit.setOnClickListener(view -> detail(vocabulary));
-    top.addView(edit, new LinearLayout.LayoutParams(a.dp(32), a.dp(32)));
-    card.addView(top);
-
+    badgeLp.leftMargin = a.dp(6);
+    title.addView(typeBadge, badgeLp);
     JSONArray tags = vocabulary.optJSONArray("tags");
-    if (tags != null && tags.length() > 0) {
-      LinearLayout tagRow = a.row();
-      LinearLayout.LayoutParams tagRowLp = new LinearLayout.LayoutParams(-1, -2);
-      tagRowLp.topMargin = a.dp(3);
-      for (int i = 0; i < tags.length(); i++) {
-        String tagValue = tags.optString(i);
-        TextView tag = a.text("#" + tagValue, 11, true);
-        tag.setTextColor(a.accent);
-        tag.setPadding(a.dp(7), a.dp(3), a.dp(7), a.dp(3));
-        tag.setBackground(a.shape((a.accent & 0x00FFFFFF) | 0x1A000000, 16, 0));
-        tag.setOnClickListener(
-            view -> {
-              tagFilter = tagValue;
-              a.render();
-            });
-        LinearLayout.LayoutParams tagLp = new LinearLayout.LayoutParams(-2, -2);
-        tagLp.rightMargin = a.dp(5);
-        tagRow.addView(tag, tagLp);
-      }
-      card.addView(tagRow, tagRowLp);
+    for (int i = 0; tags != null && i < tags.length(); i++) {
+      String tagValue = tags.optString(i);
+      TextView tag = a.text("#" + tagValue, 11, true);
+      tag.setTextColor(a.accent);
+      tag.setPadding(a.dp(7), a.dp(3), a.dp(7), a.dp(3));
+      tag.setBackground(a.shape((a.accent & 0x00FFFFFF) | 0x1A000000, 16, 0));
+      tag.setOnClickListener(view -> { tagFilter = tagValue; a.render(); });
+      LinearLayout.LayoutParams tagLp = new LinearLayout.LayoutParams(-2, -2);
+      tagLp.leftMargin = a.dp(4);
+      title.addView(tag, tagLp);
     }
+    HorizontalScrollView titleScroll = new HorizontalScrollView(a);
+    titleScroll.setHorizontalScrollBarEnabled(false);
+    titleScroll.addView(title);
+    top.addView(titleScroll, new LinearLayout.LayoutParams(0, -2, 1));
+    if (!selecting) {
+      ImageButton edit = new ImageButton(a);
+      edit.setImageDrawable(a.new GlyphDrawable("create-outline", 18, a.accent));
+      edit.setContentDescription("编辑词汇");
+      edit.setBackground(a.shape(android.graphics.Color.TRANSPARENT, 8, 0));
+      edit.setOnClickListener(view -> detail(vocabulary));
+      top.addView(edit, new LinearLayout.LayoutParams(a.dp(32), a.dp(32)));
+    }
+    card.addView(top);
 
     JSONArray meanings = vocabulary.optJSONArray("meanings");
     JSONObject fields = display == null ? null : display.optJSONObject("fields");
     JSONObject perMeaning = display == null ? null : display.optJSONObject("meaning_fields");
     JSONArray visibleIds = display == null ? null : display.optJSONArray("meaning_ids");
-    int visibleCount = 0;
-    int annotationCount = 0;
+    int visibleCount = 0, annotationCount = 0;
+    JSONObject first = null;
     for (int i = 0; meanings != null && i < meanings.length(); i++) {
       JSONObject meaning = meanings.optJSONObject(i);
       if (visibleIds != null && !contains(visibleIds, meaning.optString("id"))) continue;
+      if (first == null) first = meaning;
       visibleCount++;
-      JSONObject localFields =
-          perMeaning == null ? null : perMeaning.optJSONObject(meaning.optString("id"));
-      boolean showZh = displayField(fields, localFields, "zh_definition");
-      boolean showEn = displayField(fields, localFields, "en_definition");
-      boolean showExample = displayField(fields, localFields, "example");
-      String definition = showZh ? meaning.optString("zh_definition").trim() : "";
-      if (definition.isEmpty() && showEn) definition = meaning.optString("en_definition").trim();
-      if (definition.isEmpty()) continue;
-
-      LinearLayout meaningBlock = a.column();
-      LinearLayout.LayoutParams meaningLp = new LinearLayout.LayoutParams(-1, -2);
-      meaningLp.topMargin = a.dp(4);
-      TextView definitionText = a.text("", 13, false);
+      JSONArray annotations = meaning.optJSONArray("annotations");
+      if (annotations != null && displayField(fields, perMeaning == null ? null :
+          perMeaning.optJSONObject(meaning.optString("id")), "annotations"))
+        annotationCount += annotations.length();
+    }
+    if (first != null) {
+      JSONObject local = perMeaning == null ? null : perMeaning.optJSONObject(first.optString("id"));
       android.text.SpannableStringBuilder line = new android.text.SpannableStringBuilder();
-      line.append(String.valueOf(i + 1)).append(". ");
-      String pos = meaning.optString("part_of_speech").trim();
+      String phonetic = displayField(fields, local, "phonetic") ? first.optString("phonetic").trim() : "";
+      if (!phonetic.isEmpty()) line.append(phonetic).append("  ");
+      String pos = first.optString("part_of_speech").trim();
       if (!pos.isEmpty()) {
         int start = line.length();
         line.append(pos);
-        line.setSpan(
-            new android.text.style.ForegroundColorSpan(a.accent),
-            start,
-            line.length(),
+        line.setSpan(new android.text.style.ForegroundColorSpan(a.accent), start, line.length(),
             android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        line.setSpan(
-            new android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
-            start,
-            line.length(),
-            android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        line.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), start,
+            line.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         line.append("  ");
       }
+      String definition = displayField(fields, local, "zh_definition") ? first.optString("zh_definition").trim() : "";
+      if (definition.isEmpty() && displayField(fields, local, "en_definition"))
+        definition = first.optString("en_definition").trim();
       line.append(definition);
-      definitionText.setText(line);
-      meaningBlock.addView(definitionText);
-      String example = showExample ? meaning.optString("example").trim() : "";
-      if (!example.isEmpty()) {
-        TextView exampleText = a.text("例：" + example, 11, false);
-        exampleText.setTextColor(a.muted);
-        exampleText.setMaxLines(2);
-        LinearLayout.LayoutParams exampleLp = new LinearLayout.LayoutParams(-1, -2);
-        exampleLp.leftMargin = a.dp(16);
-        meaningBlock.addView(exampleText, exampleLp);
-      }
-      JSONArray annotations = meaning.optJSONArray("annotations");
-      if (annotations != null) annotationCount += annotations.length();
-      card.addView(meaningBlock, meaningLp);
+      TextView summary = a.text("", 13, false);
+      summary.setText(line);
+      summary.setSingleLine(true);
+      summary.setEllipsize(android.text.TextUtils.TruncateAt.END);
+      LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+      lp.topMargin = a.dp(4);
+      card.addView(summary, lp);
     }
-
     LinearLayout footer = a.row();
     LinearLayout.LayoutParams footerLp = new LinearLayout.LayoutParams(-1, -2);
     footerLp.topMargin = a.dp(5);
