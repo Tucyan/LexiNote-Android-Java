@@ -44,7 +44,7 @@ final class ProviderSettingsUi {
     summary.addView(a.text(keyState, 12, false));
     summary.addView(a.gap(8));
     summary.addView(a.text(tokenDance
-        ? "TokenDance 账户授权、充值和调用记录暂未接入；可在高级设置中手动配置服务和密钥。"
+        ? "TokenDance 账户授权、充值和调用记录暂未接入；可在下方配置模型和密钥。"
         : "可在高级设置中选择模型、配置服务地址与密钥并测试连接。", 12, false));
     Button toggle = a.outlineButton(expanded ? "收起高级设置" : "高级设置 · 模型与手动配置", v -> {
       expanded = !expanded;
@@ -53,9 +53,10 @@ final class ProviderSettingsUi {
     LinearLayout.LayoutParams toggleLayout = new LinearLayout.LayoutParams(-1, a.dp(44));
     toggleLayout.bottomMargin = a.dp(14);
     a.body.addView(toggle, toggleLayout);
-    if (!expanded) return;
+    if (!expanded && !tokenDance) return;
 
-    LinearLayout panel = a.card("LLM 供应商与模型配置");
+    LinearLayout panel = a.card(tokenDance && !expanded ? "TokenDance 模型配置" : "LLM 供应商与模型配置");
+    if (expanded) {
     panel.addView(a.text("选择预设供应商", 12, true));
     panel.addView(a.gap(6));
     JSONArray profiles = a.secure.getProviders();
@@ -76,6 +77,7 @@ final class ProviderSettingsUi {
     }
     panel.addView(a.button("＋ 新增兼容服务", v -> confirmDiscard(this::addProvider)));
     panel.addView(a.gap(6));
+    }
     panel.addView(a.text("模型选择", 12, true));
     panel.addView(a.outlineButton(config.optString("model_id"), v -> {
       if (catalog.length() > 0 && sameDestination(draft.config(), catalogDestination)) chooseModel();
@@ -127,6 +129,7 @@ final class ProviderSettingsUi {
     }
     panel.addView(effortRow);
     panel.addView(a.text("按供应商保存，开启可能增加耗时和用量；实际支持的档位由模型决定。", 12, false));
+    if (!expanded) return;
     panel.addView(a.gap(12));
     panel.addView(a.text("手动配置（修改后保存生效）", 12, true));
     addInput(panel, "供应商名称", "name", config.optString("name"));

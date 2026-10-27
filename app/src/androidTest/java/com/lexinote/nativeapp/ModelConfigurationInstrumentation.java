@@ -50,6 +50,8 @@ public final class ModelConfigurationInstrumentation extends Instrumentation {
       passed.add(
           "legacy encrypted migration, independent provider credentials, partial-save compatibility"
               + " and destination guard");
+      main(this::defaultProviderLayout);
+      passed.add("TokenDance default editor and collapsed alternative providers");
       offlineEditor();
       passed.add(
           "draft discovery/probes, model picker, explicit save, stale cancellation and secret-free"
@@ -90,6 +92,29 @@ public final class ModelConfigurationInstrumentation extends Instrumentation {
       credential = null;
     }
     finish(outcome, result);
+  }
+
+  void defaultProviderLayout() throws Exception {
+    ProviderSettingsUi ui = a.settingsUi.models;
+    a.secure.selectProvider("tokendance");
+    ui.clearDraft();
+    ui.expanded = false;
+    a.page = 4;
+    a.screen = "tabs";
+    a.render();
+    check(button(a.root, "获取模型列表") != null, "TokenDance model controls are hidden by default");
+    check(edit(a.root, "留空保留当前供应商密钥") != null, "TokenDance key control is hidden by default");
+    check(button(a.root, "DeepSeek (Flash 多模态)") == null, "Alternative providers are visible by default");
+    check(edit(a.root, "Base URL") == null, "Manual settings are visible by default");
+    button(a.root, "高级设置 · 模型与手动配置").performClick();
+    check(button(a.root, "DeepSeek (Flash 多模态)") != null, "Advanced providers cannot be opened");
+    button(a.root, "DeepSeek (Flash 多模态)").performClick();
+    check("deepseek".equals(a.secure.getProvider().optString("id")), "Provider selection failed");
+    button(a.root, "收起高级设置").performClick();
+    check("deepseek".equals(a.secure.getProvider().optString("id")), "Collapsing switched the active provider");
+    check(button(a.root, "获取模型列表") == null, "Other provider settings remain expanded");
+    button(a.root, "高级设置 · 模型与手动配置").performClick();
+    check(edit(a.root, "Base URL") != null, "Other provider manual settings cannot be reopened");
   }
 
   void credentialIsolationAndMigration() throws Exception {
