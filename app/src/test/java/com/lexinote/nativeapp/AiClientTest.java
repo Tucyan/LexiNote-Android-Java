@@ -19,6 +19,43 @@ import org.junit.Test;
 
 /** In-memory HTTPS transport: no real provider, account, credential or paid request is used. */
 public class AiClientTest {
+  @Test
+  public void structuredConversationKeepsJsonExamplesAndValidatedActionHistory() throws Exception {
+    next = new FakeConnection(200, "{\"kind\":\"answer\",\"message\":\"ok\"}");
+    JSONObject action = new JSONObject().put("kind", "answer").put("message", "earlier answer");
+    JSONArray history =
+        new JSONArray()
+            .put(
+                new JSONObject()
+                    .put("role", "assistant")
+                    .put("content", "earlier answer")
+                    .put("action", action));
+    new AiClient(provider(false), "test-only").agent(history, "usage question", null);
+    JSONArray sent = new JSONObject(next.sent.toString("UTF-8")).getJSONArray("messages");
+    assertTrue(
+        sent.getJSONObject(0).getString("content").contains("{\"kind\":\"answer\",\"message\":"));
+    assertEquals(
+        "answer", new JSONObject(sent.getJSONObject(1).getString("content")).getString("kind"));
+  }
+
+  @Test
+  public void deepSeekActionsRequestJsonButTitlesRemainText() throws Exception {
+    JSONObject config =
+        provider(false)
+            .put("base_url", "https://api.deepseek.com")
+            .put("model_id", "deepseek-flash");
+    next = new FakeConnection(200, "{\"kind\":\"answer\",\"message\":\"ok\"}");
+    new AiClient(config, "test-only").agent(new JSONArray(), "explain usage", null);
+    assertEquals(
+        "json_object",
+        new JSONObject(next.sent.toString("UTF-8"))
+            .getJSONObject("response_format")
+            .getString("type"));
+    next = new FakeConnection(200, "Usage discussion");
+    new AiClient(config, "test-only").suggestTitle("question", "answer");
+    assertFalse(new JSONObject(next.sent.toString("UTF-8")).has("response_format"));
+  }
+
   private static FakeConnection next;
   private static int opened;
 
@@ -97,6 +134,14 @@ public class AiClientTest {
       assertTrue(expected.getMessage().contains("鉴权"));
       assertFalse(expected.getMessage().contains("sensitive-server-content"));
     }
+  }
+
+  @Test
+  public void tokenDanceGatewaySendsApplicationHeader() throws Exception {
+    next = new FakeConnection(200, "{\"kind\":\"answer\",\"message\":\"ok\"}");
+    JSONObject provider = provider(false).put("base_url", "https://tokendance.space/gateway/v1");
+    new AiClient(provider, "test-only").agent(new JSONArray(), "hello", null);
+    assertEquals("app://lexinote", next.getRequestProperty("X-App-URL"));
   }
 
   @Test

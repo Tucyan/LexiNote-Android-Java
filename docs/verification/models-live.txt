@@ -1,0 +1,6 @@
+PASS: 5 model configuration groups
+legacy encrypted migration, independent provider credentials, partial-save compatibility and destination guard
+draft discovery/probes, model picker, explicit save, stale cancellation and secret-free recreation state
+LIVE DeepSeek catalog and current-draft text connection
+LIVE blind color-image probe and encrypted configuration save
+LIVE actual query page and streamed assistant follow-up

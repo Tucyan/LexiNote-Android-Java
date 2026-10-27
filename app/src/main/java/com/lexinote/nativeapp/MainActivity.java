@@ -33,6 +33,7 @@ public final class MainActivity extends Activity {
   ConversationTitles titles;
   int generation = 0;
   AiClient active;
+  String requestFailureLocation = "";
   final ExecutorService worker = Executors.newSingleThreadExecutor();
   final Handler handler = new Handler(Looper.getMainLooper());
   QueryUi query;
@@ -63,6 +64,7 @@ public final class MainActivity extends Activity {
     notebooks = new NotebookUi(this);
     review = new ReviewUi(this);
     settingsUi = new SettingsUi(this);
+    settingsUi.models.restoreState(state);
     if (state != null && !recoveryOnly) {
       page = Math.max(0, Math.min(4, state.getInt("page", 0)));
       screen = state.getString("screen", "tabs");
@@ -576,6 +578,7 @@ public final class MainActivity extends Activity {
       return;
     }
     final int token = ++generation;
+    requestFailureLocation = "";
     try {
       active = new AiClient(secure.getProvider(), secure.getApiKey());
     } catch (Exception e) {
@@ -618,6 +621,8 @@ public final class MainActivity extends Activity {
                   active = null;
                   query.partialReply = "";
                   if (session != null && session == requestSession) {
+                    StackTraceElement[] trace = e.getStackTrace();
+                    requestFailureLocation = trace.length == 0 ? "" : trace[0].toString();
                     Library.put(session, "last_error", e.getMessage());
                     library.touchSession(session, true);
                     persist();
@@ -851,6 +856,7 @@ public final class MainActivity extends Activity {
 
   @Override
   protected void onSaveInstanceState(Bundle state) {
+    settingsUi.models.saveState(state);
     super.onSaveInstanceState(state);
     state.putInt("page", page);
     state.putString("screen", screen);
@@ -1038,6 +1044,7 @@ public final class MainActivity extends Activity {
   @Override
   protected void onDestroy() {
     cancel();
+    if (settingsUi != null) settingsUi.models.close();
     if (titles != null) titles.close();
     worker.shutdownNow();
     super.onDestroy();

@@ -29,7 +29,10 @@ public final class AiClient {
           + " 等用户确认。目标不清晰返回 {kind:clarify,message,choices:[{id,label}]}；缺材料返回"
           + " {kind:request_input,message}；翻译、语法或用法答疑返回 {kind:answer,message}。图片可能有多个词，不能擅自决定目标。答案"
           + " message 可用 Markdown。每轮可有 follow_up_questions 数组，最多3个、各40字以内。"
-          + RESULT_SCHEMA;
+          + RESULT_SCHEMA
+          + "\n必须保留 JSON 外壳，不得直接输出 Markdown 正文。答疑示例："
+          + "{\"kind\":\"answer\",\"message\":\"这里是 Markdown 格式的答复\",\"follow_up_questions\":[]}。"
+          + "用户说‘只回答问题’时，仍使用这个 answer 对象，将完整答复放进 message 字符串。";
 
   public AiClient(JSONObject provider, String key) {
     this.provider = provider;
@@ -61,7 +64,9 @@ public final class AiClient {
             "根据对话内容生成一个简短标题，只输出标题文本，最多12个汉字或英文单词，不加引号。",
             new JSONArray(),
             "用户：" + limit(firstUserMessage, 1200) + "\n助手：" + limit(firstAssistantMessage, 1600),
-            null);
+            null,
+            null,
+            false);
     return TitleSuggestionGuard.clean(raw);
   }
 
@@ -126,6 +131,17 @@ public final class AiClient {
       String image,
       Consumer<String> safeMessagePreview)
       throws Exception {
+    return chat(system, history, text, image, safeMessagePreview, true);
+  }
+
+  private String chat(
+      String system,
+      JSONArray history,
+      String text,
+      String image,
+      Consumer<String> safeMessagePreview,
+      boolean structured)
+      throws Exception {
     checkCancelled();
     if (apiKey.isEmpty()) throw new IllegalStateException("请先在设置中填写 API Key 和模型");
     String endpoint = AgentProtocol.endpoint(provider.optString("base_url"));
@@ -142,6 +158,10 @@ public final class AiClient {
           && ("user".equals(message.optString("role"))
               || "assistant".equals(message.optString("role")))) {
         String content = message.optString("content");
+        if (structured
+            && message.optString("role").equals("assistant")
+            && message.optJSONObject("action") != null)
+          content = message.optJSONObject("action").toString();
         if (!content.isEmpty())
           messages.put(
               new JSONObject()
@@ -166,9 +186,11 @@ public final class AiClient {
             .put("model", model)
             .put("messages", messages)
             .put("stream", safeMessagePreview != null);
-    String effort = provider.optString("reasoning_effort", "off");
-    if (java.util.Arrays.asList("low", "medium", "high").contains(effort))
-      payload.put("reasoning_effort", effort);
+    ModelOptions.apply(payload, provider);
+    String host = new java.net.URI(endpoint).getHost();
+    if (structured
+        && ("api.deepseek.com".equalsIgnoreCase(host) || "api.openai.com".equalsIgnoreCase(host)))
+      payload.put("response_format", new JSONObject().put("type", "json_object"));
     byte[] bytes = payload.toString().getBytes(StandardCharsets.UTF_8);
     HttpURLConnection connection = (HttpURLConnection) new URL(endpoint).openConnection();
     active = connection;
@@ -184,6 +206,7 @@ public final class AiClient {
           "Accept",
           safeMessagePreview == null ? "application/json" : "text/event-stream, application/json");
       connection.setRequestProperty("Authorization", "Bearer " + apiKey);
+      if (isTokenDanceGateway()) connection.setRequestProperty("X-App-URL", "app://lexinote");
       connection.setFixedLengthStreamingMode(bytes.length);
       try (OutputStream out = connection.getOutputStream()) {
         out.write(bytes);
@@ -203,7 +226,7 @@ public final class AiClient {
             && responseType.toLowerCase(java.util.Locale.ROOT).contains("text/event-stream")) {
           SseDecoder.Result stream =
               SseDecoder.decode(in, safeMessagePreview, this::checkCancelled);
-          if (stream.content.isEmpty()) throw new IOException("模型未返回回答，请检查接口协议");
+          if (stream.content.trim().isEmpty()) throw new IOException("模型未返回回答，请检查接口协议");
           if (!stream.done && stream.finishReason == null)
             throw new IOException("模型流式回复未正常结束，未应用不完整回答");
           if (stream.finishReason != null && !"stop".equals(stream.finishReason))
@@ -237,5 +260,16 @@ public final class AiClient {
       out.write(buffer, 0, count);
     }
     return out.toString(StandardCharsets.UTF_8.name());
+  }
+
+  private boolean isTokenDanceGateway() {
+    try {
+      java.net.URI uri = new java.net.URI(provider.optString("base_url").trim());
+      return "https".equalsIgnoreCase(uri.getScheme())
+          && "tokendance.space".equalsIgnoreCase(uri.getHost())
+          && "/gateway/v1".equals(uri.getPath().replaceAll("/+$", ""));
+    } catch (Exception ignored) {
+      return false;
+    }
   }
 }

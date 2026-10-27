@@ -1,95 +1,20 @@
 package com.lexinote.nativeapp;
 
 import android.app.*;
-import android.text.InputType;
 import android.widget.*;
 import org.json.*;
 
 final class SettingsUi {
   final MainActivity a;
-  boolean providerExpanded = false;
+  final ProviderSettingsUi models;
 
   SettingsUi(MainActivity a) {
     this.a = a;
+    models = new ProviderSettingsUi(a);
   }
 
   void show() {
-    LinearLayout provider = a.card(null);
-    JSONObject config = a.secure.getProvider();
-    provider.addView(a.text("AI 服务连接", 18, true));
-    provider.addView(a.text("Android 原生版通过兼容接口连接你配置的 AI 服务，凭据仅保存在本机。", 14, false));
-    String keyState;
-    try {
-      keyState = a.secure.getApiKey().isEmpty() ? "尚未设置 API Key" : "API Key 已安全保存在本机";
-    } catch (Exception error) {
-      keyState = "API Key 无法读取，请重新填写";
-    }
-    provider.addView(a.text(keyState, 13, true));
-    provider.addView(
-        a.text(config.optString("name") + " · " + config.optString("model_id"), 12, false));
-    LinearLayout.LayoutParams providerInfoLp = new LinearLayout.LayoutParams(-1, -2);
-    providerInfoLp.topMargin = a.dp(6);
-    providerInfoLp.bottomMargin = a.dp(4);
-    provider.getChildAt(provider.getChildCount() - 1).setLayoutParams(providerInfoLp);
-    Button advanced =
-        a.outlineButton(
-            providerExpanded ? "收起高级设置 · 模型与手动配置" : "高级设置 · 模型与手动配置",
-            v -> {
-              providerExpanded = !providerExpanded;
-              a.render();
-            });
-    LinearLayout.LayoutParams advancedLp = new LinearLayout.LayoutParams(-1, a.dp(44));
-    advancedLp.bottomMargin = a.dp(14);
-    a.body.addView(advanced, advancedLp);
-    if (providerExpanded) {
-      EditText name = a.input("供应商名称", config.optString("name"), false),
-          base =
-              a.input(
-                  "Base URL，例如 https://api.example.com/v1", config.optString("base_url"), false),
-          model = a.input("模型 ID", config.optString("model_id"), false),
-          key = a.input("API Key（留空保留现有密钥）", "", false);
-      key.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-      provider.addView(name);
-      provider.addView(base);
-      provider.addView(model);
-      provider.addView(key);
-      Switch vision = new Switch(a);
-      vision.setText("模型支持视觉输入");
-      vision.setTextColor(a.foreground);
-      vision.setChecked(config.optBoolean("supports_vision"));
-      provider.addView(vision);
-      provider.addView(
-          a.button(
-              "保存服务配置",
-              v -> {
-                try {
-                  JSONObject p = new JSONObject();
-                  Library.put(p, "name", name.getText().toString());
-                  Library.put(p, "base_url", base.getText().toString().trim());
-                  Library.put(p, "model_id", model.getText().toString().trim());
-                  Library.put(p, "supports_vision", vision.isChecked());
-                  String k = key.getText().toString();
-                  a.secure.saveProvider(p, k.isEmpty() ? null : k);
-                  key.setText("");
-                  a.say("配置已保存");
-                  a.render();
-                } catch (Exception e) {
-                  a.error(e);
-                }
-              }));
-      provider.addView(
-          a.button(
-              "清除本机 API Key",
-              v -> {
-                try {
-                  a.secure.saveProvider(a.secure.getProvider(), "");
-                  a.say("密钥已清除");
-                  a.render();
-                } catch (Exception e) {
-                  a.error(e);
-                }
-              }));
-    }
+    models.show();
     LinearLayout appearance = a.card("外观与阅读");
     JSONObject prefs = a.library.settings();
     appearance.addView(a.text("主题", 13, true));
@@ -225,9 +150,7 @@ final class SettingsUi {
     LinearLayout about = a.card("LexiNote · Android Java");
     about.addView(
         a.text(
-            "独立原生版本 · Java 17\n"
-                + "本地数据保存在应用私有目录。卸载前请导出备份。\n"
-                + "原生迁移首版：尚未完整迁移 AI 自动命名、复杂 Markdown 表格与批量管理。",
+            "独立原生版本 · Java 17\n" + "本地数据保存在应用私有目录。卸载前请导出备份。\n" + "原生 Java 版本，支持图文查询、流式答疑与共享笔记。",
             14,
             false));
     a.body.addView(a.text("LexiNote 原生 Android 版本 · Java", 13, false));

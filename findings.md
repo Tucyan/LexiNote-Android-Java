@@ -1,5 +1,9 @@
 # Findings
 
+2026-10-27 model scope: native SecureSettings currently has one provider and encrypted key, settings UI only manual inputs. Source includes five presets, independent keys, reasoning options and draft text/vision tests. DeepSeek official /models now returns input_modalities and effort.supported_levels; deepseek-flash is listed. Use live discovery rather than assume capability. User authorized a temporary key for necessary real API tests; never persist it in repository or logs.
+
+2026-10-27 completion: real DeepSeek testing required explicit JSON mode plus valid JSON prompt examples and preserving structured assistant history; prompt-only enforcement was unstable. All successful results remain validated by AgentProtocol, without accepting malformed actions. Old native provider metadata can lack a name even while its endpoint/model and encrypted key are valid; migration fills presentation defaults before sanitizing. Per-profile credential checks happen after legacy migration so first partial-save updates the correct active provider.
+
 - Native baseline has 44 JVM tests and 10 device smoke checks. JSON Library/AtomicFile repository preserves source fields; query actions require confirmed target and source revision.
 - MainActivity currently owns a global image URI and destructive crop dialog; camera only reads thumbnail intent extra. Integration must separate original and effective selection URI, and handle camera success with null Intent.
 - MainActivity.request shows a blocking progress dialog; streaming assistant requires a cancellable nonmodal request path with generation guards.

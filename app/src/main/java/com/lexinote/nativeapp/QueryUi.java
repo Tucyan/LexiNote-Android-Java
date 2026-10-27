@@ -640,7 +640,10 @@ final class QueryUi {
     if (resultContext != null) {
       JSONObject contextMessage = new JSONObject();
       Library.put(contextMessage, "role", "assistant");
-      Library.put(contextMessage, "content", "当前词条完整上下文：" + resultContext.toString());
+      JSONObject contextAction = new JSONObject();
+      Library.put(contextAction, "kind", "answer");
+      Library.put(contextAction, "message", "当前词条完整上下文：" + resultContext.toString());
+      Library.put(contextMessage, "content", contextAction.toString());
       previous.put(contextMessage);
     }
     if (append) message("user", text, null);

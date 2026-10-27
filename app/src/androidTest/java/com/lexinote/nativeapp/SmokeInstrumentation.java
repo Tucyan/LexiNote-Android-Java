@@ -276,7 +276,7 @@ public final class SmokeInstrumentation extends Instrumentation {
         new JSONObject().put("base_url", "https://provider.invalid/v1").put("model_id", "test");
     secure.saveProvider(provider, "device-smoke-dummy-key");
     check("device-smoke-dummy-key".equals(secure.getApiKey()), "Credential roundtrip failed");
-    String ciphertext = isolated.getSharedPreferences("provider_private", 0).getString("key", "");
+    String ciphertext = isolated.getSharedPreferences("provider_private", 0).getAll().toString();
     check(!ciphertext.contains("device-smoke-dummy-key"), "Plaintext credential found");
     secure.saveProvider(provider, "");
     check(secure.getApiKey().isEmpty(), "Credential clear failed");
