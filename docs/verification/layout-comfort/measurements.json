@@ -1,0 +1,446 @@
+{
+  "density_dpi": 420,
+  "px_per_dp": 2.625,
+  "system_font_scale": 1.0,
+  "app_font_medium_scale": 1.0,
+  "app_font_large_scale": 1.15,
+  "measurements": [
+    {
+      "screen": "01-home-standard",
+      "label": "文本查询",
+      "bounds_px": [
+        80,
+        359,
+        386,
+        454
+      ],
+      "width_dp": 116.57,
+      "height_dp": 36.19,
+      "clickable": "true",
+      "class": "android.widget.Button"
+    },
+    {
+      "screen": "01-home-standard",
+      "label": "日期筛选",
+      "bounds_px": [
+        841,
+        1381,
+        1006,
+        1434
+      ],
+      "width_dp": 62.86,
+      "height_dp": 20.19,
+      "clickable": "true",
+      "class": "android.widget.TextView"
+    },
+    {
+      "screen": "02-notebook-standard",
+      "label": "全部",
+      "bounds_px": [
+        37,
+        692,
+        135,
+        771
+      ],
+      "width_dp": 37.33,
+      "height_dp": 30.1,
+      "clickable": "true",
+      "class": "android.widget.Button"
+    },
+    {
+      "screen": "02-notebook-standard",
+      "label": "搜索词汇、含义或例句…",
+      "bounds_px": [
+        37,
+        313,
+        855,
+        408
+      ],
+      "width_dp": 311.62,
+      "height_dp": 36.19,
+      "clickable": "true",
+      "class": "android.widget.EditText"
+    },
+    {
+      "screen": "02-notebook-standard",
+      "label": "编辑词汇",
+      "bounds_px": [
+        927,
+        881,
+        1011,
+        965
+      ],
+      "width_dp": 32.0,
+      "height_dp": 32.0,
+      "clickable": "true",
+      "class": "android.widget.ImageButton"
+    },
+    {
+      "screen": "08-review-overview-standard",
+      "label": "10 词 / 组",
+      "bounds_px": [
+        79,
+        1468,
+        386,
+        1573
+      ],
+      "width_dp": 116.95,
+      "height_dp": 40.0,
+      "clickable": "true",
+      "class": "android.widget.Button"
+    },
+    {
+      "screen": "06-assistant-standard",
+      "label": "proof",
+      "bounds_px": [
+        71,
+        780,
+        270,
+        867
+      ],
+      "width_dp": 75.81,
+      "height_dp": 33.14,
+      "clickable": "false",
+      "class": "android.widget.TextView"
+    },
+    {
+      "screen": "21-assistant-large",
+      "label": "proof",
+      "bounds_px": [
+        71,
+        787,
+        270,
+        874
+      ],
+      "width_dp": 75.81,
+      "height_dp": 33.14,
+      "clickable": "false",
+      "class": "android.widget.TextView"
+    },
+    {
+      "screen": "06-assistant-standard",
+      "label": "修改名称",
+      "bounds_px": [
+        842,
+        168,
+        1038,
+        263
+      ],
+      "width_dp": 74.67,
+      "height_dp": 36.19,
+      "clickable": "true",
+      "class": "android.widget.Button"
+    },
+    {
+      "screen": "21-assistant-large",
+      "label": "修改名称",
+      "bounds_px": [
+        818,
+        163,
+        1038,
+        267
+      ],
+      "width_dp": 83.81,
+      "height_dp": 39.62,
+      "clickable": "true",
+      "class": "android.widget.Button"
+    },
+    {
+      "screen": "03-detail-standard",
+      "label": "预算",
+      "bounds_px": [
+        70,
+        901,
+        1010,
+        950
+      ],
+      "width_dp": 358.1,
+      "height_dp": 18.67,
+      "clickable": "false",
+      "class": "android.widget.TextView"
+    },
+    {
+      "screen": "24-home-360dp-large",
+      "label": "最近查询",
+      "bounds_px": [
+        662,
+        142,
+        933,
+        268
+      ],
+      "width_dp": 103.24,
+      "height_dp": 48.0,
+      "clickable": "true",
+      "class": "android.widget.LinearLayout"
+    }
+  ],
+  "density_switch": {
+    "same_visible_text_and_geometry": true,
+    "comfortable": "18-notebook-large-comfortable",
+    "compact": "22-notebook-large-compact"
+  },
+  "assistant_app_font": {
+    "table_cell_same_width_height": true,
+    "standard": {
+      "screen": "06-assistant-standard",
+      "label": "proof",
+      "bounds_px": [
+        71,
+        780,
+        270,
+        867
+      ],
+      "width_dp": 75.81,
+      "height_dp": 33.14,
+      "clickable": "false",
+      "class": "android.widget.TextView"
+    },
+    "large": {
+      "screen": "21-assistant-large",
+      "label": "proof",
+      "bounds_px": [
+        71,
+        787,
+        270,
+        874
+      ],
+      "width_dp": 75.81,
+      "height_dp": 33.14,
+      "clickable": "false",
+      "class": "android.widget.TextView"
+    }
+  },
+  "notebook_ancestors": [
+    {
+      "class": "android.widget.LinearLayout",
+      "bounds": [
+        69,
+        894,
+        816,
+        952
+      ],
+      "clickable": "false"
+    },
+    {
+      "class": "android.widget.HorizontalScrollView",
+      "bounds": [
+        69,
+        894,
+        927,
+        952
+      ],
+      "clickable": "false"
+    },
+    {
+      "class": "android.widget.LinearLayout",
+      "bounds": [
+        69,
+        881,
+        1011,
+        965
+      ],
+      "clickable": "false"
+    },
+    {
+      "class": "android.widget.LinearLayout",
+      "bounds": [
+        37,
+        849,
+        1043,
+        1113
+      ],
+      "clickable": "true"
+    },
+    {
+      "class": "android.widget.LinearLayout",
+      "bounds": [
+        0,
+        849,
+        1080,
+        2195
+      ],
+      "clickable": "false"
+    }
+  ],
+  "contrast": {
+    "accent_vs_white": 2.537,
+    "body_vs_white": 17.853,
+    "border_vs_white": 1.233
+  },
+  "screenshots": [
+    {
+      "file": "01-home-standard.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "01-home-standard.xml"
+    },
+    {
+      "file": "02-notebook-standard.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "02-notebook-standard.xml"
+    },
+    {
+      "file": "03-detail-standard.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "03-detail-standard.xml"
+    },
+    {
+      "file": "04-home-image-standard.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "04-home-image-standard.xml"
+    },
+    {
+      "file": "05-home-keyboard.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "05-home-keyboard.xml"
+    },
+    {
+      "file": "06-assistant-standard.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "06-assistant-standard.xml"
+    },
+    {
+      "file": "07-assistant-keyboard-draft.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "07-assistant-keyboard-draft.xml"
+    },
+    {
+      "file": "08-review-overview-standard.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "08-review-overview-standard.xml"
+    },
+    {
+      "file": "09-review-card-standard.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "09-review-card-standard.xml"
+    },
+    {
+      "file": "10-review-answer-standard.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "10-review-answer-standard.xml"
+    },
+    {
+      "file": "11-guess-image-standard.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "11-guess-image-standard.xml"
+    },
+    {
+      "file": "12-guess-text-standard.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "12-guess-text-standard.xml"
+    },
+    {
+      "file": "13-tokendance-standard.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "13-tokendance-standard.xml"
+    },
+    {
+      "file": "14-model-picker-standard.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "14-model-picker-standard.xml"
+    },
+    {
+      "file": "15-settings-expanded-standard.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "15-settings-expanded-standard.xml"
+    },
+    {
+      "file": "16-settings-manual-standard.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "16-settings-manual-standard.xml"
+    },
+    {
+      "file": "17-settings-keyboard.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "17-settings-keyboard.xml"
+    },
+    {
+      "file": "18-notebook-large-comfortable.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "18-notebook-large-comfortable.xml"
+    },
+    {
+      "file": "19-detail-large.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "19-detail-large.xml"
+    },
+    {
+      "file": "20-home-large.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "20-home-large.xml"
+    },
+    {
+      "file": "21-assistant-large.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "21-assistant-large.xml"
+    },
+    {
+      "file": "22-notebook-large-compact.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "22-notebook-large-compact.xml"
+    },
+    {
+      "file": "23-notebook-dark-large.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "23-notebook-dark-large.xml"
+    },
+    {
+      "file": "24-home-360dp-large.png",
+      "width_px": 945,
+      "height_px": 2120,
+      "xml": "24-home-360dp-large.xml"
+    },
+    {
+      "file": "25-notebook-360dp-large.png",
+      "width_px": 945,
+      "height_px": 2120,
+      "xml": "25-notebook-360dp-large.xml"
+    },
+    {
+      "file": "26-detail-360dp-large.png",
+      "width_px": 945,
+      "height_px": 2120,
+      "xml": "26-detail-360dp-large.xml"
+    },
+    {
+      "file": "27-home-keyboard-360dp-large.png",
+      "width_px": 945,
+      "height_px": 2120,
+      "xml": "27-home-keyboard-360dp-large.xml"
+    },
+    {
+      "file": "28-home-320dp-large-stress.png",
+      "width_px": 840,
+      "height_px": 1885,
+      "xml": "28-home-320dp-large-stress.xml"
+    },
+    {
+      "file": "29-restored-home.png",
+      "width_px": 1080,
+      "height_px": 2424,
+      "xml": "29-restored-home.xml"
+    }
+  ]
+}

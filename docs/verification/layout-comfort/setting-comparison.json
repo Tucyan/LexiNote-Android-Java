@@ -1,0 +1,12 @@
+{
+  "after": {
+    "font": "large",
+    "theme": "light",
+    "density": "compact"
+  },
+  "before": {
+    "font": "medium",
+    "theme": "light",
+    "density": "comfortable"
+  }
+}
