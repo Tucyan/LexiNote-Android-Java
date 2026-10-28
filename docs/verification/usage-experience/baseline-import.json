@@ -1,0 +1,168 @@
+{
+  "vocabulary_count": 120,
+  "notebook_count": 8,
+  "recent_count": 10,
+  "saved_count": 8,
+  "temporary_count": 5,
+  "message_count": 54.0,
+  "mastered_count": 48,
+  "conversations": [
+    {
+      "id": "usage-query-10",
+      "title": "agenda：会议日程",
+      "retention": "temporary",
+      "origin": "query",
+      "last_used_at": "2026-10-28T01:53:00Z"
+    },
+    {
+      "id": "usage-assistant-3",
+      "title": "读书笔记中的改写练习",
+      "retention": "temporary",
+      "origin": "assistant",
+      "last_used_at": "2026-10-28T01:40:00Z"
+    },
+    {
+      "id": "usage-assistant-2",
+      "title": "data 和 evidence 的主谓一致",
+      "retention": "temporary",
+      "origin": "assistant",
+      "last_used_at": "2026-10-28T01:20:00Z"
+    },
+    {
+      "id": "usage-query-9",
+      "title": "in terms of 的比较句",
+      "retention": "temporary",
+      "origin": "query",
+      "last_used_at": "2026-10-28T01:00:00Z"
+    },
+    {
+      "id": "usage-assistant-1",
+      "title": "used to 与 be used to 的区别",
+      "retention": "temporary",
+      "origin": "assistant",
+      "last_used_at": "2026-10-28T01:00:00Z"
+    },
+    {
+      "id": "usage-query-8",
+      "title": "follow up on 的邮件表达",
+      "retention": "saved",
+      "origin": "query",
+      "last_used_at": "2026-10-28T00:30:00Z"
+    },
+    {
+      "id": "usage-query-7",
+      "title": "get the hang of 的日常用法",
+      "retention": "saved",
+      "origin": "query",
+      "last_used_at": "2026-10-28T00:00:00Z"
+    },
+    {
+      "id": "usage-query-6",
+      "title": "take into account 的句型",
+      "retention": "saved",
+      "origin": "query",
+      "last_used_at": "2026-10-27T23:30:00Z"
+    },
+    {
+      "id": "usage-query-5",
+      "title": "evidence 和 proof 的语气区别",
+      "retention": "saved",
+      "origin": "query",
+      "last_used_at": "2026-10-27T23:00:00Z"
+    },
+    {
+      "id": "usage-query-4",
+      "title": "reliable 与 dependable 的区别",
+      "retention": "saved",
+      "origin": "query",
+      "last_used_at": "2026-10-27T22:30:00Z"
+    },
+    {
+      "id": "usage-query-3",
+      "title": "character 的两个常见含义",
+      "retention": "saved",
+      "origin": "query",
+      "last_used_at": "2026-10-27T22:00:00Z"
+    },
+    {
+      "id": "usage-query-2",
+      "title": "context：从上下文猜词",
+      "retention": "saved",
+      "origin": "query",
+      "last_used_at": "2026-10-27T21:30:00Z"
+    },
+    {
+      "id": "usage-query-1",
+      "title": "deadline：如何礼貌确认截止时间",
+      "retention": "saved",
+      "origin": "query",
+      "last_used_at": "2026-10-27T21:00:00Z"
+    }
+  ],
+  "recent": [
+    {
+      "id": "usage-query-10",
+      "word": "agenda",
+      "created_at": "2026-10-28T01:50:00Z"
+    },
+    {
+      "id": "usage-query-9",
+      "word": "in terms of",
+      "created_at": "2026-10-27T01:40:00Z"
+    },
+    {
+      "id": "usage-query-8",
+      "word": "follow up on",
+      "created_at": "2026-10-26T01:30:00Z"
+    },
+    {
+      "id": "usage-query-7",
+      "word": "get the hang of",
+      "created_at": "2026-10-25T01:20:00Z"
+    },
+    {
+      "id": "usage-query-6",
+      "word": "take into account",
+      "created_at": "2026-10-24T01:10:00Z"
+    },
+    {
+      "id": "usage-query-5",
+      "word": "evidence",
+      "created_at": "2026-10-23T01:00:00Z"
+    },
+    {
+      "id": "usage-query-4",
+      "word": "reliable",
+      "created_at": "2026-10-22T00:50:00Z"
+    },
+    {
+      "id": "usage-query-3",
+      "word": "character",
+      "created_at": "2026-10-21T00:40:00Z"
+    },
+    {
+      "id": "usage-query-2",
+      "word": "context",
+      "created_at": "2026-10-20T00:30:00Z"
+    },
+    {
+      "id": "usage-query-1",
+      "word": "deadline",
+      "created_at": "2026-10-19T00:20:00Z"
+    }
+  ],
+  "review": [
+    {
+      "word": "agenda",
+      "review_count": 0,
+      "review_grade": null,
+      "review_due": 1793149200000
+    },
+    {
+      "word": "budget",
+      "review_count": 2,
+      "review_grade": "再次",
+      "review_due": 1793066400000
+    }
+  ]
+}

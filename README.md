@@ -83,3 +83,5 @@ MIT License，保留原项目许可证。独立公开仓库：[Tucyan/LexiNote-A
 2026-10-28：新增 TokenDance 账户入口、PKCE 授权/一次性码、内置离线模型列表、原生充值状态及余额/授权恢复。117 项 JVM 测试和 22 组离线设备检查通过；真实登录与支付尚未实测。见 [TokenDance 验收](docs/verification/TOKENDANCE.md)。
 
 正常使用测试数据：80 单词、40 短语、10 条最近查询、5 条临时和 8 条保存会话。已通过真实文件选择器导入和回导校验，见 [模拟备份](docs/fixtures/normal-usage/README.md) 与 [测试报告](docs/verification/NORMAL-USAGE.md)。
+
+实际使用续查：确认 9 组问题，含本地查询占用临时会话额度、导入顺序引发错误淘汰、复习统计与搜索/筛选交互。实测证据、恢复检查和建议修复顺序见 [使用体验审查](docs/verification/USAGE-EXPERIENCE.md)。本轮仅记录问题，测试数据及设置已恢复。

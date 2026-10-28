@@ -1,0 +1,11 @@
+{
+  "query": "source",
+  "expected_count": 4,
+  "expected_matches": [
+    "source",
+    "derive",
+    "look up",
+    "be based on"
+  ],
+  "actual_selected_count": 120
+}

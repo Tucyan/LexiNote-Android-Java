@@ -1,0 +1,39 @@
+{
+  "before_counts": {
+    "recent": 10,
+    "temporary": 5,
+    "saved": 8,
+    "messages": 54.0
+  },
+  "after_counts": {
+    "recent": 10,
+    "temporary": 5,
+    "saved": 8,
+    "messages": 50.0
+  },
+  "removed_conversations": [
+    {
+      "id": "usage-query-10",
+      "title": "agenda：会议日程",
+      "retention": "temporary",
+      "origin": "query",
+      "last_used_at": "2026-10-28T01:53:00Z"
+    }
+  ],
+  "added_conversations": [
+    {
+      "id": "569e2cc1-2d02-44f7-8105-3cfbe97bb8e9",
+      "title": "budget",
+      "retention": "temporary",
+      "origin": "query",
+      "last_used_at": "2026-10-28T07:39:13.227834Z"
+    }
+  ],
+  "removed_recent": [
+    {
+      "id": "usage-query-10",
+      "word": "agenda",
+      "created_at": "2026-10-28T01:50:00Z"
+    }
+  ]
+}

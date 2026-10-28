@@ -1,0 +1,20 @@
+{
+  "files": [
+    {
+      "target": "files/library.json",
+      "byte_equal": true
+    },
+    {
+      "target": "shared_prefs/provider_private.xml",
+      "byte_equal": true
+    },
+    {
+      "target": "files/before-restore.json",
+      "byte_equal": true
+    }
+  ],
+  "timezone_original": "GMT",
+  "timezone_restored": "GMT",
+  "pre_fixture_rollback_preserved": true,
+  "source_sample_rollback_preserved": true
+}

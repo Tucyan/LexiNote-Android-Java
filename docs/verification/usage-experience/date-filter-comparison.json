@@ -1,0 +1,65 @@
+{
+  "timezone": "Asia/Singapore",
+  "filter_field": "last_used_at",
+  "day": "2026-10-28",
+  "expected_local_day_count": 8,
+  "actual_count": 2,
+  "rows": [
+    {
+      "id": "usage-query-8",
+      "title": "follow up on 的邮件表达",
+      "utc": "2026-10-28T00:30:00.000Z",
+      "local_singapore": "2026-10-28 08:30",
+      "matches_current_utc_day": true
+    },
+    {
+      "id": "usage-query-7",
+      "title": "get the hang of 的日常用法",
+      "utc": "2026-10-28T00:00:00.000Z",
+      "local_singapore": "2026-10-28 08:00",
+      "matches_current_utc_day": true
+    },
+    {
+      "id": "usage-query-6",
+      "title": "take into account 的句型",
+      "utc": "2026-10-27T23:30:00.000Z",
+      "local_singapore": "2026-10-28 07:30",
+      "matches_current_utc_day": false
+    },
+    {
+      "id": "usage-query-5",
+      "title": "evidence 和 proof 的语气区别",
+      "utc": "2026-10-27T23:00:00.000Z",
+      "local_singapore": "2026-10-28 07:00",
+      "matches_current_utc_day": false
+    },
+    {
+      "id": "usage-query-4",
+      "title": "reliable 与 dependable 的区别",
+      "utc": "2026-10-27T22:30:00.000Z",
+      "local_singapore": "2026-10-28 06:30",
+      "matches_current_utc_day": false
+    },
+    {
+      "id": "usage-query-3",
+      "title": "character 的两个常见含义",
+      "utc": "2026-10-27T22:00:00.000Z",
+      "local_singapore": "2026-10-28 06:00",
+      "matches_current_utc_day": false
+    },
+    {
+      "id": "usage-query-2",
+      "title": "context：从上下文猜词",
+      "utc": "2026-10-27T21:30:00.000Z",
+      "local_singapore": "2026-10-28 05:30",
+      "matches_current_utc_day": false
+    },
+    {
+      "id": "usage-query-1",
+      "title": "deadline：如何礼貌确认截止时间",
+      "utc": "2026-10-27T21:00:00.000Z",
+      "local_singapore": "2026-10-28 05:00",
+      "matches_current_utc_day": false
+    }
+  ]
+}
