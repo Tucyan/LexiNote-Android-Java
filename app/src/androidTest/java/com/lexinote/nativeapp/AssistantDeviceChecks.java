@@ -580,6 +580,7 @@ public final class AssistantDeviceChecks {
               .put("name", "Device fixture")
               .put("base_url", "https://feature.invalid/v1")
               .put("model_id", "fixture-model")
+              .put("is_custom_model_id", true)
               .put("supports_vision", true),
           "device-fixture-key");
     }

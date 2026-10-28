@@ -15,6 +15,7 @@ final class ProviderSettingsUi {
   final MainActivity a;
   ProviderDraft draft;
   boolean expanded;
+  boolean keyVisible;
   String status = "";
   JSONArray catalog = new JSONArray();
   String catalogDestination = "";
@@ -33,19 +34,26 @@ final class ProviderSettingsUi {
       draft = new ProviderDraft(saved);
     JSONObject config = draft.config();
     boolean tokenDance = "tokendance".equals(saved.optString("id"));
-    LinearLayout summary = a.card(tokenDance ? "AI 服务 · 词元跳动" : "AI 服务连接");
-    summary.addView(a.text("当前服务：" + saved.optString("name") + " · " + saved.optString("model_id"), 14, true));
-    String keyState;
-    try {
-      keyState = a.secure.getApiKey().isEmpty() ? "尚未设置 API Key" : "API Key 已安全保存在本机";
-    } catch (Exception e) {
-      keyState = "API Key 无法读取，请重新填写";
+    boolean connected = tokenDance && TokenDanceCatalog.isGateway(saved.optString("base_url"));
+    try { connected &= !a.secure.getApiKey("tokendance").isEmpty(); }
+    catch (Exception e) { connected = false; }
+    LinearLayout summary = a.card("AI 服务 · 词元跳动");
+    summary.addView(a.text(connected ? "已连接，直接开始查词和图片解析"
+        : "登录并确认授权后自动连接，无需复制 API Key。用量从你的词元跳动账户扣除。", 13, false));
+    summary.addView(a.primaryButton(connected ? "重新授权" : "连接 TokenDance", v -> openTokenDance("authorize")));
+    LinearLayout accountRow = a.row();
+    accountRow.addView(a.outlineButton("账户与密钥", v -> openTokenDance("account")), new LinearLayout.LayoutParams(0,a.dp(44),1));
+    accountRow.addView(a.outlineButton("充值", v -> openTokenDance("recharge")), new LinearLayout.LayoutParams(0,a.dp(44),1));
+    summary.addView(accountRow);
+    LinearLayout helpRow = a.row();
+    helpRow.addView(a.button("调用记录", v -> openTokenDance("usage")), new LinearLayout.LayoutParams(0,a.dp(40),1));
+    helpRow.addView(a.button("使用帮助", v -> openTokenDance("help")), new LinearLayout.LayoutParams(0,a.dp(40),1));
+    summary.addView(helpRow);
+    summary.addView(a.text("当前服务：" + saved.optString("name") + " · " + saved.optString("model_id"), 12, false));
+    boolean fixed = tokenDance || TokenDanceCatalog.isGateway(config.optString("base_url"));
+    if (fixed && (catalog.length() == 0 || !sameDestination(config,catalogDestination))) {
+      catalog = TokenDanceCatalog.models(); catalogDestination = config.optString("base_url");
     }
-    summary.addView(a.text(keyState, 12, false));
-    summary.addView(a.gap(8));
-    summary.addView(a.text(tokenDance
-        ? "TokenDance 账户授权、充值和调用记录暂未接入；可在下方配置模型和密钥。"
-        : "可在高级设置中选择模型、配置服务地址与密钥并测试连接。", 12, false));
     Button toggle = a.outlineButton(expanded ? "收起高级设置" : "高级设置 · 模型与手动配置", v -> {
       expanded = !expanded;
       a.render();
@@ -83,7 +91,8 @@ final class ProviderSettingsUi {
       if (catalog.length() > 0 && sameDestination(draft.config(), catalogDestination)) chooseModel();
       else run("models");
     }));
-    panel.addView(a.button("获取模型列表", v -> run("models")));
+    if (!fixed) panel.addView(a.button("获取模型列表", v -> run("models")));
+    else panel.addView(a.text("内置 34 个已核对的图像理解模型（2026-10-22），离线可选；新模型可通过高级配置手动填写。",12,false));
     TextView visionNotice = a.text(config.optBoolean("supports_vision")
         ? "当前模型已开启视觉输入，可通过图片测试核对能力。"
         : "当前模型未开启视觉输入；图片查询需要支持视觉的模型。", 12, false);
@@ -95,11 +104,20 @@ final class ProviderSettingsUi {
     panel.addView(a.text("API Key（安全加密存储）", 12, true));
     EditText key = a.input("留空保留当前供应商密钥", draft.enteredKey(), false);
     key.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-    key.setTransformationMethod(PasswordTransformationMethod.getInstance());
+    key.setTransformationMethod(keyVisible ? null : PasswordTransformationMethod.getInstance());
     key.setSaveEnabled(false);
     key.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
     watch(key, value -> { draft.setKey(value); edited(); });
-    panel.addView(key);
+    LinearLayout keyRow = a.row();
+    keyRow.addView(key, new LinearLayout.LayoutParams(0,a.dp(44),1));
+    Button reveal = a.outlineButton(keyVisible ? "隐藏" : "显示", v -> {
+      keyVisible = !keyVisible;
+      key.setTransformationMethod(keyVisible ? null : PasswordTransformationMethod.getInstance());
+      key.setSelection(key.getText().length());
+      ((Button)v).setText(keyVisible ? "隐藏" : "显示");
+    });
+    keyRow.addView(reveal,new LinearLayout.LayoutParams(a.dp(64),a.dp(44)));
+    panel.addView(keyRow);
     panel.addView(a.gap(8));
     LinearLayout actions = a.row();
     LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, a.dp(44), 1);
@@ -297,6 +315,7 @@ final class ProviderSettingsUi {
   void save() {
     try {
       JSONObject config = draft.config();
+      TokenDanceCatalog.assertChatModel(config);
       String entered = draft.enteredKey();
       if (entered.trim().isEmpty()) a.secure.getApiKeyFor(config, entered);
       cancel();
@@ -318,6 +337,7 @@ final class ProviderSettingsUi {
     try {
       JSONObject config = draft.config();
       AgentProtocol.endpoint(config.optString("base_url"));
+      if (!operation.equals("models")) TokenDanceCatalog.assertChatModel(config);
       String key = a.secure.getApiKeyFor(config, draft.enteredKey());
       if (key.trim().isEmpty()
           && !(operation.equals("models") && ModelsApi.isPublicCatalog(config)))
@@ -353,6 +373,10 @@ final class ProviderSettingsUi {
                       status =
                           result.optString("message") + "（" + result.optLong("latency_ms") + " ms）";
                     a.render();
+                    if (result != null && !result.optString("recovery_action").isEmpty()) {
+                      TokenDanceRecovery recovery = TokenDanceRecovery.from(config.optString("base_url"),result.optString("recovery_action"));
+                      if (recovery != null) a.error(recovery);
+                    }
                   });
             } catch (Exception e) {
               a.handler.post(
@@ -360,7 +384,7 @@ final class ProviderSettingsUi {
                     if (!current(token, id, revision)) return;
                     active = null;
                     String message = e.getMessage() == null ? "连接失败，请检查服务配置" : e.getMessage();
-                    status = message.replace(key, "[已隐藏]");
+                    status = key.isEmpty() ? message : message.replace(key, "[已隐藏]");
                     a.render();
                   });
             }
@@ -368,6 +392,7 @@ final class ProviderSettingsUi {
     } catch (Exception e) {
       status = e.getMessage() == null ? "配置无效" : e.getMessage();
       a.render();
+      if (TokenDanceRecovery.find(e) != null) a.error(e);
     }
   }
 
@@ -443,7 +468,12 @@ final class ProviderSettingsUi {
     }
   }
 
+  void openTokenDance(String mode) {
+    confirmDiscard(() -> a.startActivityForResult(new android.content.Intent(a,TokenDanceActivity.class).putExtra("mode",mode),70));
+  }
+
   void clearDraft() {
+    keyVisible = false;
     if (draft != null) draft.setKey("");
     draft = null;
     catalog = new JSONArray();

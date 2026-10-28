@@ -87,7 +87,10 @@ public final class SecureSettings {
     }
     if (!replaced) next.put(safe);
     SharedPreferences.Editor editor = preferences.edit().putString(PROVIDERS, next.toString());
-    if (apiKey != null) putKey(editor, id, apiKey);
+    if (apiKey != null) {
+      putKey(editor, id, apiKey);
+      if (id.equals("tokendance")) editor.remove(keyName("tokendance_pending_payment")).remove(ivName("tokendance_pending_payment"));
+    }
     if (!editor.commit()) throw new IllegalStateException("无法保存模型设置，请检查存储空间");
     return id;
   }
@@ -146,7 +149,9 @@ public final class SecureSettings {
           "supports_vision",
           "reasoning_effort",
           "reasoning_levels",
-          "vision_known"
+          "vision_known",
+          "is_custom_model_id",
+          "is_custom_base_url"
         }) if (supplied.has(field)) input.put(field, supplied.get(field));
     input.put("id", id);
     JSONObject safe = ProviderProfiles.sanitize(input, custom);
@@ -157,7 +162,10 @@ public final class SecureSettings {
       next.put(id.equals(p.optString("id")) ? safe : p);
     }
     SharedPreferences.Editor editor = preferences.edit().putString(PROVIDERS, next.toString());
-    if (apiKey != null) putKey(editor, id, apiKey);
+    if (apiKey != null) {
+      putKey(editor, id, apiKey);
+      if (id.equals("tokendance")) editor.remove(keyName("tokendance_pending_payment")).remove(ivName("tokendance_pending_payment"));
+    }
     if (!editor.commit()) throw new IllegalStateException("无法保存模型设置，请检查存储空间");
   }
 
@@ -183,6 +191,61 @@ public final class SecureSettings {
       return "";
     }
     return readKey(id);
+  }
+
+  /** Pending PKCE verifier and state share the device-bound encrypted store, never backups. */
+  public synchronized void saveTokenDanceAuthorization(TokenDanceProtocol.Session session) throws Exception {
+    SharedPreferences.Editor editor = preferences.edit();
+    putKey(editor, "tokendance_pending_authorization", session.toJson());
+    if (!editor.commit()) throw new IllegalStateException("无法保存授权会话");
+  }
+
+  public synchronized TokenDanceProtocol.Session pendingTokenDanceAuthorization() throws Exception {
+    String raw = readKey("tokendance_pending_authorization");
+    return raw.isEmpty() ? null : TokenDanceProtocol.Session.fromJson(raw);
+  }
+
+  public synchronized void clearTokenDanceAuthorization() {
+    if (!preferences.edit().remove(keyName("tokendance_pending_authorization"))
+        .remove(ivName("tokendance_pending_authorization")).commit())
+      throw new IllegalStateException("无法清除授权会话");
+  }
+
+  /** One atomic write activates the official destination and saves the issued key. */
+  public synchronized void connectTokenDance(String apiKey) throws Exception {
+    if (apiKey == null || apiKey.trim().isEmpty()) throw new IllegalArgumentException("授权未返回有效密钥");
+    JSONArray all = getProviders(), next = new JSONArray();
+    for (int i = 0; i < all.length(); i++) {
+      JSONObject provider = all.getJSONObject(i);
+      if ("tokendance".equals(provider.optString("id"))) {
+        provider = copy(provider).put("base_url", "https://tokendance.space/gateway/v1")
+            .put("is_custom_base_url", false);
+        try { TokenDanceCatalog.assertChatModel(provider); }
+        catch (IllegalArgumentException invalid) {
+          provider.put("model_id", "deepseek-v4.1-flash").put("is_custom_model_id", false);
+        }
+        if (TokenDanceCatalog.isKnown(provider.optString("model_id")))
+          provider.put("supports_vision", true).put("vision_known", true);
+      }
+      next.put(provider);
+    }
+    SharedPreferences.Editor editor = preferences.edit().putString(PROVIDERS, next.toString())
+        .putString(ACTIVE, "tokendance").remove(keyName("tokendance_pending_payment")).remove(ivName("tokendance_pending_payment"))
+        .remove(keyName("tokendance_pending_authorization"))
+        .remove(ivName("tokendance_pending_authorization"));
+    putKey(editor, "tokendance", apiKey);
+    if (!editor.commit()) throw new IllegalStateException("无法保存授权，请重新连接");
+  }
+
+  public synchronized void saveTokenDancePayment(JSONObject state) throws Exception {
+    SharedPreferences.Editor editor=preferences.edit();
+    putKey(editor,"tokendance_pending_payment",state.toString());
+    if(!editor.commit()) throw new IllegalStateException("无法保存充值会话");
+  }
+
+  public synchronized JSONObject pendingTokenDancePayment() throws Exception {
+    String raw=readKey("tokendance_pending_payment");
+    return raw.isEmpty() ? null : new JSONObject(raw);
   }
 
   private void migrateLegacy() {

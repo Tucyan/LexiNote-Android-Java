@@ -143,7 +143,11 @@ public final class AiClient {
       boolean structured)
       throws Exception {
     checkCancelled();
-    if (apiKey.isEmpty()) throw new IllegalStateException("请先在设置中填写 API Key 和模型");
+    if (apiKey.isEmpty()) {
+      if (TokenDanceCatalog.isGateway(provider.optString("base_url")))
+        throw new TokenDanceRecovery(TokenDanceProtocol.RecoveryAction.REAUTHORIZE_API_KEY);
+      throw new IllegalStateException("请先在设置中填写 API Key 和模型");
+    }
     String endpoint = AgentProtocol.endpoint(provider.optString("base_url"));
     String model = provider.optString("model_id").trim();
     if (model.isEmpty()) throw new IllegalStateException("请先填写模型 ID");
@@ -186,6 +190,7 @@ public final class AiClient {
             .put("model", model)
             .put("messages", messages)
             .put("stream", safeMessagePreview != null);
+    TokenDanceCatalog.assertChatModel(provider);
     ModelOptions.apply(payload, provider);
     String host = new java.net.URI(endpoint).getHost();
     if (structured
@@ -214,6 +219,8 @@ public final class AiClient {
       int code = connection.getResponseCode();
       checkCancelled();
       if (code < 200 || code >= 300) {
+        TokenDanceRecovery recovery = TokenDanceRecovery.from(provider.optString("base_url"), connection.getHeaderField("TokenDance-Recovery-Action"));
+        if (recovery != null) throw recovery;
         if (code == 401 || code == 403) throw new IOException("模型鉴权失败，请检查 API Key 或账户权限");
         if (code == 429) throw new IOException("模型请求过于频繁或额度不足，请稍后重试");
         throw new IOException("模型接口请求失败（HTTP " + code + "），请检查地址和模型 ID");

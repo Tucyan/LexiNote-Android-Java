@@ -139,6 +139,7 @@ public class ModelsApi {
               .put(
                   "max_tokens",
                   "off".equals(provider.optString("reasoning_effort", "off")) ? 128 : 512);
+      TokenDanceCatalog.assertChatModel(provider);
       ModelOptions.apply(payload, provider);
       String body =
           request(
@@ -161,7 +162,13 @@ public class ModelsApi {
       return result(true, vision ? "视觉探测成功：模型识别了红色图片" : "文本探测成功", started);
     } catch (Exception e) {
       String message = e instanceof CancellationException ? "探测已取消" : safeError(e);
-      return result(false, message, started);
+      JSONObject failed = result(false, message, started);
+      TokenDanceRecovery recovery = TokenDanceRecovery.find(e);
+      if (recovery != null) {
+        try { failed.put("message",recovery.getMessage()).put("recovery_action",recovery.actionId()); }
+        catch (org.json.JSONException ignored) { }
+      }
+      return failed;
     }
   }
 
@@ -197,7 +204,11 @@ public class ModelsApi {
       }
       checkCancelled();
       int code = connection.getResponseCode();
-      if (code < 200 || code >= 300) throw new IOException(statusError(code));
+      if (code < 200 || code >= 300) {
+        TokenDanceRecovery recovery = TokenDanceRecovery.from(provider.optString("base_url"), connection.getHeaderField("TokenDance-Recovery-Action"));
+        if (recovery != null) throw recovery;
+        throw new IOException(statusError(code));
+      }
       try (InputStream in = connection.getInputStream()) {
         return read(in);
       }

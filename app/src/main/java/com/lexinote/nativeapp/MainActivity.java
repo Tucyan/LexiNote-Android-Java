@@ -519,6 +519,14 @@ public final class MainActivity extends Activity {
 
   void error(Exception e) {
     if (!alive()) return;
+    TokenDanceRecovery recovery = TokenDanceRecovery.find(e);
+    if (recovery != null) {
+      new AlertDialog.Builder(this).setTitle("TokenDance 服务")
+          .setMessage(recovery.getMessage()).setNegativeButton(recovery.action == TokenDanceProtocol.RecoveryAction.API_KEY_QUOTA ? "等待刷新" : "稍后", null)
+          .setPositiveButton(recovery.action == TokenDanceProtocol.RecoveryAction.TOP_UP_BALANCE ? "去充值" : "重新连接",
+              (dialog, which) -> settingsUi.models.openTokenDance(recovery.action == TokenDanceProtocol.RecoveryAction.TOP_UP_BALANCE ? "recharge" : "authorize")).show();
+      return;
+    }
     new AlertDialog.Builder(this)
         .setTitle("操作未完成")
         .setMessage(e.getMessage() == null ? e.toString() : e.getMessage())
@@ -631,6 +639,7 @@ public final class MainActivity extends Activity {
                   else {
                     say(e.getMessage() == null ? "请求失败，可重试" : e.getMessage());
                     render();
+                    if (TokenDanceRecovery.find(e) != null) error(e);
                   }
                 });
           }
@@ -700,6 +709,13 @@ public final class MainActivity extends Activity {
   @Override
   protected void onActivityResult(int req, int result, Intent data) {
     super.onActivityResult(req, result, data);
+    if (req == 70) {
+      if (result == RESULT_OK) {
+        titles.reset(); settingsUi.models.cancel(); settingsUi.models.clearDraft();
+        screen = "tabs"; page = 4; render();
+      }
+      return;
+    }
     if (req == 102) {
       Uri output = pendingCameraUri;
       pendingCameraUri = null;

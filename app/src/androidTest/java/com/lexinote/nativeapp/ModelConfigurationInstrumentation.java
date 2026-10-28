@@ -14,6 +14,7 @@ import org.json.*;
 /** Offline settings acceptance and opt-in live use. The supplied credential is never reported. */
 public final class ModelConfigurationInstrumentation extends Instrumentation {
   MainActivity a;
+  TokenDanceActivity portal;
   JSONObject before;
   Map<String, ?> originalPreferences;
   String credential;
@@ -52,6 +53,13 @@ public final class ModelConfigurationInstrumentation extends Instrumentation {
               + " and destination guard");
       main(this::defaultProviderLayout);
       passed.add("TokenDance default editor and collapsed alternative providers");
+      main(() -> { a.secure.selectProvider("tokendance"); a.settingsUi.models.clearDraft(); a.settingsUi.models.expanded=false; a.render(); });
+      capture("tokendance-default");
+      main(this::tokenDanceOfflinePickerAndEncryptedPending);
+      capture("offline-model-picker");
+      passed.add("offline 34-model picker, password visibility and encrypted pending authorization");
+      tokenDancePortalFlows();
+      passed.add("offline PKCE activation and persistent payment polling without real login or payment");
       offlineEditor();
       passed.add(
           "draft discovery/probes, model picker, explicit save, stale cancellation and secret-free"
@@ -74,6 +82,8 @@ public final class ModelConfigurationInstrumentation extends Instrumentation {
       if (a != null)
         main(
             () -> {
+              if (portal != null) portal.finish();
+              TokenDanceActivity.defaultClientFactory = TokenDanceApi::new;
               a.cancel();
               a.titles.reset();
               a.settingsUi.models.cancel();
@@ -94,15 +104,113 @@ public final class ModelConfigurationInstrumentation extends Instrumentation {
     finish(outcome, result);
   }
 
+  void tokenDanceOfflinePickerAndEncryptedPending() throws Exception {
+    a.secure.selectProvider("tokendance");
+    ProviderSettingsUi ui=a.settingsUi.models; ui.clearDraft(); ui.expanded=false;
+    a.page=4; a.screen="tabs"; a.render();
+    check(ui.catalog.length()==34,"Built-in model catalog missing");
+    button(a.root,"deepseek-v4.1-flash").performClick();
+    check(ui.active==null,"Offline picker sent network request");
+    EditText key=edit(a.root,"留空保留当前供应商密钥"); key.setText("visibility-fixture");
+    button(a.root,"显示").performClick(); check(key.getTransformationMethod()==null,"Password reveal failed");
+    button(a.root,"隐藏").performClick(); check(key.getTransformationMethod()!=null,"Password hide failed");
+    ui.clearDraft();
+    TokenDanceProtocol.Session pending=TokenDanceProtocol.begin(null,System.currentTimeMillis());
+    a.secure.saveTokenDanceAuthorization(pending);
+    check(a.secure.pendingTokenDanceAuthorization().verifier.equals(pending.verifier),"Encrypted session did not restore");
+    String stored=a.getSharedPreferences("provider_private",0).getAll().toString();
+    check(!stored.contains(pending.verifier) && !stored.contains(pending.state),"PKCE secret stored in plaintext");
+  }
+
+  void tokenDancePortalFlows() throws Exception {
+    // Close the offline picker through Android's actual back event.
+    sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK); waitForIdleSync();
+    java.util.concurrent.atomic.AtomicBoolean settled=new java.util.concurrent.atomic.AtomicBoolean(false);
+    java.util.concurrent.atomic.AtomicInteger requests=new java.util.concurrent.atomic.AtomicInteger();
+    TokenDanceActivity.defaultClientFactory=() -> new TokenDanceApi(url -> new java.net.HttpURLConnection(url) {
+      public void connect(){} public void disconnect(){} public boolean usingProxy(){return false;}
+      public java.io.OutputStream getOutputStream(){return new java.io.ByteArrayOutputStream();}
+      public int getResponseCode(){return 200;}
+      public java.io.InputStream getInputStream() {
+        requests.incrementAndGet();
+        String payload;
+        if(url.getPath().endsWith("/auth/keys")) payload="{\"key\":\"tokendance-issued-fixture\"}";
+        else {
+          String link=url.getPath().endsWith("/sessions") ? ",\"alipay_url\":\"alipays://platformapi/startapp?appId=fixture\"" : "";
+          payload="{\"session\":{\"id\":\"fixture-payment\",\"amount\":5,\"status\":\""+(settled.get()?"paid":"pending")+"\",\"expired_at\":"+(System.currentTimeMillis()/1000+600)+link+"}}";
+        }
+        return new java.io.ByteArrayInputStream(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+      }
+    });
+    main(() -> {
+      org.json.JSONObject changed=ProviderProfiles.preset("tokendance").put("base_url","https://alternate.invalid/v1")
+          .put("model_id","seedream-unsupported").put("is_custom_base_url",true).put("is_custom_model_id",true);
+      a.secure.saveProvider(changed,""); a.secure.selectProvider("deepseek");
+    });
+    portal=(TokenDanceActivity)startActivitySync(new Intent(getTargetContext(),TokenDanceActivity.class).putExtra("mode","recharge").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+    waitForIdleSync();
+    main(() -> {
+      portal.pending=a.secure.pendingTokenDanceAuthorization(); portal.mode="authorize";
+      portal.finishAuthorization("one-time-fixture",true);
+    });
+    await("PKCE activation",() -> a.secure.getProvider().optString("id").equals("tokendance") && a.secure.pendingTokenDanceAuthorization()==null,10);
+    check(a.secure.getApiKey().equals("tokendance-issued-fixture"),"Issued key not saved");
+    check(a.secure.getProvider().optString("base_url").equals("https://tokendance.space/gateway/v1"),"Authorization reused a custom destination");
+    check(a.secure.getProvider().optString("model_id").equals("deepseek-v4.1-flash"),"Authorization retained an incompatible model");
+    main(() -> {
+      String stored=a.getSharedPreferences("provider_private",0).getAll().toString();
+      check(!stored.contains("tokendance-issued-fixture"),"Issued credential stored in plaintext");
+    });
+    portal=(TokenDanceActivity)startActivitySync(new Intent(getTargetContext(),TokenDanceActivity.class).putExtra("mode","recharge").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+    waitForIdleSync(); main(() -> portal.createPayment(5));
+    await("payment created",() -> portal.payment!=null && !portal.busy,10);
+    main(() -> {
+      check(portal.payment.alipayUrl!=null,"Creation lost payment URL");
+      Bundle saved=new Bundle(); portal.onSaveInstanceState(saved);
+      check(!saved.toString().contains("alipays:") && !saved.toString().contains("tokendance-issued-fixture"),"Payment or key leaked into Bundle");
+      portal.checkPayment();
+    });
+    await("payment status refreshed",() -> !portal.busy,10);
+    capture("recharge-fixture");
+    main(() -> {
+      check(portal.payment.alipayUrl!=null,"Status response without URL erased the payment link");
+      check(a.secure.pendingTokenDancePayment().getString("url").startsWith("alipays:"),"Payment state was not preserved");
+      check(!a.getSharedPreferences("provider_private",0).getAll().toString().contains("alipays:"),"Payment URL stored in plaintext");
+      portal.finish();
+    });
+    portal=(TokenDanceActivity)startActivitySync(new Intent(getTargetContext(),TokenDanceActivity.class).putExtra("mode","recharge").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+    waitForIdleSync(); main(() -> {
+      check(portal.payment!=null && portal.payment.alipayUrl!=null,"Recreated payment state lost its link");
+      portal.payment=new TokenDanceApi.PaymentSession(portal.payment.id,portal.payment.amount,"pending",System.currentTimeMillis()/1000L-1,portal.payment.alipayUrl);
+      settled.set(true); portal.checkPayment();
+    });
+    await("payment settled",() -> portal.payment!=null && portal.payment.status.equals("paid") && !portal.busy,10);
+    main(() -> { check(portal.payment.alipayUrl==null,"Terminal payment retains a pay link"); portal.finish(); });
+    check(requests.get()>=4,"Fake transport did not exercise the service flow");
+    TokenDanceActivity.defaultClientFactory=TokenDanceApi::new;
+  }
+
+  void capture(String name) throws Exception {
+    waitForIdleSync(); android.os.SystemClock.sleep(700);
+    android.graphics.Bitmap bitmap=getUiAutomation().takeScreenshot();
+    check(bitmap!=null,"Screenshot unavailable");
+    java.io.File folder=new java.io.File(getTargetContext().getExternalFilesDir(null),"tokendance-verification");
+    check(folder.isDirectory() || folder.mkdirs(),"Cannot create screenshot folder");
+    try(java.io.OutputStream out=new java.io.FileOutputStream(new java.io.File(folder,name+".png"))) {
+      bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);
+    } finally { bitmap.recycle(); }
+  }
+
   void defaultProviderLayout() throws Exception {
     ProviderSettingsUi ui = a.settingsUi.models;
     a.secure.selectProvider("tokendance");
+    a.secure.saveProvider(ProviderProfiles.preset("tokendance"), "");
     ui.clearDraft();
     ui.expanded = false;
     a.page = 4;
     a.screen = "tabs";
     a.render();
-    check(button(a.root, "获取模型列表") != null, "TokenDance model controls are hidden by default");
+    check(button(a.root, "deepseek-v4.1-flash") != null, "TokenDance model controls are hidden by default");
     check(edit(a.root, "留空保留当前供应商密钥") != null, "TokenDance key control is hidden by default");
     check(button(a.root, "DeepSeek (Flash 多模态)") == null, "Alternative providers are visible by default");
     check(edit(a.root, "Base URL") == null, "Manual settings are visible by default");

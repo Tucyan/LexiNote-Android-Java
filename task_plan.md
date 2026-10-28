@@ -1,3 +1,5 @@
+2026-10-28 TokenDance continuation completed: built-in 34-model reference list and compatibility guard; PKCE callback/headless authorization, encrypted pending state and atomic activation; account/usage/help portal; payment state restoration, explicit user payment, late-return final-status check and recovery actions. Current worker preference gpt-6.1-terra/high. Verification:117 JVM tests,0 errors;lint0 errors/13 warnings;5 configuration+7 feature+10 smoke device groups pass. Real account login/payment untested. See docs/verification/TOKENDANCE.md and docs/plans/2026-10-28-tokendance-completion.md. No temporary credentials used; original private preferences/library restored by device suites.
+
 # Selected feature migration
 
 2026-10-27 follow-up: fresh actual-screen and experience comparison completed. See docs/ui-parity-2026-10-27/REPORT.md:16 actual screenshot pairs, identical testfixture, source-backed experience gaps and corrected prior spelling/drag claims. App data/settings restored; application source unchanged in this audit.

@@ -137,9 +137,20 @@ public class AiClientTest {
   }
 
   @Test
+  public void tokenDanceRecoveryRoutesOnlyOfficialGatewayErrors() throws Exception {
+    next = new FakeConnection(402, "secret-body"); next.recoveryHeader = "top_up_balance";
+    JSONObject config = provider(false).put("base_url", "https://tokendance.space/gateway/v1").put("model_id", "deepseek-v4.1-flash");
+    try { new AiClient(config,"test-only").agent(new JSONArray(),"hello",null); fail(); }
+    catch (TokenDanceRecovery expected) { assertEquals(TokenDanceProtocol.RecoveryAction.TOP_UP_BALANCE,expected.action); }
+    next = new FakeConnection(402, "secret-body"); next.recoveryHeader = "top_up_balance";
+    try { new AiClient(provider(false),"test-only").agent(new JSONArray(),"hello",null); fail(); }
+    catch (java.io.IOException expected) { assertFalse(expected instanceof TokenDanceRecovery); assertFalse(expected.toString().contains("secret-body")); }
+  }
+
+  @Test
   public void tokenDanceGatewaySendsApplicationHeader() throws Exception {
     next = new FakeConnection(200, "{\"kind\":\"answer\",\"message\":\"ok\"}");
-    JSONObject provider = provider(false).put("base_url", "https://tokendance.space/gateway/v1");
+    JSONObject provider = provider(false).put("base_url", "https://tokendance.space/gateway/v1").put("model_id", "deepseek-v4.1-flash");
     new AiClient(provider, "test-only").agent(new JSONArray(), "hello", null);
     assertEquals("app://lexinote", next.getRequestProperty("X-App-URL"));
   }
@@ -210,6 +221,8 @@ public class AiClientTest {
   }
 
   private static final class FakeConnection extends HttpURLConnection {
+    String recoveryHeader;
+    @Override public String getHeaderField(String name) { return name.equals("TokenDance-Recovery-Action") ? recoveryHeader : null; }
     final ByteArrayOutputStream sent = new ByteArrayOutputStream();
     final String answer;
     final int code;

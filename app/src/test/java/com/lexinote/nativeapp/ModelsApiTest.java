@@ -14,6 +14,18 @@ import org.junit.Test;
 
 public class ModelsApiTest {
   @Test
+  public void probesPreserveTrustedRecoveryActionsWithoutServerSecrets() throws Exception {
+    TestConnection connection = new TestConnection(403,"secret-body"); connection.recoveryHeader="reauthorize_api_key";
+    JSONObject config = ProviderProfiles.preset("tokendance");
+    JSONObject failed = new ModelsApi(config,"test-key",url -> connection).testConnection(false);
+    assertEquals("reauthorize_api_key",failed.getString("recovery_action"));
+    assertFalse(failed.getString("message").contains("secret-body"));
+    TestConnection other = new TestConnection(403,"secret-body"); other.recoveryHeader="reauthorize_api_key";
+    JSONObject generic = api(other,"https://provider.invalid").testConnection(false);
+    assertFalse(generic.has("recovery_action"));
+  }
+
+  @Test
   public void cancellationWhileRegisteringConnectionDoesNotSendProbeBody() throws Exception {
     TestConnection connection = new TestConnection(200, envelope("LEXINOTE TEXT OK"));
     ModelsApi[] holder = new ModelsApi[1];
@@ -155,6 +167,8 @@ public class ModelsApiTest {
   }
 
   private static final class TestConnection extends HttpURLConnection {
+    String recoveryHeader;
+    @Override public String getHeaderField(String name) { return name.equals("TokenDance-Recovery-Action") ? recoveryHeader : null; }
     final int code;
     final String body;
     final ByteArrayOutputStream sent = new ByteArrayOutputStream();

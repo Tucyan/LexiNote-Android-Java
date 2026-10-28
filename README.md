@@ -30,7 +30,7 @@ macOS/Linux：`bash ./gradlew testDebugUnitTest lintDebug assembleDebug`。
 
 应用包名 `com.lexinote.nativeapp`，与原版 `com.lexinote.app` 可同时安装。Debug APK 由 Android 默认调试密钥签名，仅用于体验和开发；商店发布前请配置正式签名。没有在仓库中存放密钥、API Key 或本机 SDK 路径。
 
-启动后可在「笔记 → 管理」手动新增词汇，并在「查询记录」离线查找；本地命中无需配置 AI。在「我的 → 高级设置」选择五种预设供应商或新增兼容服务，填写 HTTPS 地址和 API Key，可获取/搜索模型列表、手动填写模型 ID，配置视觉输入和思考强度。未保存的当前输入可直接进行文本/图片测试；保存后才用于查询。每个供应商密钥独立加密保存，留空保留，另有清除入口；更换地址须重新填写已有密钥或明确清除。网络请求可取消，助手支持 SSE 和普通 JSON 回退，无自动重试。连接测试可能产生少量费用。
+启动后可在「笔记 → 管理」手动新增词汇，并在「查询记录」离线查找；本地命中无需配置 AI。在「我的」可直接连接 TokenDance，登录授权后自动保存密钥；系统浏览器使用一次性授权码完成连接。在「高级设置」选择其他预设供应商或新增兼容服务，填写 HTTPS 地址和 API Key，可获取/搜索模型列表、手动填写模型 ID，配置视觉输入和思考强度。未保存的当前输入可直接进行文本/图片测试；保存后才用于查询。每个供应商密钥独立加密保存，留空保留，另有清除入口；更换地址须重新填写已有密钥或明确清除。网络请求可取消，助手支持 SSE 和普通 JSON 回退，无自动重试。连接测试可能产生少量费用。
 
 ## 已实现
 
@@ -79,3 +79,5 @@ adb shell am instrument -w com.lexinote.nativeapp.test/com.lexinote.nativeapp.Fe
 构建版本依据 [AGP 8.13 官方兼容表](https://developer.android.com/build/releases/agp-8-13-0-release-notes)。文档和图片通过 [Android Storage Access Framework](https://developer.android.com/training/data-storage/shared/documents-files) 选择，不要求全盘存储权限；凭据使用 [Android Keystore](https://developer.android.com/privacy-and-security/keystore)。
 
 MIT License，保留原项目许可证。独立公开仓库：[Tucyan/LexiNote-Android-Java](https://github.com/Tucyan/LexiNote-Android-Java)。
+
+2026-10-28：新增 TokenDance 账户入口、PKCE 授权/一次性码、内置离线模型列表、原生充值状态及余额/授权恢复。117 项 JVM 测试和 22 组离线设备检查通过；真实登录与支付尚未实测。见 [TokenDance 验收](docs/verification/TOKENDANCE.md)。
