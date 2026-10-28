@@ -1,0 +1,6 @@
+
+PASS 0
+
+FAIL 2
+UX06 saved-day filter and display use local timezone: java.lang.RuntimeException: java.lang.AssertionError: expected8 local-day sessions, actual2
+UX07 recent deletion/clear refreshes open dialog: java.lang.AssertionError: deleted row remains

@@ -10,6 +10,7 @@ public class SelectedImagesBackupTest {
   public void originalAndDerivedImagesTravelIndependentlyWithEditorState() throws Exception {
     Library library = new Library();
     JSONObject session = library.newSession("photo");
+    Library.promoteTemporary(session);
     session.put("input_images", new JSONArray().put("file:///original.jpg"));
     session.put("native_selected_images", new JSONArray().put("file:///selection.jpg"));
     session.put(

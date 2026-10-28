@@ -48,6 +48,7 @@ public final class Library {
       if (!data.has(k)) put(data, k, new JSONArray());
     if (!data.has("settings")) put(data, "settings", new JSONObject());
     normalizeSystemRoots();
+    normalizeSessionMetadata();
   }
 
   public static boolean systemGlobal(JSONObject n) {
@@ -316,31 +317,143 @@ public final class Library {
       put(metadata, key, s.opt(key));
     put(metadata, "title_source", "fallback");
     put(metadata, "title_revision", 0);
-    put(metadata, "retention", "temporary");
+    put(metadata, "retention", "query");
     put(metadata, "origin", "query");
     put(metadata, "last_used_at", now());
     put(s, "metadata", metadata);
     return s;
   }
 
+  /** Entering an AI conversation makes it eligible for the temporary limit. */
+  public static void promoteTemporary(JSONObject s) {
+    if (isSaved(s)) return;
+    JSONObject meta = s.optJSONObject("metadata");
+    if (meta == null) { meta = new JSONObject(); put(s, "metadata", meta); }
+    put(meta, "retention", "temporary");
+    put(meta, "ai_session_entered", true);
+  }
+
+  private static long sessionTime(JSONObject s, boolean history) {
+    JSONObject meta = s.optJSONObject("metadata");
+    String[] values = history ? new String[] {s.optString("created_at")} :
+        new String[] {meta == null ? "" : meta.optString("last_used_at"), s.optString("updated_at"), s.optString("created_at")};
+    for (String value : values) try { return java.time.Instant.parse(value).toEpochMilli(); }
+      catch (RuntimeException ignored) { }
+    return Long.MIN_VALUE;
+  }
+
+  private static JSONArray ordered(JSONArray source, boolean history, boolean newestFirst) {
+    List<JSONObject> items = new ArrayList<>();
+    for (int i = 0; i < source.length(); i++) if (source.optJSONObject(i) != null) items.add(source.optJSONObject(i));
+    items.sort((a, b) -> {
+      int c = Long.compare(sessionTime(a, history), sessionTime(b, history));
+      if (c == 0) c = a.optString("id").compareTo(b.optString("id"));
+      return newestFirst ? -c : c;
+    });
+    JSONArray result = new JSONArray();
+    for (JSONObject item : items) result.put(item);
+    return result;
+  }
+
+  public static JSONArray sortedSessions(JSONArray source, boolean newestFirst) {
+    return ordered(source, false, newestFirst);
+  }
+
+  public static JSONArray sortedHistory(JSONArray source, boolean newestFirst) {
+    return ordered(source, true, newestFirst);
+  }
+
+  private static String retention(JSONObject s) {
+    if (isSaved(s)) return "saved";
+    JSONObject meta = s.optJSONObject("metadata");
+    String value = meta == null ? "" : meta.optString("retention");
+    // Legacy sessions without metadata are queries unless they contain real user messages.
+    if (value.equals("query")) return value;
+    if (value.equals("temporary")) {
+      if (meta.optBoolean("ai_session_entered") || !meta.optString("origin").equals("query")) return "temporary";
+      JSONArray oldMessages = s.optJSONArray("ai_messages");
+      if (oldMessages != null && oldMessages.length() > 0) return "temporary";
+      return "query";
+    }
+    // A stand-alone legacy conversation has no query index to retain its messages.
+    // Indexed legacy queries are explicitly classified during loading below.
+    JSONArray messages = s.optJSONArray("ai_messages");
+    return messages != null && messages.length() > 0 ? "temporary" : "query";
+  }
+
+  private static void normalizeRetention(JSONObject s) {
+    String kind = retention(s);
+    JSONObject meta = s.optJSONObject("metadata");
+    if (meta == null) {
+      meta = new JSONObject();
+      put(s, "metadata", meta);
+    }
+    put(meta, "retention", kind);
+    if (meta.optString("title").trim().isEmpty()) {
+      String title = s.optString("title").trim();
+      if (title.isEmpty()) title = s.optString("input_text").trim();
+      if (title.isEmpty() && s.optJSONObject("query_results") != null)
+        title = s.optJSONObject("query_results").optString("word").trim();
+      put(meta, "title", title.isEmpty() ? "会话" : title);
+    }
+    if (meta.optString("title_source").isEmpty())
+      put(meta, "title_source", kind.equals("saved") ? "user" : "fallback");
+    if (meta.optString("origin").isEmpty())
+      put(meta, "origin", kind.equals("query") ? "query" : "assistant");
+    if (meta.optString("created_at").isEmpty()) put(meta, "created_at", s.optString("created_at"));
+    if (meta.optString("updated_at").isEmpty()) put(meta, "updated_at", s.optString("updated_at", s.optString("created_at")));
+    if (meta.optString("last_used_at").isEmpty()) put(meta, "last_used_at", s.optString("updated_at", s.optString("created_at")));
+  }
+
+  private void normalizeSessionMetadata() {
+    Set<String> recentIds = new HashSet<>();
+    JSONArray recent = array("recent_queries");
+    for (int i = 0; i < recent.length(); i++)
+      recentIds.add(recent.optJSONObject(i).optString("id"));
+    for (String key : new String[] {"conversations", "recent_queries"}) {
+      JSONArray items = array(key);
+      for (int i = 0; i < items.length(); i++) {
+        JSONObject item = items.optJSONObject(i);
+        if (item == null) continue;
+        JSONObject meta = item.optJSONObject("metadata");
+        String kind = meta == null ? "" : meta.optString("retention");
+        // Original legacy history can contain a user message even for a local lookup.
+        if (recentIds.contains(item.optString("id")) && !isSaved(item)
+            && !kind.equals("query") && !kind.equals("temporary")
+            && (meta == null || !meta.optString("origin").equals("assistant"))) {
+          if (meta == null) { meta = new JSONObject(); put(item, "metadata", meta); }
+          put(meta, "retention", "query");
+        }
+        normalizeRetention(item);
+      }
+    }
+  }
+
+  public static boolean isTemporary(JSONObject s) { return retention(s).equals("temporary"); }
+
   public void touchSession(JSONObject s, boolean history) {
+    normalizeRetention(s);
     put(s, "updated_at", now());
     if (s.optJSONObject("metadata") != null) {
       put(s.optJSONObject("metadata"), "updated_at", s.opt("updated_at"));
       put(s.optJSONObject("metadata"), "last_used_at", s.opt("updated_at"));
     }
     upsert("conversations", s);
+    if (history) upsert("recent_queries", copy(s));
+    JSONArray recent = ordered(array("recent_queries"), true, true);
+    while (recent.length() > 10) recent.remove(recent.length() - 1);
+    put(data, "recent_queries", recent);
+    Set<String> recentIds = new HashSet<>();
+    for (int i = 0; i < recent.length(); i++) recentIds.add(recent.optJSONObject(i).optString("id"));
+    JSONArray all = ordered(array("conversations"), false, true), kept = new JSONArray();
     int temporary = 0;
-    JSONArray a = array("conversations");
-    for (int i = a.length() - 1; i >= 0; i--)
-      if (!isSaved(a.optJSONObject(i))) {
-        temporary++;
-        if (temporary > 5) a.remove(i);
-      }
-    if (history) {
-      upsert("recent_queries", copy(s));
-      while (array("recent_queries").length() > 10) array("recent_queries").remove(0);
+    for (int i = 0; i < all.length(); i++) {
+      JSONObject item = all.optJSONObject(i);
+      String kind = retention(item);
+      if (kind.equals("saved") || kind.equals("temporary") && ++temporary <= 5
+          || kind.equals("query") && recentIds.contains(item.optString("id"))) kept.put(item);
     }
+    put(data, "conversations", kept);
   }
 
   public static boolean isSaved(JSONObject s) {
@@ -381,10 +494,22 @@ public final class Library {
     a.put(copy(s));
   }
 
+  public void pruneQuerySessions() {
+    Set<String> ids = new HashSet<>();
+    JSONArray recent = array("recent_queries");
+    for (int i = 0; i < recent.length(); i++) ids.add(recent.optJSONObject(i).optString("id"));
+    JSONArray conversations = array("conversations");
+    for (int i = conversations.length() - 1; i >= 0; i--) {
+      JSONObject item = conversations.optJSONObject(i);
+      if (retention(item).equals("query") && !ids.contains(item.optString("id"))) conversations.remove(i);
+    }
+  }
+
   public void delete(String key, String id) {
     JSONArray a = array(key);
     for (int i = a.length() - 1; i >= 0; i--)
       if (id.equals(a.optJSONObject(i).optString("id"))) a.remove(i);
+    if (key.equals("recent_queries")) pruneQuerySessions();
   }
 
   /** Batch reference operations keep vocabulary entities shared between notebooks. */

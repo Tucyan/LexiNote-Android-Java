@@ -28,7 +28,7 @@ final class NotebookUi {
           && !v.optString("type", "word").equals(typeFilter.equals("短语") ? "phrase" : "word"))
         continue;
       if (!tagFilter.equals("全部") && !contains(v.optJSONArray("tags"), tagFilter)) continue;
-      if (!Library.normalized(v.toString()).contains(Library.normalized(filter))) continue;
+      if (!NotebookSearch.matches(v, filter)) continue;
       out.add(v);
     }
     return out;
@@ -62,10 +62,15 @@ final class NotebookUi {
     exportLp.leftMargin = a.dp(8);
     tools.addView(export, exportLp);
     controls.addView(tools);
+    f.addTextChangedListener(new android.text.TextWatcher() {
+      public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+      public void onTextChanged(CharSequence s, int start, int before, int count) { filter = s.toString(); renderResults(controls); }
+      public void afterTextChanged(android.text.Editable s) {}
+    });
     f.setOnEditorActionListener(
         (v, action, event) -> {
           filter = f.getText().toString();
-          a.render();
+          renderResults(controls);
           return true;
         });
     LinearLayout cats = a.row();
@@ -79,7 +84,7 @@ final class NotebookUi {
       String id = global ? null : n.optString("id");
       JSONArray ids = n.optJSONArray("vocabulary_ids");
       int count = global ? a.library.array("vocabularies").length() : (ids == null ? 0 : ids.length());
-      Button category = a.chip((global ? "全部词汇" : n.optString("name")) + " (" + count + ")",
+      Button category = a.chip((global ? "全部词汇" : n.optString("name")) + " (" + count + (!global && n.optJSONArray("child_notebook_ids") != null && n.optJSONArray("child_notebook_ids").length() > 0 ? " 直接词条" : "") + ")",
           Objects.equals(id, selected), v -> { selected = id; a.render(); });
       if (Objects.equals(id, selected)) {
         category.setTextColor(android.graphics.Color.WHITE);
@@ -155,6 +160,13 @@ final class NotebookUi {
     filterScroll.setHorizontalScrollBarEnabled(false);
     filterScroll.addView(filters);
     controls.addView(filterScroll);
+    renderResults(controls);
+  }
+  LinearLayout resultsBar;
+  void renderResults(LinearLayout controls) {
+    a.body.removeAllViews();
+    if (resultsBar != null && resultsBar.getParent() == controls) controls.removeView(resultsBar);
+    JSONObject selectedNote = selected == null ? null : a.library.find("notebooks", selected);
     if (selected != null) {
       JSONObject n = a.library.find("notebooks", selected);
       if (n == null) {
@@ -195,7 +207,9 @@ final class NotebookUi {
       selectionBar.addView(
           a.chip("操作 (" + selectedVocabularyIds.size() + ")", true, view -> batchMenu()));
     }
-    if (selecting) controls.addView(selectionBar);
+    resultsBar = selectionBar;
+    selectionBar.addView(a.text("结果 " + rows.size() + " 条", 12, false));
+    controls.addView(selectionBar);
     if (selected != null) {
       JSONArray children =
           selectedNote == null ? null : selectedNote.optJSONArray("child_notebook_ids");
@@ -236,9 +250,12 @@ final class NotebookUi {
       empty.setGravity(Gravity.CENTER);
       empty.addView(a.icon("file-tray-outline", 48, a.subtle));
       empty.addView(a.gap(12));
-      empty.addView(a.text("此分类暂无词汇记录", 16, true));
+      JSONArray children = selectedNote == null ? null : selectedNote.optJSONArray("child_notebook_ids");
+      String state = NotebookSearch.emptyState(!filter.trim().isEmpty() || !typeFilter.equals("全部") || !tagFilter.equals("全部"), children != null && children.length() > 0);
+      empty.addView(a.text(state.equals("filtered") ? "未找到匹配内容" : state.equals("parent") ? "请选择子笔记" : "此分类暂无词汇记录", 16, true));
       empty.addView(a.gap(6));
-      TextView hint = a.text("在「查询和记录」页面查询后，点击整理笔记即可保存到此处。", 13, false);
+      TextView hint = a.text(state.equals("filtered") ? "请调整或清除筛选条件。" : state.equals("parent") ? "选择上方子笔记查看词汇。" : "在「查询和记录」页面查询后，点击整理笔记即可保存到此处。", 13, false);
+      if (state.equals("filtered")) empty.addView(a.chip("清除筛选", false, view -> { filter = ""; typeFilter = "全部"; tagFilter = "全部"; a.render(); }));
       hint.setGravity(Gravity.CENTER);
       hint.setPadding(a.dp(16), 0, a.dp(16), 0);
       empty.addView(hint);
@@ -280,6 +297,7 @@ final class NotebookUi {
     LinearLayout title = a.row();
     title.setGravity(Gravity.CENTER_VERTICAL);
     TextView word = a.text(vocabulary.optString("content"), 16, true);
+    word.setOnClickListener(view -> { if (selecting) { toggleSelected(vocabulary.optString("id")); a.render(); } else detail(vocabulary); });
     title.addView(word);
     String type = vocabulary.optString("type", "word").equals("phrase") ? "短语" : "单词";
     TextView typeBadge = a.text(type, 11, true);
@@ -288,6 +306,7 @@ final class NotebookUi {
     typeBadge.setBackground(a.shape(a.inputBg, 16, 0));
     LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(-2, -2);
     badgeLp.leftMargin = a.dp(6);
+    typeBadge.setOnClickListener(view -> { if (selecting) { toggleSelected(vocabulary.optString("id")); a.render(); } else detail(vocabulary); });
     title.addView(typeBadge, badgeLp);
     JSONArray tags = vocabulary.optJSONArray("tags");
     for (int i = 0; tags != null && i < tags.length(); i++) {
@@ -369,6 +388,13 @@ final class NotebookUi {
     }
     card.addView(footer, footerLp);
     a.passiveLabels(card);
+    View.OnClickListener open = view -> { if (selecting) { toggleSelected(vocabulary.optString("id")); a.render(); } else detail(vocabulary); };
+    word.setOnClickListener(open);
+    typeBadge.setOnClickListener(open);
+    for (int i = 0; tags != null && i < tags.length(); i++) {
+      final String tagValue = tags.optString(i);
+      title.getChildAt(i + 2).setOnClickListener(view -> { tagFilter = tagValue; a.render(); });
+    }
   }
 
   boolean displayField(JSONObject fields, JSONObject localFields, String key) {

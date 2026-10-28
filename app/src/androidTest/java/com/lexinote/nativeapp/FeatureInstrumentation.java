@@ -239,6 +239,7 @@ public final class FeatureInstrumentation extends Instrumentation {
     a.image = ImageTools.saveBitmap(a, selected);
     selected.recycle();
     a.session = a.library.newSession("photo");
+    Library.promoteTemporary(a.session);
     a.query.storeImageSource(a.session);
     a.library.touchSession(a.session, false);
     check(a.persist(), "Cannot persist source image fixture");

@@ -1,0 +1,13 @@
+
+PASS 10
+UX01 local query preserves all five AI sessions
+UX02 sixth AI session evicts oldest by time
+UX02 query context entering assistant survives history clear
+UX03 Again never increases mastery and denominator stays ten
+UX04 source searches text values and selects four
+UX05 unsubmitted search survives type switch
+UX06 saved-day filter and display use local timezone
+UX07 recent deletion/clear refreshes open dialog
+UX08 parent and filtered-empty states differ
+UX09 actual title tap opens full vocabulary
+FAIL 0

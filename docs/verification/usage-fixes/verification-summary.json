@@ -1,0 +1,11 @@
+{
+  "unit_tests": 132.0,
+  "failures": 0.0,
+  "errors": 0.0,
+  "lint_errors": 0,
+  "lint_warnings": 13,
+  "offline_device_groups": 32,
+  "report_links_ok": true,
+  "restoration_byte_equal": true,
+  "credential_scan_ok": true
+}

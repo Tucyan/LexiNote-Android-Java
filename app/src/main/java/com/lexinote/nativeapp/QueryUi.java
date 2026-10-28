@@ -245,13 +245,13 @@ final class QueryUi {
   }
 
   void renderSessionLists() {
-    JSONArray conversations = a.library.array("conversations");
+    JSONArray conversations = Library.sortedSessions(a.library.array("conversations"), true);
     List<JSONObject> savedItems = new ArrayList<>(), temporaryItems = new ArrayList<>();
-    for (int i = conversations.length() - 1; i >= 0; i--) {
+    for (int i = 0; i < conversations.length(); i++) {
       JSONObject item = conversations.optJSONObject(i);
       if (item == null) continue;
       if (saved(item)) savedItems.add(item);
-      else temporaryItems.add(item);
+      else if (Library.isTemporary(item)) temporaryItems.add(item);
     }
 
     LinearLayout savedCard = a.card(null);
@@ -263,6 +263,8 @@ final class QueryUi {
     EditText filter = a.input("搜索会话名称", sessionFilter, false);
     searchRow.addView(filter, new LinearLayout.LayoutParams(0, a.dp(44), 1));
     TextView dateFilter = a.text("日期筛选", 14, false);
+    dateFilter.setTextIsSelectable(false);
+    dateFilter.setFocusable(false);
     dateFilter.setTextColor(a.accent);
     dateFilter.setTypeface(null, android.graphics.Typeface.NORMAL);
     dateFilter.setPadding(a.dp(8), 0, 0, 0);
@@ -360,19 +362,11 @@ final class QueryUi {
   }
 
   String sessionDate(JSONObject item, String field) {
-    JSONObject metadata = item.optJSONObject("metadata");
-    String value = metadata == null ? "" : metadata.optString(field);
-    if (value.isEmpty())
-      value = item.optString(field.equals("last_used_at") ? "updated_at" : "created_at");
-    return value.isEmpty() ? "—" : value.replace('T', ' ').replace("Z", "");
+    return SessionDates.display(item, field, java.time.ZoneId.systemDefault());
   }
 
   boolean matchesDate(JSONObject item) {
-    String date = sessionDate(item, dateField);
-    if (date.length() < 10) return startDate.isEmpty() && endDate.isEmpty();
-    String day = date.substring(0, 10);
-    return (startDate.isEmpty() || day.compareTo(startDate) >= 0)
-        && (endDate.isEmpty() || day.compareTo(endDate) <= 0);
+    return SessionDates.matches(item, dateField, startDate, endDate, java.time.ZoneId.systemDefault());
   }
 
   void showDateFilter() {
@@ -430,15 +424,7 @@ final class QueryUi {
   }
 
   boolean validDate(String value) {
-    if (!value.matches("\\d{4}-\\d{2}-\\d{2}")) return false;
-    java.text.SimpleDateFormat format = new java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US);
-    format.setLenient(false);
-    try {
-      format.parse(value);
-      return true;
-    } catch (java.text.ParseException error) {
-      return false;
-    }
+    return SessionDates.validDate(value);
   }
 
   void addDateFields(LinearLayout parent) {
@@ -463,11 +449,20 @@ final class QueryUi {
   }
 
   void showRecent() {
-    JSONArray history = a.library.array("recent_queries");
     AlertDialog dialog =
         new AlertDialog.Builder(a).setTitle("最近查询").setPositiveButton("完成", null).create();
     LinearLayout box = a.column();
-    for (int i = history.length() - 1; i >= 0; i--) {
+    fillRecent(box, dialog);
+    ScrollView scroll = new ScrollView(a);
+    scroll.addView(box);
+    dialog.setView(scroll);
+    dialog.show();
+  }
+
+  void fillRecent(LinearLayout box, AlertDialog dialog) {
+    box.removeAllViews();
+    JSONArray history = Library.sortedHistory(a.library.array("recent_queries"), true);
+    for (int i = 0; i < history.length(); i++) {
       JSONObject s = history.optJSONObject(i);
       LinearLayout row = a.row();
       row.addView(
@@ -475,37 +470,27 @@ final class QueryUi {
               s.optJSONObject("query_results") == null
                   ? title(s)
                   : s.optJSONObject("query_results").optString("word", title(s)),
-              v -> {
-                dialog.dismiss();
-                open(s);
-              }),
+              v -> { dialog.dismiss(); open(s); }),
           new LinearLayout.LayoutParams(0, -2, 1));
-      row.addView(
-          a.button(
-              "删除", v -> a.change(() -> a.library.delete("recent_queries", s.optString("id")))));
+      row.addView(a.button("删除", v -> {
+        a.change(() -> a.library.delete("recent_queries", s.optString("id")));
+        fillRecent(box, dialog);
+      }));
       box.addView(row);
     }
     if (history.length() == 0) box.addView(a.text("暂无最近查询", 14, false));
-    if (history.length() > 0)
-      box.addView(
-          a.button(
-              "清空最近查询",
-              v ->
-                  new AlertDialog.Builder(a)
-                      .setMessage("清空最近查询？保存的会话和词汇保留。")
-                      .setNegativeButton("取消", null)
-                      .setPositiveButton(
-                          "清空",
-                          (d, w) ->
-                              a.change(
-                                  () -> {
-                                    while (history.length() > 0) history.remove(0);
-                                  }))
-                      .show()));
-    ScrollView scroll = new ScrollView(a);
-    scroll.addView(box);
-    dialog.setView(scroll);
-    dialog.show();
+    else box.addView(a.button("清空最近查询", v ->
+        new AlertDialog.Builder(a)
+            .setMessage("清空最近查询？保存的会话和词汇保留。")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("清空", (d, w) -> {
+              a.change(() -> {
+                JSONArray current = a.library.array("recent_queries");
+                while (current.length() > 0)
+                  a.library.delete("recent_queries", current.optJSONObject(0).optString("id"));
+              });
+              fillRecent(box, dialog);
+            }).show()));
   }
 
   String title(JSONObject s) {
@@ -627,6 +612,7 @@ final class QueryUi {
     }
     if (text.trim().isEmpty() && a.image == null) return;
     if (a.session == null) a.session = a.library.newSession(text);
+    Library.promoteTemporary(a.session);
     final JSONObject target = a.session;
     final String explicitTarget = draft;
     final Uri requestImage = fromHub && homeMode.equals("text") ? null : a.image;
@@ -800,6 +786,17 @@ final class QueryUi {
 
   void assistant() {
     if (a.session == null) a.session = a.library.newSession("");
+    boolean emptyDraft = a.session.optString("input_text").trim().isEmpty()
+        && messages().length() == 0 && a.session.optJSONObject("query_results") == null;
+    if (emptyDraft) {
+      // Opening an empty composer must not evict an existing conversation.
+      Library.put(a.session.optJSONObject("metadata"), "origin", "assistant");
+    } else if (!Library.isSaved(a.session) && !Library.isTemporary(a.session)) {
+      // A result explicitly opened in the assistant becomes independent of query history.
+      Library.promoteTemporary(a.session);
+      a.library.touchSession(a.session, false);
+      if (!a.persist()) return;
+    }
     assistantView = AssistantUi.show(a, this);
     if (!partialReply.isEmpty()) assistantView.updatePartial(partialReply);
   }

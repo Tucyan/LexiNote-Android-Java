@@ -55,7 +55,11 @@ public class LibraryIntegrityTest {
     JSONObject saved = l.newSession("saved");
     saved.put("metadata", new JSONObject("{retention:'saved',title:'saved'}"));
     l.touchSession(saved, false);
-    for (int i = 0; i < 8; i++) l.touchSession(l.newSession("temp" + i), false);
+    for (int i = 0; i < 8; i++) {
+      JSONObject temporary = l.newSession("temp" + i);
+      Library.promoteTemporary(temporary);
+      l.touchSession(temporary, false);
+    }
     assertNotNull(l.find("conversations", saved.getString("id")));
     assertEquals(6, l.array("conversations").length());
   }

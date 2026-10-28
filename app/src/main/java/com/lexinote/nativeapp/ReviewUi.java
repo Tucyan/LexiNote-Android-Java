@@ -12,6 +12,7 @@ final class ReviewUi {
   String notebook = null;
   boolean reverse = false, revealed = false;
   int completed = 0, batchSize = 10;
+  ReviewLogic.Progress progressState = new ReviewLogic.Progress(0);
 
   ReviewUi(MainActivity a) {
     this.a = a;
@@ -32,7 +33,9 @@ final class ReviewUi {
       int due = 0, mastered = 0;
       for (JSONObject v : currentPool) {
         if (v.optLong("review_due", 0) <= now) due++;
-        if (v.optInt("review_count") >= 3) mastered++;
+        if (ReviewLogic.mastered(v.has("review_mastery_level") && !v.isNull("review_mastery_level")
+            ? v.optInt("review_mastery_level") : null, v.optInt("review_count"),
+            v.optString("review_grade", ""))) mastered++;
       }
       LinearLayout stats = a.card(null);
       LinearLayout heading = a.row();
@@ -192,11 +195,13 @@ final class ReviewUi {
                   if (n != null
                       && !NotebookUi.contains(
                           n.optJSONArray("vocabulary_ids"), word.optString("id"))) continue;
-                  if (word.optLong("review_due", 0) <= reviewStartedAt)
+                  if (word.optLong("review_due", 0) <= reviewStartedAt
+                      && !queue.contains(word.optString("id")))
                     queue.add(word.optString("id"));
                 }
                 revealed = false;
                 completed = 0;
+                progressState = new ReviewLogic.Progress(queue.size());
                 a.render();
               });
       LinearLayout.LayoutParams startLp = new LinearLayout.LayoutParams(-1, a.dp(56));
@@ -209,12 +214,12 @@ final class ReviewUi {
     if (queue.isEmpty()) {
       int dueCount = 0;
       for (JSONObject v : currentPool) if (v.optLong("review_due", 0) <= now) dueCount++;
-      if (dueCount == 0 || completed > 0) {
+      if (dueCount == 0 || completed > 0 || progressState.skipped > 0) {
         LinearLayout empty = a.column();
         empty.setGravity(android.view.Gravity.CENTER);
         empty.addView(a.icon("checkmark-circle-outline", 40, a.accent));
         empty.addView(
-            a.text(completed > 0 ? "本轮完成 " + completed + " 张卡片。评分已保存。" : "当前范围暂无待复习词汇。", 16, true));
+            a.text((completed > 0 || progressState.skipped > 0) ? "本轮完成 " + completed + " 张卡片。" + (progressState.skipped > 0 ? "跳过 " + progressState.skipped + " 张。" : "") + "评分已保存。" : "当前范围暂无待复习词汇。", 16, true));
         a.body.addView(empty, new LinearLayout.LayoutParams(-1, a.dp(180)));
       }
       return;
@@ -222,17 +227,18 @@ final class ReviewUi {
     JSONObject word = a.library.find("vocabularies", queue.peek());
     if (word == null) {
       queue.remove();
+      progressState.skip();
       a.render();
       return;
     }
     LinearLayout card = a.card(null);
     card.setMinimumHeight(a.dp(360));
-    int total = completed + queue.size();
-    card.addView(a.text("第 " + (completed + 1) + " / " + total + " 张", 13, false));
-    card.addView(a.text("剩余 " + queue.size() + " · 已复习 " + completed, 12, false));
+    int total = progressState.total;
+    card.addView(a.text("已完成 " + completed + "/" + total + " 张", 13, false));
+    card.addView(a.text("剩余 " + queue.size() + " · 跳过 " + progressState.skipped, 12, false));
     ProgressBar progress = new ProgressBar(a, null, android.R.attr.progressBarStyleHorizontal);
     progress.setMax(Math.max(1, total));
-    progress.setProgress(completed);
+    progress.setProgress(completed + progressState.skipped);
     card.addView(progress, new LinearLayout.LayoutParams(-1, a.dp(5)));
     JSONArray meanings = word.optJSONArray("meanings");
     JSONObject meaning =
@@ -247,6 +253,7 @@ final class ReviewUi {
               "跳过此词",
               v -> {
                 queue.remove();
+                progressState.skip();
                 revealed = false;
                 a.render();
               }));
@@ -278,10 +285,15 @@ final class ReviewUi {
                   long interval =
                       grade.equals("再次") ? 0 : grade.equals("困难") ? 86400000L : 4 * 86400000L;
                   Library.put(word, "review_due", System.currentTimeMillis() + interval);
+                  Library.put(word, "review_mastery_level", ReviewLogic.nextLevel(
+                      word.has("review_mastery_level") && !word.isNull("review_mastery_level")
+                          ? word.optInt("review_mastery_level") : null,
+                      word.optInt("review_count"), word.optString("review_grade", ""), grade));
                   Library.put(word, "review_grade", grade);
                   Library.put(word, "review_count", word.optInt("review_count") + 1);
                   Library.put(word, "reviewed_at", Library.now());
-                  completed++;
+                  progressState.rate(grade);
+                  completed = progressState.completed;
                   revealed = false;
                   a.persist();
                   a.render();

@@ -1,0 +1,5 @@
+
+PASS 0
+
+FAIL 1
+UX02 query context entering assistant survives history clear: java.lang.RuntimeException: java.lang.AssertionError: nonempty query context was not promoted

@@ -1,0 +1,18 @@
+{
+  "timezone": "GMT",
+  "files": [
+    {
+      "byte_equal": true,
+      "path": "files/library.json"
+    },
+    {
+      "byte_equal": true,
+      "path": "shared_prefs/provider_private.xml"
+    },
+    {
+      "byte_equal": true,
+      "path": "files/before-restore.json"
+    }
+  ],
+  "original_rollback_preserved": true
+}

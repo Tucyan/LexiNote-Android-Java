@@ -45,7 +45,7 @@ function Seek-Audit([string]$label,[int]$limit=6) {
  throw "Scroll target unavailable: $label"
 }
 function Snapshot-Audit([string]$name){ Save-DeviceScreen 'screens' $name }
-function Export-AuditState([string]$name){
+function Export-AuditState([string]$name,[switch]$CurrentMastery){
  $raw=& $adb exec-out run-as com.lexinote.nativeapp cat files/library.json
  if($LASTEXITCODE -ne 0){throw 'Cannot inspect test library'}
  $data=$raw | ConvertFrom-Json
@@ -57,10 +57,16 @@ function Export-AuditState([string]$name){
   saved_count=@($data.conversations | Where-Object {$_.metadata.retention -eq 'saved'}).Count
   temporary_count=@($data.conversations | Where-Object {$_.metadata.retention -eq 'temporary'}).Count
   message_count=(@($data.conversations | ForEach-Object {@($_.ai_messages).Count}) | Measure-Object -Sum).Sum
-  mastered_count=@($data.vocabularies | Where-Object {$_.review_count -ge 3}).Count
+  mastery_metric=$(if($CurrentMastery){'graded_level'}else{'legacy_count'})
+  mastered_count=$(if($CurrentMastery){
+    @($data.vocabularies | Where-Object {
+      if($_.PSObject.Properties.Name -contains 'review_mastery_level'){$_.review_mastery_level -ge 3}
+      else{$_.review_count -ge 3 -and ([string]::IsNullOrEmpty($_.review_grade) -or $_.review_grade -eq '简单')}
+    }).Count
+  }else{@($data.vocabularies | Where-Object {$_.review_count -ge 3}).Count})
   conversations=@($data.conversations | ForEach-Object {[ordered]@{id=$_.id;title=$_.metadata.title;retention=$_.metadata.retention;origin=$_.metadata.origin;last_used_at=$_.metadata.last_used_at}})
   recent=@($data.recent_queries | ForEach-Object {[ordered]@{id=$_.id;word=$_.query_results.word;created_at=$_.created_at}})
-  review=@($data.vocabularies | Where-Object {$_.content -in @('agenda','budget')} | ForEach-Object {[ordered]@{word=$_.content;review_count=$_.review_count;review_grade=$_.review_grade;review_due=$_.review_due}})
+  review=@($data.vocabularies | Where-Object {$_.content -in @('agenda','budget')} | ForEach-Object {[ordered]@{word=$_.content;review_count=$_.review_count;review_grade=$_.review_grade;review_mastery_level=$_.review_mastery_level;review_due=$_.review_due}})
  }
  $summary | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $uiRoot ($name+'.json')) -Encoding utf8NoBOM
 }

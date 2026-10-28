@@ -1,0 +1,71 @@
+app\src\test\java\com\lexinote\nativeapp\SessionDatesTest.java:12: ����: �Ҳ�������
+    assertTrue(SessionDates.matches(s,"last_used_at","2026-10-28","2026-10-28",sg));
+               ^
+  ����:   ���� SessionDates
+  λ��: �� SessionDatesTest
+app\src\test\java\com\lexinote\nativeapp\SessionDatesTest.java:13: ����: �Ҳ�������
+    assertFalse(SessionDates.matches(s,"last_used_at","2026-10-27","2026-10-27",sg));
+                ^
+  ����:   ���� SessionDates
+  λ��: �� SessionDatesTest
+app\src\test\java\com\lexinote\nativeapp\SessionDatesTest.java:14: ����: �Ҳ�������
+    assertEquals("2026-10-28 07:00 +08:00",SessionDates.display(s,"last_used_at",sg));
+                                           ^
+  ����:   ���� SessionDates
+  λ��: �� SessionDatesTest
+app\src\test\java\com\lexinote\nativeapp\SessionDatesTest.java:18: ����: �Ҳ�������
+    assertTrue(SessionDates.matches(item("2026-11-02T04:59:59.999Z"),"last_used_at","2026-11-01","2026-11-01",ny));
+               ^
+  ����:   ���� SessionDates
+  λ��: �� SessionDatesTest
+app\src\test\java\com\lexinote\nativeapp\SessionDatesTest.java:19: ����: �Ҳ�������
+    assertFalse(SessionDates.matches(item("2026-11-02T05:00:00Z"),"last_used_at","2026-11-01","2026-11-01",ny));
+                ^
+  ����:   ���� SessionDates
+  λ��: �� SessionDatesTest
+app\src\test\java\com\lexinote\nativeapp\SessionDatesTest.java:20: ����: �Ҳ�������
+    assertTrue(SessionDates.matches(item("2026-10-28T07:00:00+08:00"),"last_used_at","2026-10-28","2026-10-28",ZoneId.of("Asia/Singapore")));
+               ^
+  ����:   ���� SessionDates
+  λ��: �� SessionDatesTest
+app\src\test\java\com\lexinote\nativeapp\SessionDatesTest.java:24: ����: �Ҳ�������
+    assertTrue(SessionDates.matches(s,"last_used_at","2026-10-28","",utc));
+               ^
+  ����:   ���� SessionDates
+  λ��: �� SessionDatesTest
+app\src\test\java\com\lexinote\nativeapp\SessionDatesTest.java:26: ����: �Ҳ�������
+    assertFalse(SessionDates.matches(s,"last_used_at","2026-10-28","",utc));
+                ^
+  ����:   ���� SessionDates
+  λ��: �� SessionDatesTest
+app\src\test\java\com\lexinote\nativeapp\SessionDatesTest.java:27: ����: �Ҳ�������
+    assertTrue(SessionDates.matches(s,"last_used_at","","",utc));
+               ^
+  ����:   ���� SessionDates
+  λ��: �� SessionDatesTest
+app\src\test\java\com\lexinote\nativeapp\SessionDatesTest.java:28: ����: �Ҳ�������
+    assertEquals("��",SessionDates.display(s,"last_used_at",utc));
+                     ^
+  ����:   ���� SessionDates
+  λ��: �� SessionDatesTest
+app\src\test\java\com\lexinote\nativeapp\SessionDatesTest.java:29: ����: �Ҳ�������
+    assertTrue(SessionDates.validDate("2024-02-29"));
+               ^
+  ����:   ���� SessionDates
+  λ��: �� SessionDatesTest
+app\src\test\java\com\lexinote\nativeapp\SessionDatesTest.java:30: ����: �Ҳ�������
+    assertFalse(SessionDates.validDate("2026-02-29"));
+                ^
+  ����:   ���� SessionDates
+  λ��: �� SessionDatesTest
+app\src\test\java\com\lexinote\nativeapp\SessionDatesTest.java:31: ����: �Ҳ�������
+    assertFalse(SessionDates.validDate("2026-1-01"));
+                ^
+  ����:   ���� SessionDates
+  λ��: �� SessionDatesTest
+app\src\test\java\com\lexinote\nativeapp\SessionDatesTest.java:32: ����: �Ҳ�������
+    assertFalse(SessionDates.matches(item("2026-10-28T02:00:00Z"),"last_used_at","2026-10-30","2026-10-28",utc));
+                ^
+  ����:   ���� SessionDates
+  λ��: �� SessionDatesTest
+14 ������

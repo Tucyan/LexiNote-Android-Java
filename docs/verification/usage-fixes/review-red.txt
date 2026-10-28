@@ -1,0 +1,62 @@
+app\src\test\java\com\lexinote\nativeapp\ReviewLogicTest.java:7: ����: �Ҳ�������
+    for (int i = 0; i < 48; i++) if (ReviewLogic.mastered(null, 3, "")) mastered++;
+                                     ^
+  ����:   ���� ReviewLogic
+  λ��: �� ReviewLogicTest
+app\src\test\java\com\lexinote\nativeapp\ReviewLogicTest.java:9: ����: �Ҳ�������
+    assertEquals(1, ReviewLogic.nextLevel(null, 0, "", "��"));
+                    ^
+  ����:   ���� ReviewLogic
+  λ��: �� ReviewLogicTest
+app\src\test\java\com\lexinote\nativeapp\ReviewLogicTest.java:10: ����: �Ҳ�������
+    int budget = ReviewLogic.nextLevel(null, 2, "��", "�ٴ�");
+                 ^
+  ����:   ���� ReviewLogic
+  λ��: �� ReviewLogicTest
+app\src\test\java\com\lexinote\nativeapp\ReviewLogicTest.java:11: ����: �Ҳ�������
+    assertFalse(ReviewLogic.mastered(budget, 3, "�ٴ�"));
+                ^
+  ����:   ���� ReviewLogic
+  λ��: �� ReviewLogicTest
+app\src\test\java\com\lexinote\nativeapp\ReviewLogicTest.java:13: ����: �Ҳ�������
+    assertEquals(0, ReviewLogic.nextLevel(0, 4, "�ٴ�", "�ٴ�"));
+                    ^
+  ����:   ���� ReviewLogic
+  λ��: �� ReviewLogicTest
+app\src\test\java\com\lexinote\nativeapp\ReviewLogicTest.java:14: ����: �Ҳ�������
+    assertFalse(ReviewLogic.mastered(null, 10, "����"));
+                ^
+  ����:   ���� ReviewLogic
+  λ��: �� ReviewLogicTest
+app\src\test\java\com\lexinote\nativeapp\ReviewLogicTest.java:15: ����: �Ҳ�������
+    assertFalse(ReviewLogic.mastered(null, 10, "�ٴ�"));
+                ^
+  ����:   ���� ReviewLogic
+  λ��: �� ReviewLogicTest
+app\src\test\java\com\lexinote\nativeapp\ReviewLogicTest.java:16: ����: �Ҳ�������
+    assertFalse(ReviewLogic.mastered(null, 10, "unknown"));
+                ^
+  ����:   ���� ReviewLogic
+  λ��: �� ReviewLogicTest
+app\src\test\java\com\lexinote\nativeapp\ReviewLogicTest.java:17: ����: �Ҳ�������
+    assertEquals(2, ReviewLogic.nextLevel(2, 2, "��", "����"));
+                    ^
+  ����:   ���� ReviewLogic
+  λ��: �� ReviewLogicTest
+app\src\test\java\com\lexinote\nativeapp\ReviewLogicTest.java:18: ����: �Ҳ�������
+    assertEquals(3, ReviewLogic.nextLevel(2, 2, "��", "��"));
+                    ^
+  ����:   ���� ReviewLogic
+  λ��: �� ReviewLogicTest
+app\src\test\java\com\lexinote\nativeapp\ReviewLogicTest.java:19: ����: �Ҳ�������
+    assertEquals(2, ReviewLogic.nextLevel(2, 2, "��", "unknown"));
+                    ^
+  ����:   ���� ReviewLogic
+  λ��: �� ReviewLogicTest
+app\src\test\java\com\lexinote\nativeapp\ReviewLogicTest.java:22: ����: �����ReviewLogic������
+    ReviewLogic.Progress p = new ReviewLogic.Progress(10);
+               ^
+app\src\test\java\com\lexinote\nativeapp\ReviewLogicTest.java:22: ����: �����ReviewLogic������
+    ReviewLogic.Progress p = new ReviewLogic.Progress(10);
+                                            ^
+13 ������

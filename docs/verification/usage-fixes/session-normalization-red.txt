@@ -1,0 +1,12 @@
+JUnit version 4.13.2
+....E
+Time: 0.188
+There was 1 failure:
+1) normalizedMetadataSurvivesBackupAndReload(com.lexinote.nativeapp.SessionRetentionTest)
+org.junit.ComparisonFailure: expected:<[que]ry> but was:<[tempora]ry>
+	at org.junit.Assert.assertEquals(Assert.java:117)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at com.lexinote.nativeapp.SessionRetentionTest.normalizedMetadataSurvivesBackupAndReload(SessionRetentionTest.java:33)
+
+FAILURES!!!
+Tests run: 4,  Failures: 1

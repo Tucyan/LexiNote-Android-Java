@@ -31,7 +31,7 @@ public class LibraryTest {
       l.touchSession(s, true);
     }
     assertEquals(10, l.array("recent_queries").length());
-    assertEquals(5, l.array("conversations").length());
+    assertEquals(10, l.array("conversations").length());
   }
 
   @Test

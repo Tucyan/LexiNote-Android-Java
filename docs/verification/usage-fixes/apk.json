@@ -1,0 +1,8 @@
+{
+  "path": "app/build/outputs/apk/debug/app-debug.apk",
+  "bytes": 1466408,
+  "sha256": "5F9283D12A70CAA76C05E089251244F11608B536E4D3DF8796FD04A1D6FBA080",
+  "package": "com.lexinote.nativeapp",
+  "signing": "debug",
+  "verification": "installed on Pixel_9a API37;132 JVM tests and32 offline device groups passed"
+}

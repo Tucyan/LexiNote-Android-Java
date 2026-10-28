@@ -1,0 +1,5 @@
+
+PASS 0
+
+FAIL 1
+UX02 empty draft preserves quota then first message evicts oldest: java.lang.RuntimeException: java.lang.AssertionError: empty draft consumed quota
