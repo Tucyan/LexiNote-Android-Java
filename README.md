@@ -81,3 +81,5 @@ adb shell am instrument -w com.lexinote.nativeapp.test/com.lexinote.nativeapp.Fe
 MIT License，保留原项目许可证。独立公开仓库：[Tucyan/LexiNote-Android-Java](https://github.com/Tucyan/LexiNote-Android-Java)。
 
 2026-10-28：新增 TokenDance 账户入口、PKCE 授权/一次性码、内置离线模型列表、原生充值状态及余额/授权恢复。117 项 JVM 测试和 22 组离线设备检查通过；真实登录与支付尚未实测。见 [TokenDance 验收](docs/verification/TOKENDANCE.md)。
+
+正常使用测试数据：80 单词、40 短语、10 条最近查询、5 条临时和 8 条保存会话。已通过真实文件选择器导入和回导校验，见 [模拟备份](docs/fixtures/normal-usage/README.md) 与 [测试报告](docs/verification/NORMAL-USAGE.md)。

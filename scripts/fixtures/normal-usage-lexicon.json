@@ -1,0 +1,1210 @@
+{
+  "words": [
+    {
+      "content": "agenda",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "议程",
+      "en_definition": "a list of matters to be discussed at a meeting",
+      "example": "The manager shared the agenda before the meeting.",
+      "topic": "work"
+    },
+    {
+      "content": "deadline",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "截止日期",
+      "en_definition": "the latest time by which something must be finished",
+      "example": "We need to submit the report before Friday's deadline.",
+      "topic": "work"
+    },
+    {
+      "content": "colleague",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "同事",
+      "en_definition": "a person who works with you",
+      "example": "My colleague showed me how to use the new system.",
+      "topic": "work"
+    },
+    {
+      "content": "delegate",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "委派",
+      "en_definition": "to give a task or responsibility to another person",
+      "example": "She delegated the routine tasks to her assistant.",
+      "topic": "work"
+    },
+    {
+      "content": "negotiate",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "谈判",
+      "en_definition": "to discuss something in order to reach an agreement",
+      "example": "The two companies negotiated a fair price.",
+      "topic": "work"
+    },
+    {
+      "content": "proposal",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "提议；方案",
+      "en_definition": "a suggested plan for others to consider",
+      "example": "The team presented a proposal to improve customer service.",
+      "topic": "work"
+    },
+    {
+      "content": "coordinate",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "协调",
+      "en_definition": "to organize people or activities so they work together",
+      "example": "Maya will coordinate the volunteers for the event.",
+      "topic": "work"
+    },
+    {
+      "content": "feedback",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "反馈",
+      "en_definition": "comments that help someone understand or improve their work",
+      "example": "The teacher gave useful feedback on my presentation.",
+      "topic": "work"
+    },
+    {
+      "content": "priority",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "优先事项",
+      "en_definition": "something considered more important than other things",
+      "example": "Safety is our first priority on this project.",
+      "topic": "work"
+    },
+    {
+      "content": "efficient",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "adjective",
+      "zh_definition": "高效的",
+      "en_definition": "working well without wasting time or effort",
+      "example": "A shared calendar makes scheduling more efficient.",
+      "topic": "work"
+    },
+    {
+      "content": "schedule",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "日程安排",
+      "en_definition": "a plan showing when activities will happen",
+      "example": "I checked my schedule before accepting the invitation.",
+      "topic": "work"
+    },
+    {
+      "content": "client",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "客户",
+      "en_definition": "a person or organization that receives professional services",
+      "example": "The designer met the client to discuss the project.",
+      "topic": "work"
+    },
+    {
+      "content": "budget",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "预算",
+      "en_definition": "a plan for how much money can be spent",
+      "example": "We stayed within our budget by comparing prices.",
+      "topic": "work"
+    },
+    {
+      "content": "revise",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "修改",
+      "en_definition": "to change something in order to improve it",
+      "example": "Please revise the introduction before sending the report.",
+      "topic": "work"
+    },
+    {
+      "content": "collaborate",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "合作",
+      "en_definition": "to work with others on a shared task",
+      "example": "Students from both schools collaborated on the exhibition.",
+      "topic": "work"
+    },
+    {
+      "content": "supervisor",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "主管；监督人",
+      "en_definition": "a person who is responsible for overseeing someone's work",
+      "example": "Ask your supervisor if you need additional training.",
+      "topic": "work"
+    },
+    {
+      "content": "recruit",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "招聘；招募",
+      "en_definition": "to find and bring new people into an organization",
+      "example": "The company plans to recruit three new engineers.",
+      "topic": "work"
+    },
+    {
+      "content": "estimate",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "估计",
+      "en_definition": "to roughly calculate or judge an amount or value",
+      "example": "We estimate that the journey will take two hours.",
+      "topic": "work"
+    },
+    {
+      "content": "revenue",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "收入；收益",
+      "en_definition": "money received by a business or organization",
+      "example": "Ticket sales provide most of the museum's revenue.",
+      "topic": "work"
+    },
+    {
+      "content": "productive",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "adjective",
+      "zh_definition": "富有成效的",
+      "en_definition": "achieving a useful amount of work or results",
+      "example": "Our meeting was productive because everyone came prepared.",
+      "topic": "work"
+    },
+    {
+      "content": "chapter",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "章；章节",
+      "en_definition": "a main division of a book",
+      "example": "I read one chapter before going to sleep.",
+      "topic": "reading"
+    },
+    {
+      "content": "narrative",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "叙述；故事",
+      "en_definition": "an account of connected events",
+      "example": "The narrative follows a family across three generations.",
+      "topic": "reading"
+    },
+    {
+      "content": "character",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "人物；角色",
+      "en_definition": "a person represented in a story or play",
+      "example": "My favorite character learns to trust her friends.",
+      "topic": "reading"
+    },
+    {
+      "content": "plot",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "情节",
+      "en_definition": "the series of events that form a story",
+      "example": "The plot becomes more exciting after the discovery.",
+      "topic": "reading"
+    },
+    {
+      "content": "author",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "作者",
+      "en_definition": "a person who writes a book or other work",
+      "example": "The author spoke about her childhood at the library.",
+      "topic": "reading"
+    },
+    {
+      "content": "passage",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "段落；选段",
+      "en_definition": "a short section of a written work",
+      "example": "Read the passage carefully before answering the questions.",
+      "topic": "reading"
+    },
+    {
+      "content": "context",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "上下文；背景",
+      "en_definition": "the surrounding words or situation that help explain meaning",
+      "example": "You can often guess a word's meaning from its context.",
+      "topic": "reading"
+    },
+    {
+      "content": "theme",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "主题",
+      "en_definition": "a central subject or idea in a work",
+      "example": "Friendship is a major theme of the novel.",
+      "topic": "reading"
+    },
+    {
+      "content": "fiction",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "虚构文学；小说",
+      "en_definition": "stories invented by the writer rather than factual accounts",
+      "example": "He enjoys reading historical fiction on the train.",
+      "topic": "reading"
+    },
+    {
+      "content": "biography",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "传记",
+      "en_definition": "an account of someone's life written by another person",
+      "example": "She borrowed a biography of the scientist from the library.",
+      "topic": "reading"
+    },
+    {
+      "content": "illustrate",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "说明；阐明",
+      "en_definition": "to make an idea clear by giving examples or pictures",
+      "example": "The story illustrates how small choices can matter.",
+      "topic": "reading"
+    },
+    {
+      "content": "interpret",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "解释；理解",
+      "en_definition": "to explain or understand the meaning of something",
+      "example": "Readers may interpret the ending in different ways.",
+      "topic": "reading"
+    },
+    {
+      "content": "summarize",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "概括；总结",
+      "en_definition": "to express the main points of something briefly",
+      "example": "Can you summarize the article in three sentences?",
+      "topic": "reading"
+    },
+    {
+      "content": "clue",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "线索",
+      "en_definition": "a piece of information that helps solve a problem or mystery",
+      "example": "A muddy footprint gave the detective an important clue.",
+      "topic": "reading"
+    },
+    {
+      "content": "literal",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "adjective",
+      "zh_definition": "字面的",
+      "en_definition": "following the exact usual meaning of words",
+      "example": "A literal translation does not always sound natural.",
+      "topic": "reading"
+    },
+    {
+      "content": "metaphor",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "隐喻",
+      "en_definition": "an expression that describes one thing as another to suggest a similarity",
+      "example": "The poet uses a river as a metaphor for time.",
+      "topic": "reading"
+    },
+    {
+      "content": "paragraph",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "段落",
+      "en_definition": "a group of sentences about one main idea",
+      "example": "The first paragraph introduces the writer's argument.",
+      "topic": "reading"
+    },
+    {
+      "content": "publish",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "出版；发表",
+      "en_definition": "to make a book or other writing available to the public",
+      "example": "The journal will publish her article next month.",
+      "topic": "reading"
+    },
+    {
+      "content": "quotation",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "引文；引用的话",
+      "en_definition": "words taken from a text or speech and repeated",
+      "example": "He began his essay with a quotation from a famous novel.",
+      "topic": "reading"
+    },
+    {
+      "content": "perspective",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "视角；观点",
+      "en_definition": "a particular way of thinking about or viewing something",
+      "example": "The book offers a child's perspective on the journey.",
+      "topic": "reading"
+    },
+    {
+      "content": "errand",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "差事；短程办事",
+      "en_definition": "a short trip to do a particular task",
+      "example": "I ran an errand at the pharmacy on my way home.",
+      "topic": "daily"
+    },
+    {
+      "content": "grocery",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "食品杂货店",
+      "en_definition": "a shop that sells food and household items",
+      "example": "She stopped at the grocery to buy some milk.",
+      "topic": "daily"
+    },
+    {
+      "content": "commute",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "通勤",
+      "en_definition": "to travel regularly between home and work or school",
+      "example": "I commute by bus because parking is expensive.",
+      "topic": "daily"
+    },
+    {
+      "content": "appointment",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "预约；约定",
+      "en_definition": "an arrangement to meet someone at a particular time",
+      "example": "I made a dental appointment for next Tuesday.",
+      "topic": "daily"
+    },
+    {
+      "content": "receipt",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "收据",
+      "en_definition": "a written or printed record showing that payment was made",
+      "example": "Keep the receipt in case you need to return the shoes.",
+      "topic": "daily"
+    },
+    {
+      "content": "neighbor",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "邻居",
+      "en_definition": "a person who lives near you",
+      "example": "Our neighbor watered the plants while we were away.",
+      "topic": "daily"
+    },
+    {
+      "content": "convenient",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "adjective",
+      "zh_definition": "方便的",
+      "en_definition": "easy to use or suitable for a particular purpose",
+      "example": "The station is convenient for people who work downtown.",
+      "topic": "daily"
+    },
+    {
+      "content": "hesitate",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "犹豫",
+      "en_definition": "to pause before doing something because you are unsure",
+      "example": "Don't hesitate to ask if you need help.",
+      "topic": "daily"
+    },
+    {
+      "content": "replace",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "更换；取代",
+      "en_definition": "to put something new in the place of something else",
+      "example": "We need to replace the broken light bulb.",
+      "topic": "daily"
+    },
+    {
+      "content": "borrow",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "借入",
+      "en_definition": "to take something temporarily with the intention of returning it",
+      "example": "May I borrow your umbrella until tomorrow?",
+      "topic": "daily"
+    },
+    {
+      "content": "afford",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "负担得起",
+      "en_definition": "to have enough money or time for something",
+      "example": "We can't afford a larger apartment right now.",
+      "topic": "daily"
+    },
+    {
+      "content": "recommend",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "推荐",
+      "en_definition": "to suggest that someone try or choose something",
+      "example": "A friend recommended this small restaurant to us.",
+      "topic": "daily"
+    },
+    {
+      "content": "routine",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "日常惯例",
+      "en_definition": "the usual way of doing things regularly",
+      "example": "A short walk is part of my morning routine.",
+      "topic": "daily"
+    },
+    {
+      "content": "repair",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "修理",
+      "en_definition": "to fix something that is damaged or broken",
+      "example": "He repaired the chair instead of throwing it away.",
+      "topic": "daily"
+    },
+    {
+      "content": "generous",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "adjective",
+      "zh_definition": "慷慨的",
+      "en_definition": "willing to give more than is necessary or expected",
+      "example": "Our host was generous with her time and advice.",
+      "topic": "daily"
+    },
+    {
+      "content": "reliable",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "adjective",
+      "zh_definition": "可靠的",
+      "en_definition": "able to be trusted to work well or do what is expected",
+      "example": "The weather app is usually reliable in this area.",
+      "topic": "daily"
+    },
+    {
+      "content": "flexible",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "adjective",
+      "zh_definition": "灵活的",
+      "en_definition": "able to change easily when circumstances require it",
+      "example": "My work hours are flexible on most Fridays.",
+      "topic": "daily"
+    },
+    {
+      "content": "occasion",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "场合；时刻",
+      "en_definition": "a particular time when something happens",
+      "example": "We save these dishes for special occasions.",
+      "topic": "daily"
+    },
+    {
+      "content": "apologize",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "道歉",
+      "en_definition": "to say that you are sorry for something",
+      "example": "He apologized for arriving late to dinner.",
+      "topic": "daily"
+    },
+    {
+      "content": "organize",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "整理；组织",
+      "en_definition": "to arrange things in a clear and useful way",
+      "example": "I organized my desk so I could find my notes easily.",
+      "topic": "daily"
+    },
+    {
+      "content": "analyze",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "分析",
+      "en_definition": "to examine something carefully in order to understand it",
+      "example": "The researchers analyzed the survey responses.",
+      "topic": "academic"
+    },
+    {
+      "content": "evidence",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "证据",
+      "en_definition": "facts or information that support a conclusion",
+      "example": "The article presents evidence for its main claim.",
+      "topic": "academic"
+    },
+    {
+      "content": "hypothesis",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "假设",
+      "en_definition": "an idea that can be tested through research or experiment",
+      "example": "The students designed an experiment to test their hypothesis.",
+      "topic": "academic"
+    },
+    {
+      "content": "method",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "方法",
+      "en_definition": "a particular way of doing something",
+      "example": "This method makes it easier to compare the results.",
+      "topic": "academic"
+    },
+    {
+      "content": "theory",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "理论",
+      "en_definition": "a set of ideas that explains a subject or phenomenon",
+      "example": "The lecture introduced a theory of language learning.",
+      "topic": "academic"
+    },
+    {
+      "content": "data",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "数据",
+      "en_definition": "facts or measurements collected for examination",
+      "example": "The team collected data from several schools.",
+      "topic": "academic"
+    },
+    {
+      "content": "variable",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "变量",
+      "en_definition": "a factor that can change in a study or experiment",
+      "example": "Temperature was the only variable changed in the experiment.",
+      "topic": "academic"
+    },
+    {
+      "content": "conclude",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "得出结论",
+      "en_definition": "to decide something after considering the available information",
+      "example": "The researchers concluded that further study was needed.",
+      "topic": "academic"
+    },
+    {
+      "content": "significant",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "adjective",
+      "zh_definition": "重要的；显著的",
+      "en_definition": "important or large enough to be noticed",
+      "example": "The new policy led to a significant reduction in waste.",
+      "topic": "academic"
+    },
+    {
+      "content": "concept",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "概念",
+      "en_definition": "an abstract idea or general understanding of something",
+      "example": "The teacher explained the concept with a simple example.",
+      "topic": "academic"
+    },
+    {
+      "content": "evaluate",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "评估",
+      "en_definition": "to judge the quality or value of something carefully",
+      "example": "We need to evaluate the results before making a decision.",
+      "topic": "academic"
+    },
+    {
+      "content": "factor",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "因素",
+      "en_definition": "one of the things that influences a result",
+      "example": "Cost is an important factor when choosing a course.",
+      "topic": "academic"
+    },
+    {
+      "content": "source",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "来源；出处",
+      "en_definition": "a person or document that provides information",
+      "example": "Check the source before sharing the statistic.",
+      "topic": "academic"
+    },
+    {
+      "content": "interpretation",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "解释；理解",
+      "en_definition": "a particular explanation of the meaning of something",
+      "example": "Her interpretation of the results differs from mine.",
+      "topic": "academic"
+    },
+    {
+      "content": "approach",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "noun",
+      "zh_definition": "方法；途径",
+      "en_definition": "a way of dealing with a task or problem",
+      "example": "The class tried a different approach to solving the puzzle.",
+      "topic": "academic"
+    },
+    {
+      "content": "assume",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "假定；认为",
+      "en_definition": "to accept something as true without proof",
+      "example": "We cannot assume that every student has internet access.",
+      "topic": "academic"
+    },
+    {
+      "content": "compare",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "比较",
+      "en_definition": "to examine similarities and differences between things",
+      "example": "The essay compares two different education systems.",
+      "topic": "academic"
+    },
+    {
+      "content": "contrast",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "对比",
+      "en_definition": "to examine or show differences between things",
+      "example": "The report contrasts urban and rural living costs.",
+      "topic": "academic"
+    },
+    {
+      "content": "derive",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "verb",
+      "zh_definition": "推导出；获得",
+      "en_definition": "to obtain something from a source or develop it from something else",
+      "example": "The formula can be derived from the previous equation.",
+      "topic": "academic"
+    },
+    {
+      "content": "relevant",
+      "type": "word",
+      "phonetic": "",
+      "part_of_speech": "adjective",
+      "zh_definition": "相关的",
+      "en_definition": "closely connected to the subject being considered",
+      "example": "Please include only information relevant to the question.",
+      "topic": "academic"
+    }
+  ],
+  "phrases": [
+    {
+      "content": "follow up on",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrasal verb",
+      "zh_definition": "跟进；对……采取后续行动",
+      "en_definition": "take further action about something",
+      "example": "I’ll follow up on the client’s request tomorrow.",
+      "topic": "work"
+    },
+    {
+      "content": "touch base",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "idiom",
+      "zh_definition": "简短联系或沟通",
+      "en_definition": "make brief contact to exchange information",
+      "example": "Let’s touch base after the meeting.",
+      "topic": "work"
+    },
+    {
+      "content": "meet a deadline",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "赶上截止日期",
+      "en_definition": "finish something by the required time",
+      "example": "The team worked together to meet the deadline.",
+      "topic": "work"
+    },
+    {
+      "content": "hand over",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrasal verb",
+      "zh_definition": "移交（工作或职责）",
+      "en_definition": "transfer responsibility or control to someone else",
+      "example": "Maya will hand over the project before she leaves.",
+      "topic": "work"
+    },
+    {
+      "content": "on the same page",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "idiom",
+      "zh_definition": "意见一致；理解一致",
+      "en_definition": "having the same understanding or agreement",
+      "example": "We reviewed the plan to make sure everyone was on the same page.",
+      "topic": "work"
+    },
+    {
+      "content": "bring up",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrasal verb",
+      "zh_definition": "提出（话题）",
+      "en_definition": "introduce a subject for discussion",
+      "example": "She brought up the budget during the call.",
+      "topic": "work",
+      "remarks": "也可表示抚养孩子。"
+    },
+    {
+      "content": "draw up",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrasal verb",
+      "zh_definition": "起草（文件或计划）",
+      "en_definition": "prepare a formal document or plan",
+      "example": "Our lawyer will draw up the agreement.",
+      "topic": "work"
+    },
+    {
+      "content": "work out the details",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "商定细节",
+      "en_definition": "resolve or arrange the details of a plan",
+      "example": "We can work out the details once the proposal is approved.",
+      "topic": "work"
+    },
+    {
+      "content": "take the lead",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "带头；负责主导",
+      "en_definition": "assume the main responsibility for an activity",
+      "example": "Jordan offered to take the lead on the presentation.",
+      "topic": "work"
+    },
+    {
+      "content": "rule of thumb",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "idiom",
+      "zh_definition": "经验法则",
+      "en_definition": "a practical guideline based on experience rather than exact calculation",
+      "example": "As a rule of thumb, allow an hour for the review.",
+      "topic": "work"
+    },
+    {
+      "content": "read between the lines",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "idiom",
+      "zh_definition": "领会言外之意",
+      "en_definition": "understand a meaning that is implied rather than stated directly",
+      "example": "Reading between the lines, I sensed that she was disappointed.",
+      "topic": "reading"
+    },
+    {
+      "content": "look up",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrasal verb",
+      "zh_definition": "查找（信息）",
+      "en_definition": "search for information in a reference source",
+      "example": "I looked up the unfamiliar word in a dictionary.",
+      "topic": "reading",
+      "remarks": "也可表示抬头看。"
+    },
+    {
+      "content": "skim through",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrasal verb",
+      "zh_definition": "快速浏览",
+      "en_definition": "read something quickly to get its general meaning",
+      "example": "He skimmed through the article before class.",
+      "topic": "reading"
+    },
+    {
+      "content": "make sense of",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "理解；弄懂",
+      "en_definition": "understand something that is difficult or confusing",
+      "example": "The diagram helped me make sense of the instructions.",
+      "topic": "reading"
+    },
+    {
+      "content": "come across",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrasal verb",
+      "zh_definition": "偶然发现或遇到",
+      "en_definition": "find or encounter someone or something by chance",
+      "example": "I came across a fascinating essay in the library.",
+      "topic": "reading",
+      "remarks": "也可表示给人留下某种印象。"
+    },
+    {
+      "content": "in other words",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "换句话说",
+      "en_definition": "used to express the same idea in a different way",
+      "example": "The narrator is unreliable; in other words, we cannot trust every detail.",
+      "topic": "reading"
+    },
+    {
+      "content": "point of view",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "观点；叙述视角",
+      "en_definition": "a perspective from which something is considered or narrated",
+      "example": "The story is told from a child’s point of view.",
+      "topic": "reading"
+    },
+    {
+      "content": "turn the page",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "翻页",
+      "en_definition": "move to the next page of a book or document",
+      "example": "She turned the page and found a map of the island.",
+      "topic": "reading"
+    },
+    {
+      "content": "grasp the main idea",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "理解主旨",
+      "en_definition": "understand the central message of a text",
+      "example": "The headings helped me grasp the main idea quickly.",
+      "topic": "reading"
+    },
+    {
+      "content": "be based on",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "以……为基础；根据",
+      "en_definition": "use something as the foundation or source",
+      "example": "The novel is based on events from the author’s childhood.",
+      "topic": "reading"
+    },
+    {
+      "content": "get the hang of",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "idiom",
+      "zh_definition": "掌握……的窍门",
+      "en_definition": "learn how to do something through practice",
+      "example": "After a few rides, I got the hang of using the gears.",
+      "topic": "daily"
+    },
+    {
+      "content": "run out of",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrasal verb",
+      "zh_definition": "用完；耗尽",
+      "en_definition": "have no more of something left",
+      "example": "We ran out of milk this morning.",
+      "topic": "daily"
+    },
+    {
+      "content": "pick up",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrasal verb",
+      "zh_definition": "接（某人）",
+      "en_definition": "collect someone from a place, usually in a vehicle",
+      "example": "Can you pick me up at the station?",
+      "topic": "daily",
+      "remarks": "也可表示捡起或顺便买。"
+    },
+    {
+      "content": "sleep in",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrasal verb",
+      "zh_definition": "睡懒觉",
+      "en_definition": "sleep later than usual in the morning",
+      "example": "I slept in on Sunday because I had no plans.",
+      "topic": "daily"
+    },
+    {
+      "content": "give someone a hand",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "idiom",
+      "zh_definition": "帮某人一把",
+      "en_definition": "help someone do something",
+      "example": "Could you give me a hand with these boxes?",
+      "topic": "daily"
+    },
+    {
+      "content": "on the way",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "在途中",
+      "en_definition": "travelling toward a place or destination",
+      "example": "Dinner is almost ready, and Sam is on the way home.",
+      "topic": "daily"
+    },
+    {
+      "content": "take a break",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "休息一下",
+      "en_definition": "stop an activity for a short period to rest",
+      "example": "Let’s take a break and get some fresh air.",
+      "topic": "daily"
+    },
+    {
+      "content": "make up one’s mind",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "idiom",
+      "zh_definition": "下定决心；作出决定",
+      "en_definition": "decide after considering the options",
+      "example": "Nina made up her mind to try the cooking class.",
+      "topic": "daily"
+    },
+    {
+      "content": "keep in touch",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "保持联系",
+      "en_definition": "continue communicating with someone",
+      "example": "We still keep in touch despite living in different cities.",
+      "topic": "daily"
+    },
+    {
+      "content": "once in a while",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "偶尔；有时",
+      "en_definition": "occasionally rather than regularly",
+      "example": "Once in a while, we eat breakfast at the café.",
+      "topic": "daily"
+    },
+    {
+      "content": "in terms of",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "就……而言；从……方面来说",
+      "en_definition": "with regard to a particular aspect",
+      "example": "The two methods differ in terms of cost and speed.",
+      "topic": "academic"
+    },
+    {
+      "content": "account for",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrasal verb",
+      "zh_definition": "解释；说明……的原因",
+      "en_definition": "explain the reason for something",
+      "example": "The model does not account for seasonal variation.",
+      "topic": "academic"
+    },
+    {
+      "content": "carry out",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrasal verb",
+      "zh_definition": "实施；开展",
+      "en_definition": "perform or complete a planned task or study",
+      "example": "The researchers carried out a survey of local residents.",
+      "topic": "academic"
+    },
+    {
+      "content": "with respect to",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "关于；就……而言",
+      "en_definition": "concerning a particular subject or aspect",
+      "example": "The groups were similar with respect to age.",
+      "topic": "academic"
+    },
+    {
+      "content": "lead to",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrasal verb",
+      "zh_definition": "导致；引起",
+      "en_definition": "cause something to happen or result in it",
+      "example": "A small error in measurement can lead to a misleading conclusion.",
+      "topic": "academic"
+    },
+    {
+      "content": "draw a conclusion",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "得出结论",
+      "en_definition": "form a judgment based on evidence or reasoning",
+      "example": "It is too early to draw a conclusion from one experiment.",
+      "topic": "academic"
+    },
+    {
+      "content": "take into account",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "考虑到；把……纳入考虑",
+      "en_definition": "consider something when making a decision or assessment",
+      "example": "The analysis takes differences in income into account.",
+      "topic": "academic"
+    },
+    {
+      "content": "in contrast to",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "与……相比；与……形成对照",
+      "en_definition": "used to highlight a difference from something else",
+      "example": "In contrast to the first group, the second group received no training.",
+      "topic": "academic"
+    },
+    {
+      "content": "give rise to",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "引起；造成",
+      "en_definition": "cause something to develop or occur",
+      "example": "The unexpected result gave rise to several new questions.",
+      "topic": "academic"
+    },
+    {
+      "content": "a body of evidence",
+      "type": "phrase",
+      "phonetic": "",
+      "part_of_speech": "phrase",
+      "zh_definition": "大量证据；一系列证据",
+      "en_definition": "a collection of evidence considered together",
+      "example": "A growing body of evidence supports the proposed link.",
+      "topic": "academic"
+    }
+  ]
+}
