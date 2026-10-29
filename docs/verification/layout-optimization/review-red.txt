@@ -5,4 +5,3 @@ PASS 0
 
 FAIL 1
 LC03 review card spacing: java.lang.RuntimeException: java.lang.AssertionError: review card disconnected from controls
-

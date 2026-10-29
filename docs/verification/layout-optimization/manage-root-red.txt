@@ -10,4 +10,3 @@ MANAGE delete target
 MANAGE create target
 FAIL 1
 MANAGE root target: java.lang.RuntimeException: java.lang.AssertionError: global category action used selected parent
-

@@ -5,4 +5,3 @@ PASS 0
 
 FAIL 1
 IMAGE selected controls: java.lang.RuntimeException: java.lang.AssertionError: selected image remove control clipped
-

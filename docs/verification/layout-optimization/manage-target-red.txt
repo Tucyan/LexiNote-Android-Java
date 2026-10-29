@@ -8,4 +8,3 @@ PASS 0
 FAIL 2
 MANAGE delete target: java.lang.RuntimeException: java.lang.AssertionError: long-pressed target was not deleted
 MANAGE create target: java.lang.RuntimeException: java.lang.AssertionError: child used selected notebook instead of long-pressed parent
-

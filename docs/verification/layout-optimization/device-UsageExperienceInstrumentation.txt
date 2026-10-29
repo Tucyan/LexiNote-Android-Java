@@ -11,5 +11,3 @@ UX07 recent deletion/clear refreshes open dialog
 UX08 parent and filtered-empty states differ
 UX09 actual title tap opens full vocabulary
 FAIL 0
-
-

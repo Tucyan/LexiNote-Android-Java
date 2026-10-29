@@ -10,5 +10,3 @@ MANAGE delete target
 MANAGE create target
 MANAGE root target
 FAIL 0
-
-

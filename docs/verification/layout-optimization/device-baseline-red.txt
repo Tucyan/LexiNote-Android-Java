@@ -34,4 +34,3 @@ LC11 latest outside timeline: java.lang.RuntimeException: java.lang.AssertionErr
 LC04 notebook control depth: java.lang.RuntimeException: java.lang.AssertionError: notebook default controls still too deep
 LC05 optional credentials: java.lang.RuntimeException: java.lang.AssertionError: manual key still on default screen
 LC12 readable action colors: java.lang.RuntimeException: java.lang.AssertionError: primary text contrast below4.5
-

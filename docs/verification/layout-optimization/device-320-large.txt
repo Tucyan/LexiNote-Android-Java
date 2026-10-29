@@ -53,5 +53,3 @@ SCOPE selected visible
 IMAGE selected controls
 VISUAL states
 FAIL 0
-
-

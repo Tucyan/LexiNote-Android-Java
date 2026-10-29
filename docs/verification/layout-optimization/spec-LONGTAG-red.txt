@@ -5,4 +5,3 @@ PASS 0
 
 FAIL 1
 LONGTAG filter visible: java.lang.RuntimeException: java.lang.AssertionError: long tag hides filter action
-

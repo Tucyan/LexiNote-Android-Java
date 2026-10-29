@@ -3,4 +3,3 @@ PASS 0
 
 FAIL 1
 LC06 targets: java.lang.RuntimeException: java.lang.AssertionError: query mode target below48dp
-

@@ -7,4 +7,3 @@ batch references, per-notebook displays, filtered selection and annotation prove
 200-row recycled timeline, persistent reading anchor and native Markdown tables
 live SSE preview and validated final action over fake HTTPS
 asynchronous AI naming and manual-title race protection
-

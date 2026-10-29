@@ -342,4 +342,3 @@ public final class LayoutComfortInstrumentation extends Instrumentation {
     }
   }
 }
-

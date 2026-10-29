@@ -5,4 +5,3 @@ PASS 0
 
 FAIL 1
 LC10 header bounds: java.lang.RuntimeException: java.lang.AssertionError: recent action overflows header
-
