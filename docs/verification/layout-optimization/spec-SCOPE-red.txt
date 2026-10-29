@@ -1,0 +1,8 @@
+
+RUN SCOPE selected visible
+
+PASS 0
+
+FAIL 1
+SCOPE selected visible: java.lang.RuntimeException: java.lang.AssertionError: selected scope is outside viewport after render
+

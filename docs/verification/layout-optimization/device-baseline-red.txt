@@ -1,0 +1,37 @@
+
+RUN LC06 targets
+
+RUN LC01 dialog gutter
+
+RUN LC08 markdown scale
+
+RUN LC09 density
+
+RUN LC10 header bounds
+
+RUN LC02 compact context
+
+RUN LC11 latest outside timeline
+
+RUN LC04 notebook control depth
+
+RUN LC05 optional credentials
+
+RUN LC12 readable action colors
+
+RUN LC03 review card spacing
+
+PASS 1
+LC03 review card spacing
+FAIL 10
+LC06 targets: java.lang.RuntimeException: java.lang.AssertionError: query mode target below48dp
+LC01 dialog gutter: java.lang.AssertionError: meaning has no dialog gutter: 0px
+LC08 markdown scale: java.lang.RuntimeException: java.lang.AssertionError: Markdown ignored app font scale
+LC09 density: java.lang.RuntimeException: java.lang.AssertionError: density has no card spacing effect
+LC10 header bounds: java.lang.RuntimeException: java.lang.NullPointerException: Attempt to invoke interface method 'int java.lang.CharSequence.length()' on a null object reference
+LC02 compact context: java.lang.RuntimeException: java.lang.AssertionError: default query card still oversized
+LC11 latest outside timeline: java.lang.RuntimeException: java.lang.AssertionError: latest action still overlays timeline
+LC04 notebook control depth: java.lang.RuntimeException: java.lang.AssertionError: notebook default controls still too deep
+LC05 optional credentials: java.lang.RuntimeException: java.lang.AssertionError: manual key still on default screen
+LC12 readable action colors: java.lang.RuntimeException: java.lang.AssertionError: primary text contrast below4.5
+

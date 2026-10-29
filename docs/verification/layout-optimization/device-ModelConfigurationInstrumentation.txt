@@ -1,0 +1,8 @@
+
+PASS: 5 model configuration groups
+legacy encrypted migration, independent provider credentials, partial-save compatibility and destination guard
+TokenDance default editor and collapsed alternative providers
+offline 34-model picker, password visibility and encrypted pending authorization
+offline PKCE activation and persistent payment polling without real login or payment
+draft discovery/probes, model picker, explicit save, stale cancellation and secret-free recreation state
+

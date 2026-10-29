@@ -1,0 +1,284 @@
+[
+  {
+    "path": "standard/assistant-keyboard.png",
+    "sha256": "321e7bf19b8ac9261ffdbeade662132bd0015f3d532d7e7399974f9a8f3fed4f",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/home-both.png",
+    "sha256": "c2e48e92e753bf76da9fa2f21352e7face76ec5a79fd33396f9190d0c0c44b93",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/home-image.png",
+    "sha256": "fd2c6a255898c3c02b0135ffa69d88b47f8781a850bf1635513363563b5bcad2",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/home-text.png",
+    "sha256": "5450a01cca7fdfac84821631fb6cb438172037145cfda83dcab614e4cfe6731b",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/IMAGE.png",
+    "sha256": "d8d9c146f6f819c512dedf46472cb777a02e74e7eaad543f97e57d6db457af6d",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/LC01.png",
+    "sha256": "e9e1ad23f53484c608e1880257ecf81c0cd5d9ec194ecfe87894837403195c0f",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/LC03.png",
+    "sha256": "3dd6e6ee690cc84f9b340c98ef8d12728079d583f1e61d3008dd3a75a1ad8546",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/LC05.png",
+    "sha256": "5dd5e6b8323fce1518ee0db50b433b3881fd083b8319a9bf0d4e0a6c65898b68",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/LC06.png",
+    "sha256": "9dd466ab89d73ffa2acbf2d6ba1c330dc0371389f8d9827bfe548928af4bb186",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/LC08.png",
+    "sha256": "d53d9814e376716221e170a25c233f3b8eec98820a946b8318c6cd390c81e1d0",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/LC09.png",
+    "sha256": "a1d2b08107e801fb0571f889efe08472b3af89fa1a53fa97e4a412019137f9cf",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/LC10.png",
+    "sha256": "2401d40974f20410e22d0fb207215c5de5f64d976c045b7af54d408fc85e7e40",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/LC11.png",
+    "sha256": "119174d83bb392727d12eac53e066f2b758c124030ecd70982abdb125a862363",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/LC12.png",
+    "sha256": "c004dedf1c25cf30ef52b7c42703e7d899189f017c79ae1004367eea39a1e32f",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/LONGTAG.png",
+    "sha256": "4485533062123e9cc6b6c7d694b7ee209d71bcbc2ac6fe7a7127e8ae51f80eb2",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/notebook-comfortable.png",
+    "sha256": "dd1c8e9f43ca4ec55bee640ebe968005cfa1aecd7816441a0a9049bc44587371",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/notebook-compact.png",
+    "sha256": "be9c5e96cbaa95788caa5e54daaaed60035061440abd4f7b90e10846b2bbc1bc",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/notebook-dark.png",
+    "sha256": "e39f5d105943045173ece409e6820a79aa9707b8a3da0c83d972397f45975316",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/review-answer.png",
+    "sha256": "b23a690b034bd39cd179d6b5f9858335ae5840a2f523afefe62ebf95b452ea8f",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/SCOPE.png",
+    "sha256": "ed7490e8abe9a4ecb434b8ba4a5e71ca7688942491db749db8aac9fed8153d71",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "standard/settings-default.png",
+    "sha256": "da544a40d4a0c812badb9528dd8ab99f54aa71a4b1e92a0141264713af265f49",
+    "width": 1080,
+    "height": 2424
+  },
+  {
+    "path": "narrow-320/assistant-keyboard.png",
+    "sha256": "637953e6786ee414a0f8e19ca8ed19fea839eba2d4f49342e49fe815b4cf381f",
+    "width": 840,
+    "height": 1886
+  },
+  {
+    "path": "narrow-320/home-both.png",
+    "sha256": "43683cf827f6b95f39aaa5fd034dbf57638dc056ad5b261168c67316668f2885",
+    "width": 840,
+    "height": 1886
+  },
+  {
+    "path": "narrow-320/home-image.png",
+    "sha256": "a94d6555c1ab3ed0bf379bd54278a82e2c9c10df36f58fac2bcfb54c8399ff39",
+    "width": 840,
+    "height": 1886
+  },
+  {
+    "path": "narrow-320/home-text.png",
+    "sha256": "f706e2a0f2ef158d9fda383fcdb9fe1a9c7e0c64668776cddb527675801110e0",
+    "width": 840,
+    "height": 1886
+  },
+  {
+    "path": "narrow-320/IMAGE.png",
+    "sha256": "8f16c20ed0a5ac84c8792cba2934923ef7433c7ba980b10bff17a601d4fb542d",
+    "width": 840,
+    "height": 1886
+  },
+  {
+    "path": "narrow-320/LC01.png",
+    "sha256": "28e3f46c38dd982c3b709e784eb6276f0076d6a9eea317ad00e66396f5f0fccb",
+    "width": 840,
+    "height": 1886
+  },
+  {
+    "path": "narrow-320/MODES.png",
+    "sha256": "2acc0d639ce2282c83893f184d0138c1550936b4627ed7913cfb10e1d3c684a0",
+    "width": 840,
+    "height": 1886
+  },
+  {
+    "path": "narrow-320/notebook-comfortable.png",
+    "sha256": "b22d7c17e3b8855dacf0bd068300e6e0dc3b55e08233c86bda827d01801d628f",
+    "width": 840,
+    "height": 1886
+  },
+  {
+    "path": "narrow-320/review-answer.png",
+    "sha256": "b77197450a04e87c09d8a1d0c750a53f8bd06e56941dc15eb7b8e32338710e5a",
+    "width": 840,
+    "height": 1886
+  },
+  {
+    "path": "narrow-320/SCOPE.png",
+    "sha256": "88847b5725be15290335214000ebdd49468346ebc30583324a229c247a9e46a4",
+    "width": 840,
+    "height": 1886
+  },
+  {
+    "path": "narrow-320/settings-default.png",
+    "sha256": "ed179b1d049c4bf3b46b63717024b9168273039db8f19cbd58904bd43e90d754",
+    "width": 840,
+    "height": 1886
+  },
+  {
+    "path": "narrow-360/assistant-keyboard.png",
+    "sha256": "3f2ff483f3b405efe191a2eaa71943b4e2d7d89547275069578019bec923bf75",
+    "width": 945,
+    "height": 2121
+  },
+  {
+    "path": "narrow-360/home-both.png",
+    "sha256": "947574d980a5183fafe806713f1c535eb3e6bcc1cdf2090f9c2a721862ac1299",
+    "width": 945,
+    "height": 2121
+  },
+  {
+    "path": "narrow-360/home-text.png",
+    "sha256": "30f02992e8d0b47ee66405455814cba802f77bab95a635206947de5d1de12237",
+    "width": 945,
+    "height": 2121
+  },
+  {
+    "path": "narrow-360/IMAGE.png",
+    "sha256": "4bb573dcad294523f1ba0cd20b7d99428bc91917e36cf8b9c6e91bbaf4939d37",
+    "width": 945,
+    "height": 2121
+  },
+  {
+    "path": "narrow-360/LC01.png",
+    "sha256": "79973a7abcc268897c25a466863095fb54073885ed2bc5cf716fd84a9700b6ae",
+    "width": 945,
+    "height": 2121
+  },
+  {
+    "path": "narrow-360/MODES.png",
+    "sha256": "30f02992e8d0b47ee66405455814cba802f77bab95a635206947de5d1de12237",
+    "width": 945,
+    "height": 2121
+  },
+  {
+    "path": "system-130/assistant-keyboard.png",
+    "sha256": "aae5204d3eed90e5c75b6e1c45d453a249fd20bf8005b354547668e516e33eb1",
+    "width": 945,
+    "height": 2121
+  },
+  {
+    "path": "system-130/home-both.png",
+    "sha256": "ac8cad10231e74ce747f9388f9432cbb9c53d4fb2b48469a1a5ca2f0f97072ea",
+    "width": 945,
+    "height": 2121
+  },
+  {
+    "path": "system-130/home-text.png",
+    "sha256": "1368274d58d1bde1b7f135f3e399d96bbc53b979cce908b9c6bf40744356dafb",
+    "width": 945,
+    "height": 2121
+  },
+  {
+    "path": "system-130/IMAGE.png",
+    "sha256": "691870cfcc6b3a38caf3c10069b6ab0e5fdb4203c3d8da2cd9209d920f8dda57",
+    "width": 945,
+    "height": 2121
+  },
+  {
+    "path": "system-130/LC01.png",
+    "sha256": "2850fd195a3426184db78eef7a5acc7ea1580b11672465f2cc2507288d1ffba3",
+    "width": 945,
+    "height": 2121
+  },
+  {
+    "path": "system-130/MODES.png",
+    "sha256": "6b07425329e35c0255a1322ee381f9ff0a179f7691754be5696c08a6aa07fe50",
+    "width": 945,
+    "height": 2121
+  },
+  {
+    "path": "system-130/notebook-comfortable.png",
+    "sha256": "92b20854fd16c6c5d696ad9795b350226304ccf69ca5c2283b0a9c49462303de",
+    "width": 945,
+    "height": 2121
+  },
+  {
+    "path": "system-130/review-answer.png",
+    "sha256": "f9e39bc2529e7fa6b989802534bf2facf151d5d79042e8735ef8281b630d5819",
+    "width": 945,
+    "height": 2121
+  },
+  {
+    "path": "system-130/settings-default.png",
+    "sha256": "5ddf8f91c89c48f089a4edbf0990b750a10efd3189b83640fca2ee7f01e42504",
+    "width": 945,
+    "height": 2121
+  }
+]

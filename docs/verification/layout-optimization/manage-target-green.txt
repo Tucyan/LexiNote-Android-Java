@@ -1,0 +1,14 @@
+
+RUN MANAGE delete target
+
+RUN MANAGE create target
+
+RUN MANAGE root target
+
+PASS 3
+MANAGE delete target
+MANAGE create target
+MANAGE root target
+FAIL 0
+
+

@@ -16,11 +16,17 @@ import java.util.List;
 final class MarkdownView extends LinearLayout {
   private final int foreground;
   private final int border;
+  private final float appScale;
 
   MarkdownView(Context context, int foreground, int border) {
+    this(context, foreground, border, 1f);
+  }
+
+  MarkdownView(Context context, int foreground, int border, float appScale) {
     super(context);
     this.foreground = foreground;
     this.border = border;
+    this.appScale = appScale;
     setOrientation(VERTICAL);
   }
 
@@ -57,6 +63,8 @@ final class MarkdownView extends LinearLayout {
   private void addText(String markdown, boolean horizontal) {
     TextView text = new TextView(getContext());
     MarkdownText.apply(text, markdown);
+    text.setTextSize(14 * appScale);
+    text.setLineSpacing(0, 1.15f);
     text.setTextColor(foreground);
     text.setPadding(dp(8), dp(6), dp(8), dp(6));
     if (horizontal) {
@@ -89,6 +97,8 @@ final class MarkdownView extends LinearLayout {
       for (String value : rows.get(r)) {
         TextView cell = new TextView(getContext());
         MarkdownText.apply(cell, value);
+        cell.setTextSize(14 * appScale);
+        cell.setLineSpacing(0, 1.15f);
         cell.setTextColor(foreground);
         cell.setTextIsSelectable(true);
         cell.setGravity(Gravity.CENTER_VERTICAL);

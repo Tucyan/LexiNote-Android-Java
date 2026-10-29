@@ -1,0 +1,22 @@
+{
+  "unit_tests": 135,
+  "unit_failures": 0,
+  "unit_errors": 0,
+  "layout_conditions": {
+    "device-411.txt": 17,
+    "device-320-large.txt": 17,
+    "device-360-large.txt": 17,
+    "device-360-system130.txt": 17
+  },
+  "business": {
+    "SmokeInstrumentation": 10,
+    "FeatureInstrumentation": 7,
+    "ModelConfigurationInstrumentation": 5,
+    "UsageExperienceInstrumentation": 10
+  },
+  "management": 3,
+  "final_layout_pngs": 47,
+  "lint_errors": 0,
+  "lint_warnings": 13,
+  "restored_byte_equal": true
+}

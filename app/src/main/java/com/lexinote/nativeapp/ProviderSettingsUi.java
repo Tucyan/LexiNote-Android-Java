@@ -15,6 +15,7 @@ final class ProviderSettingsUi {
   final MainActivity a;
   ProviderDraft draft;
   boolean expanded;
+  boolean diagnosticsExpanded;
   boolean keyVisible;
   String status = "";
   JSONArray catalog = new JSONArray();
@@ -42,13 +43,16 @@ final class ProviderSettingsUi {
         : "登录并确认授权后自动连接，无需复制 API Key。用量从你的词元跳动账户扣除。", 13, false));
     summary.addView(a.primaryButton(connected ? "重新授权" : "连接 TokenDance", v -> openTokenDance("authorize")));
     LinearLayout accountRow = a.row();
-    accountRow.addView(a.outlineButton("账户与密钥", v -> openTokenDance("account")), new LinearLayout.LayoutParams(0,a.dp(44),1));
-    accountRow.addView(a.outlineButton("充值", v -> openTokenDance("recharge")), new LinearLayout.LayoutParams(0,a.dp(44),1));
+    LinearLayout.LayoutParams accountLp = new LinearLayout.LayoutParams(0, a.dp(48), 1);
+    accountLp.rightMargin = a.dp(8);
+    accountRow.addView(a.outlineButton("账户与密钥", v -> openTokenDance("account")), accountLp);
+    accountRow.addView(a.outlineButton("更多服务", v -> new AlertDialog.Builder(a)
+        .setTitle("TokenDance 更多服务")
+        .setItems(new String[] {"充值", "调用记录", "使用帮助"}, (dialog, which) -> {
+          String[] modes = {"recharge", "usage", "help"};
+          openTokenDance(modes[which]);
+        }).show()), new LinearLayout.LayoutParams(0, a.dp(48), 1));
     summary.addView(accountRow);
-    LinearLayout helpRow = a.row();
-    helpRow.addView(a.button("调用记录", v -> openTokenDance("usage")), new LinearLayout.LayoutParams(0,a.dp(40),1));
-    helpRow.addView(a.button("使用帮助", v -> openTokenDance("help")), new LinearLayout.LayoutParams(0,a.dp(40),1));
-    summary.addView(helpRow);
     summary.addView(a.text("当前服务：" + saved.optString("name") + " · " + saved.optString("model_id"), 12, false));
     boolean fixed = tokenDance || TokenDanceCatalog.isGateway(config.optString("base_url"));
     if (fixed && (catalog.length() == 0 || !sameDestination(config,catalogDestination))) {
@@ -58,7 +62,7 @@ final class ProviderSettingsUi {
       expanded = !expanded;
       a.render();
     });
-    LinearLayout.LayoutParams toggleLayout = new LinearLayout.LayoutParams(-1, a.dp(44));
+    LinearLayout.LayoutParams toggleLayout = new LinearLayout.LayoutParams(-1, a.dp(48));
     toggleLayout.bottomMargin = a.dp(14);
     a.body.addView(toggle, toggleLayout);
     if (!expanded && !tokenDance) return;
@@ -75,7 +79,7 @@ final class ProviderSettingsUi {
         String id = profile.optString("id");
         Button chip = a.chip(profile.optString("name"), id.equals(saved.optString("id")), v -> selectProvider(id));
         chip.setSingleLine(false);
-        LinearLayout.LayoutParams chipLayout = new LinearLayout.LayoutParams(0, a.dp(44), 1);
+        LinearLayout.LayoutParams chipLayout = new LinearLayout.LayoutParams(0, a.dp(48), 1);
         chipLayout.rightMargin = a.dp(6);
         row.addView(chip, chipLayout);
       }
@@ -100,34 +104,44 @@ final class ProviderSettingsUi {
     visionNotice.setPadding(a.dp(8), a.dp(8), a.dp(8), a.dp(8));
     visionNotice.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 8, 0));
     panel.addView(visionNotice);
-    panel.addView(a.gap(12));
-    panel.addView(a.text("API Key（安全加密存储）", 12, true));
-    EditText key = a.input("留空保留当前供应商密钥", draft.enteredKey(), false);
-    key.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-    key.setTransformationMethod(keyVisible ? null : PasswordTransformationMethod.getInstance());
-    key.setSaveEnabled(false);
-    key.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
-    watch(key, value -> { draft.setKey(value); edited(); });
-    LinearLayout keyRow = a.row();
-    keyRow.addView(key, new LinearLayout.LayoutParams(0,a.dp(44),1));
-    Button reveal = a.outlineButton(keyVisible ? "隐藏" : "显示", v -> {
-      keyVisible = !keyVisible;
+    if (tokenDance) {
+      panel.addView(a.gap(a.space(12, 8)));
+      panel.addView(a.primaryButton("保存服务配置", v -> save()));
+      panel.addView(a.outlineButton(diagnosticsExpanded ? "收起手动密钥与连接诊断" : "手动密钥与连接诊断", v -> {
+        diagnosticsExpanded = !diagnosticsExpanded;
+        a.render();
+      }));
+    }
+    if (!tokenDance || diagnosticsExpanded) {
+      panel.addView(a.gap(12));
+      panel.addView(a.text("API Key（安全加密存储）", 12, true));
+      EditText key = a.input("留空保留当前供应商密钥", draft.enteredKey(), false);
+      key.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
       key.setTransformationMethod(keyVisible ? null : PasswordTransformationMethod.getInstance());
-      key.setSelection(key.getText().length());
-      ((Button)v).setText(keyVisible ? "隐藏" : "显示");
-    });
-    keyRow.addView(reveal,new LinearLayout.LayoutParams(a.dp(64),a.dp(44)));
-    panel.addView(keyRow);
-    panel.addView(a.gap(8));
-    LinearLayout actions = a.row();
-    LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, a.dp(44), 1);
-    left.rightMargin = a.dp(8);
-    actions.addView(a.primaryButton("保存服务配置", v -> save()), left);
-    actions.addView(a.outlineButton("文本连接测试", v -> run("text")), new LinearLayout.LayoutParams(0, a.dp(44), 1));
-    panel.addView(actions);
-    panel.addView(a.gap(8));
-    panel.addView(a.outlineButton("图片识别测试", v -> run("vision")));
-    panel.addView(a.text("测试使用当前填写的密钥、地址和模型，发送少量请求，可能产生费用；图片测试使用内置色块图。", 12, false));
+      key.setSaveEnabled(false);
+      key.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
+      watch(key, value -> { draft.setKey(value); edited(); });
+      LinearLayout keyRow = a.row();
+      keyRow.addView(key, new LinearLayout.LayoutParams(0,a.dp(48),1));
+      Button reveal = a.outlineButton(keyVisible ? "隐藏" : "显示", v -> {
+        keyVisible = !keyVisible;
+        key.setTransformationMethod(keyVisible ? null : PasswordTransformationMethod.getInstance());
+        key.setSelection(key.getText().length());
+        ((Button)v).setText(keyVisible ? "隐藏" : "显示");
+      });
+      keyRow.addView(reveal,new LinearLayout.LayoutParams(a.dp(64),a.dp(48)));
+      panel.addView(keyRow);
+      panel.addView(a.gap(8));
+      LinearLayout actions = a.row();
+      LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, a.dp(48), 1);
+      left.rightMargin = a.dp(8);
+      if (!tokenDance) actions.addView(a.primaryButton("保存服务配置", v -> save()), left);
+      actions.addView(a.outlineButton("文本连接测试", v -> run("text")), new LinearLayout.LayoutParams(0, a.dp(48), 1));
+      panel.addView(actions);
+      panel.addView(a.gap(8));
+      panel.addView(a.outlineButton("图片识别测试", v -> run("vision")));
+      panel.addView(a.text("测试使用当前填写的密钥、地址和模型，发送少量请求，可能产生费用；图片测试使用内置色块图。", 12, false));
+    }
     if (active != null) panel.addView(a.outlineButton("取消配置请求", v -> {
       cancel(); status = "请求已取消"; a.render();
     }));
@@ -143,7 +157,7 @@ final class ProviderSettingsUi {
       if (!effort.equals("off") && known != null && !contains(known, effort)) continue;
       effortRow.addView(a.chip(names[i], effort.equals(config.optString("reasoning_effort", "off")), v -> {
         draft.set("reasoning_effort", effort); edited(); a.render();
-      }), new LinearLayout.LayoutParams(0, a.dp(40), 1));
+      }), new LinearLayout.LayoutParams(0, a.dp(48), 1));
     }
     panel.addView(effortRow);
     panel.addView(a.text("按供应商保存，开启可能增加耗时和用量；实际支持的档位由模型决定。", 12, false));
@@ -429,7 +443,18 @@ final class ProviderSettingsUi {
                         ? (model.optBoolean("supports_vision") ? " · 图文" : " · 文本")
                         : " · 能力未知"));
           }
-          list.setAdapter(new ArrayAdapter<>(a, android.R.layout.simple_list_item_1, labels));
+          list.setAdapter(new ArrayAdapter<String>(a, android.R.layout.simple_list_item_1, labels) {
+            @Override public View getView(int position, View convertView, android.view.ViewGroup parent) {
+              TextView item = convertView instanceof TextView ? (TextView) convertView : new TextView(a);
+              item.setText(getItem(position));
+              item.setTextColor(a.foreground);
+              item.setTextSize(14 * a.scale);
+              item.setPadding(a.dp(16), a.dp(16), a.dp(16), a.dp(16));
+              item.setMinHeight(a.dp(64));
+              item.setGravity(Gravity.CENTER_VERTICAL);
+              return item;
+            }
+          });
         };
     filter.accept("");
     watch(search, filter);
@@ -495,12 +520,14 @@ final class ProviderSettingsUi {
 
   void saveState(android.os.Bundle state) {
     state.putBoolean("provider_editor_expanded", expanded);
+    state.putBoolean("provider_diagnostics_expanded", diagnosticsExpanded);
     if (draft != null) state.putString("provider_editor_draft", draft.config().toString());
   }
 
   void restoreState(android.os.Bundle state) {
     if (state == null) return;
     expanded = state.getBoolean("provider_editor_expanded", false);
+    diagnosticsExpanded = state.getBoolean("provider_diagnostics_expanded", false);
     String raw = state.getString("provider_editor_draft");
     if (raw == null) return;
     try {

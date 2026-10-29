@@ -1,0 +1,8 @@
+
+RUN STATE context disclosure
+
+PASS 0
+
+FAIL 1
+STATE context disclosure: java.lang.RuntimeException: java.lang.AssertionError: collapsed context state was not saved
+

@@ -65,7 +65,7 @@ final class ReviewUi {
       metrics.setBackground(metricsBg);
       addMetric(metrics, currentPool.size(), "当前范围生词", a.foreground);
       addMetricDivider(metrics);
-      addMetric(metrics, mastered, "已熟练掌握", android.graphics.Color.parseColor("#10B981"));
+      addMetric(metrics, mastered, "已熟练掌握", LayoutStyle.textAccent(android.graphics.Color.parseColor("#10B981"), a.inputBg));
       addMetricDivider(metrics);
       addMetric(metrics, due, "待复习强化", a.accent);
       stats.addView(metrics);
@@ -93,7 +93,7 @@ final class ReviewUi {
                 a.page = 0;
                 a.render();
               });
-      LinearLayout.LayoutParams collectLp = new LinearLayout.LayoutParams(a.dp(240), a.dp(44));
+      LinearLayout.LayoutParams collectLp = new LinearLayout.LayoutParams(a.dp(240), a.dp(48));
       collectLp.gravity = android.view.Gravity.CENTER_HORIZONTAL;
       collectLp.topMargin = a.dp(14);
       empty.addView(collect, collectLp);
@@ -135,9 +135,21 @@ final class ReviewUi {
                   a.render();
                 }));
       HorizontalScrollView scopeScroll = new HorizontalScrollView(a);
-      scopeScroll.setHorizontalScrollBarEnabled(false);
+      scopeScroll.setHorizontalScrollBarEnabled(true);
+      scopeScroll.setScrollbarFadingEnabled(false);
+      scopeScroll.setContentDescription("左右滑动选择复习范围");
       scopeScroll.addView(scopes);
       options.addView(scopeScroll);
+      scopeScroll.post(() -> {
+        for (int i=0;i<scopes.getChildCount();i++) {
+          View pill=scopes.getChildAt(i);
+          if (Boolean.TRUE.equals(pill.getTag())) {
+            scopeScroll.scrollTo(Math.max(0,pill.getRight()-scopeScroll.getWidth()+a.dp(8)),0);
+            break;
+          }
+        }
+      });
+      options.addView(a.text("左右滑动选择笔记范围", 11, false));
       TextView modeTitle = a.text("2. 复习模式", 14, true);
       LinearLayout.LayoutParams modeTitleLp = new LinearLayout.LayoutParams(-1, -2);
       modeTitleLp.topMargin = a.dp(12);
@@ -177,11 +189,11 @@ final class ReviewUi {
       sizeTitleLp.topMargin = a.dp(14);
       options.addView(sizeTitle, sizeTitleLp);
       LinearLayout sizes = a.row();
-      LinearLayout.LayoutParams sizesLp = new LinearLayout.LayoutParams(-1, a.dp(40));
+      LinearLayout.LayoutParams sizesLp = new LinearLayout.LayoutParams(-1, a.dp(48));
       sizesLp.topMargin = a.dp(8);
       options.addView(sizes, sizesLp);
       for (int size : new int[] {10, 20, 50})
-        sizes.addView(batchSizeButton(size), new LinearLayout.LayoutParams(0, a.dp(40), 1));
+        sizes.addView(batchSizeButton(size), new LinearLayout.LayoutParams(0, a.dp(48), 1));
       Button start =
           a.primaryButton(
               "开启本组复习",
@@ -232,7 +244,12 @@ final class ReviewUi {
       return;
     }
     LinearLayout card = a.card(null);
-    card.setMinimumHeight(a.dp(360));
+    card.setMinimumHeight(a.dp(260));
+    LinearLayout.LayoutParams cardLp = (LinearLayout.LayoutParams)card.getLayoutParams();
+    cardLp.height = -2;
+    cardLp.weight = 1;
+    card.setLayoutParams(cardLp);
+    card.setGravity(android.view.Gravity.CENTER_VERTICAL);
     int total = progressState.total;
     card.addView(a.text("已完成 " + completed + "/" + total + " 张", 13, false));
     card.addView(a.text("剩余 " + queue.size() + " · 跳过 " + progressState.skipped, 12, false));
@@ -240,6 +257,7 @@ final class ReviewUi {
     progress.setMax(Math.max(1, total));
     progress.setProgress(completed + progressState.skipped);
     card.addView(progress, new LinearLayout.LayoutParams(-1, a.dp(5)));
+    card.addView(a.gap(a.space(16, 10)));
     JSONArray meanings = word.optJSONArray("meanings");
     JSONObject meaning =
         meanings == null || meanings.length() == 0 ? null : meanings.optJSONObject(0);
@@ -297,7 +315,7 @@ final class ReviewUi {
                   revealed = false;
                   a.persist();
                   a.render();
-                }));
+                }), new LinearLayout.LayoutParams(0, -2, 1));
       row.setOrientation(LinearLayout.HORIZONTAL);
     }
   }
@@ -319,11 +337,12 @@ final class ReviewUi {
   Button scopePill(String label, boolean selected, Runnable action) {
     Button button = a.button(label, v -> action.run());
     button.setTextSize(12.5f * a.scale);
+    button.setTag(selected);
     button.setTextColor(selected ? android.graphics.Color.WHITE : a.foreground);
     button.setPadding(a.dp(14), 0, a.dp(14), 0);
     button.setBackground(
-        a.shape(selected ? a.accent : a.inputBg, 24, selected ? a.accent : a.border));
-    button.setLayoutParams(new LinearLayout.LayoutParams(-2, a.dp(40)));
+        a.shape(selected ? a.accentFill : a.inputBg, 24, selected ? a.accentFill : a.border));
+    button.setLayoutParams(new LinearLayout.LayoutParams(-2, a.dp(48)));
     return button;
   }
 
