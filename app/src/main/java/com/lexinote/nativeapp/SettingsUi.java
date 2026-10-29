@@ -28,7 +28,7 @@ final class SettingsUi {
               tnames[i],
               theme.equals(id),
               v -> a.change(() -> Library.put(a.library.settings(), "theme_mode", id))),
-          new LinearLayout.LayoutParams(0, a.dp(48), 1));
+          new LinearLayout.LayoutParams(0, a.dp(40), 1));
     }
     LinearLayout.LayoutParams themeRowLp = new LinearLayout.LayoutParams(-1, -2);
     themeRowLp.topMargin = a.dp(6);
@@ -38,28 +38,22 @@ final class SettingsUi {
     appearance.addView(a.text("强调色", 13, true));
     String[] accents = {"#10B981", "#2563EB", "#6366F1", "#F59E0B", "#E11D48", "#8B5CF6"};
     String chosen = prefs.optString("accent_color", accents[0]);
-    // Two rows keep all color choices reachable even at narrow viewport widths.
-    LinearLayout colors = a.column();
-    for (int i = 0; i < accents.length; i += 3) {
-      LinearLayout colorRow = a.row();
-      for (int j = i; j < Math.min(i + 3, accents.length); j++) {
-        String color = accents[j];
-        android.widget.FrameLayout target = new android.widget.FrameLayout(a);
-        target.setContentDescription("强调色 " + color + (chosen.equalsIgnoreCase(color) ? "，已选择" : ""));
-        target.setOnClickListener(v -> a.change(() -> Library.put(a.library.settings(), "accent_color", color)));
-        TextView dot = a.text(chosen.equalsIgnoreCase(color) ? "✓" : "", 15, true);
-        dot.setGravity(android.view.Gravity.CENTER);
-        dot.setTextColor(LayoutStyle.onColor(android.graphics.Color.parseColor(color)));
-        android.graphics.drawable.GradientDrawable swatch = new android.graphics.drawable.GradientDrawable();
-        swatch.setShape(android.graphics.drawable.GradientDrawable.OVAL);
-        swatch.setColor(android.graphics.Color.parseColor(color));
-        if (chosen.equalsIgnoreCase(color)) swatch.setStroke(a.dp(2), android.graphics.Color.WHITE);
-        dot.setBackground(swatch);
-        android.widget.FrameLayout.LayoutParams dotLp = new android.widget.FrameLayout.LayoutParams(a.dp(36), a.dp(36), android.view.Gravity.CENTER);
-        target.addView(dot, dotLp);
-        colorRow.addView(target, new LinearLayout.LayoutParams(a.dp(48), a.dp(48)));
-      }
-      colors.addView(colorRow);
+    LinearLayout colors = a.row();
+    for (String color : accents) {
+      TextView dot = a.text(chosen.equalsIgnoreCase(color) ? "✓" : "", 15, true);
+      dot.setGravity(android.view.Gravity.CENTER);
+      dot.setTextColor(android.graphics.Color.WHITE);
+      android.graphics.drawable.GradientDrawable swatch =
+          new android.graphics.drawable.GradientDrawable();
+      swatch.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+      swatch.setColor(android.graphics.Color.parseColor(color));
+      if (chosen.equalsIgnoreCase(color)) swatch.setStroke(a.dp(2), android.graphics.Color.WHITE);
+      dot.setBackground(swatch);
+      dot.setOnClickListener(
+          v -> a.change(() -> Library.put(a.library.settings(), "accent_color", color)));
+      LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(a.dp(36), a.dp(36));
+      dotLp.rightMargin = a.dp(10);
+      colors.addView(dot, dotLp);
     }
     LinearLayout.LayoutParams colorsLp = new LinearLayout.LayoutParams(-1, -2);
     colorsLp.topMargin = a.dp(8);
@@ -77,7 +71,7 @@ final class SettingsUi {
               fnames[i],
               font.equals(id),
               v -> a.change(() -> Library.put(a.library.settings(), "font_size", id))),
-          new LinearLayout.LayoutParams(0, a.dp(48), 1));
+          new LinearLayout.LayoutParams(0, a.dp(40), 1));
     }
     LinearLayout.LayoutParams fontsLp = new LinearLayout.LayoutParams(-1, -2);
     fontsLp.topMargin = a.dp(6);
@@ -93,12 +87,11 @@ final class SettingsUi {
               d.equals("comfortable") ? "舒适" : "紧凑",
               density.equals(d),
               v -> a.change(() -> Library.put(a.library.settings(), "density", d))),
-          new LinearLayout.LayoutParams(0, a.dp(48), 1));
+          new LinearLayout.LayoutParams(0, a.dp(40), 1));
     LinearLayout.LayoutParams densitiesLp = new LinearLayout.LayoutParams(-1, -2);
     densitiesLp.topMargin = a.dp(6);
     densities.setLayoutParams(densitiesLp);
     appearance.addView(densities);
-    appearance.addView(a.text("舒适：卡片和内容间距更宽；紧凑：减少留白，触控区域保持不变。", 12, false));
     LinearLayout notebook = a.card("查询偏好");
     Switch auto = new Switch(a);
     auto.setText("查询结果自动记录到默认笔记");

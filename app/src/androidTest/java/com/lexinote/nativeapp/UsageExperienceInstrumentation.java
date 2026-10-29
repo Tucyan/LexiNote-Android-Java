@@ -185,7 +185,6 @@ public final class UsageExperienceInstrumentation extends Instrumentation {
     main(() -> {
       a.page = 2; a.render();
       edit(a.root, "搜索词汇、含义或例句…").setText("meeting");
-      button(a.root, "筛选").performClick();
       button(a.root, "短语").performClick();
       check(edit(a.root, "搜索词汇、含义或例句…").getText().toString().equals("meeting"), "draft lost");
       check(a.notebooks.filter.equals("meeting"), "filter state lost");

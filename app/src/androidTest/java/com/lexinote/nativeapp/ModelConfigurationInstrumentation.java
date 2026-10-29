@@ -106,7 +106,7 @@ public final class ModelConfigurationInstrumentation extends Instrumentation {
 
   void tokenDanceOfflinePickerAndEncryptedPending() throws Exception {
     a.secure.selectProvider("tokendance");
-    ProviderSettingsUi ui=a.settingsUi.models; ui.clearDraft(); ui.expanded=false; ui.diagnosticsExpanded=true;
+    ProviderSettingsUi ui=a.settingsUi.models; ui.clearDraft(); ui.expanded=false;
     a.page=4; a.screen="tabs"; a.render();
     check(ui.catalog.length()==34,"Built-in model catalog missing");
     button(a.root,"deepseek-v4.1-flash").performClick();
@@ -207,15 +207,11 @@ public final class ModelConfigurationInstrumentation extends Instrumentation {
     a.secure.saveProvider(ProviderProfiles.preset("tokendance"), "");
     ui.clearDraft();
     ui.expanded = false;
-    ui.diagnosticsExpanded = false;
     a.page = 4;
     a.screen = "tabs";
     a.render();
     check(button(a.root, "deepseek-v4.1-flash") != null, "TokenDance model controls are hidden by default");
-    check(edit(a.root, "留空保留当前供应商密钥") == null, "TokenDance manual key must be collapsed by default");
-    button(a.root, "手动密钥与连接诊断").performClick();
-    check(edit(a.root, "留空保留当前供应商密钥") != null, "TokenDance manual key cannot be opened");
-    button(a.root, "收起手动密钥与连接诊断").performClick();
+    check(edit(a.root, "留空保留当前供应商密钥") != null, "TokenDance key control is hidden by default");
     check(button(a.root, "DeepSeek (Flash 多模态)") == null, "Alternative providers are visible by default");
     check(edit(a.root, "Base URL") == null, "Manual settings are visible by default");
     button(a.root, "高级设置 · 模型与手动配置").performClick();

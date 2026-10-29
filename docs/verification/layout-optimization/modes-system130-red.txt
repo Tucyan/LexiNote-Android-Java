@@ -1,7 +1,0 @@
-
-RUN MODES label bounds
-
-PASS 0
-
-FAIL 1
-MODES label bounds: java.lang.RuntimeException: java.lang.AssertionError: mode text clipped: 文本查询

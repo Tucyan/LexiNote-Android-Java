@@ -7,6 +7,7 @@ import android.view.ViewGroup;
 import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
@@ -40,7 +41,7 @@ final class AssistantUi {
     adapter = new Adapter();
     list.setAdapter(adapter);
     latest = a.button("回到最新消息", v -> scrollToLatest());
-    latest.setVisibility(View.INVISIBLE);
+    latest.setVisibility(View.GONE);
     list.setOnScrollListener(
         new android.widget.AbsListView.OnScrollListener() {
           @Override
@@ -49,7 +50,7 @@ final class AssistantUi {
           @Override
           public void onScroll(android.widget.AbsListView view, int first, int visible, int total) {
             if (total == 0) return;
-            latest.setVisibility(isAtBottom() ? View.INVISIBLE : View.VISIBLE);
+            latest.setVisibility(isAtBottom() ? View.GONE : View.VISIBLE);
           }
         });
   }
@@ -59,7 +60,13 @@ final class AssistantUi {
     int index = a.root.indexOfChild(a.scroll);
     if (index < 0) index = Math.max(0, a.root.getChildCount() - 1);
     a.scroll.setVisibility(View.GONE);
-    a.root.addView(ui.list, index, new LinearLayout.LayoutParams(-1, 0, 1));
+    FrameLayout timeline = new FrameLayout(a);
+    timeline.addView(ui.list, new FrameLayout.LayoutParams(-1, -1));
+    FrameLayout.LayoutParams latestLp =
+        new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.RIGHT);
+    latestLp.setMargins(0, 0, a.dp(16), a.dp(12));
+    timeline.addView(ui.latest, latestLp);
+    a.root.addView(timeline, index, new LinearLayout.LayoutParams(-1, 0, 1));
     ui.composer();
     ui.list.post(ui::restoreAnchor);
     return ui;
@@ -126,7 +133,7 @@ final class AssistantUi {
 
   private void scrollToLatest() {
     if (list.getCount() > 0) list.setSelection(list.getCount() - 1);
-    latest.setVisibility(View.INVISIBLE);
+    latest.setVisibility(View.GONE);
   }
 
   private View makeHeader() {
@@ -180,16 +187,6 @@ final class AssistantUi {
     LinearLayout footer = a.fixedFooter();
     footer.setBackground(a.shape(a.card, 0, a.border));
     LinearLayout column = a.column();
-    // Reserve the action row even while hidden so visibility never resizes the timeline
-    // and changes the reader's scroll position.
-    LinearLayout latestRow = a.row();
-    latestRow.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
-    latest.setTextColor(android.graphics.Color.WHITE);
-    latest.setBackground(a.shape(a.accentFill, 10, 0));
-    latest.setMinHeight(a.dp(48));
-    latest.setMinimumHeight(a.dp(48));
-    latestRow.addView(latest, new LinearLayout.LayoutParams(-2, a.dp(48)));
-    column.addView(latestRow, new LinearLayout.LayoutParams(-1, a.dp(48)));
     if (a.session != null && a.session.has("last_error")) {
       TextView error = a.text("上次请求失败：" + a.session.optString("last_error"), 12, false);
       error.setTextColor(a.muted);
@@ -198,15 +195,13 @@ final class AssistantUi {
     }
     LinearLayout row = a.row();
     composer = a.input("继续提问…", q.follow, true);
-    composer.setMinLines(1);
     composer.setMinHeight(a.dp(48));
-    composer.setMaxHeight(a.dp(120));
     composer.setOnLongClickListener(
         v -> {
           a.chooseImage();
           return true;
         });
-    row.addView(composer, new LinearLayout.LayoutParams(0, -2, 1));
+    row.addView(composer, new LinearLayout.LayoutParams(0, a.dp(48), 1));
     Button send =
         a.button(
             a.active != null ? "取消" : "发送",
@@ -226,10 +221,6 @@ final class AssistantUi {
               q.send(text);
               a.render();
             });
-    send.setMinHeight(a.dp(48));
-    send.setMinimumHeight(a.dp(48));
-    send.setMinWidth(a.dp(48));
-    send.setMinimumWidth(a.dp(48));
     row.addView(send);
     column.addView(row);
     q.track(composer, value -> q.follow = value);
@@ -276,8 +267,8 @@ final class AssistantUi {
       String content = message == null ? partial : message.optString("content");
       LinearLayout bubble = a.column();
       bubble.setPadding(a.dp(13), a.dp(11), a.dp(13), a.dp(11));
-      bubble.setBackground(a.shape(mine ? a.accentFill : a.inputBg, 15, mine ? 0 : a.border));
-      MarkdownView body = new MarkdownView(a, mine ? -1 : a.foreground, a.border, a.scale);
+      bubble.setBackground(a.shape(mine ? a.accent : a.inputBg, 15, mine ? 0 : a.border));
+      MarkdownView body = new MarkdownView(a, mine ? -1 : a.foreground, a.border);
       body.setMarkdown(content);
       bubble.addView(body);
       if (message != null) suggestions(bubble, message);

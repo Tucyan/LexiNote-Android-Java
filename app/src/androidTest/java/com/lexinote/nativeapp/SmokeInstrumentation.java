@@ -42,7 +42,7 @@ public final class SmokeInstrumentation extends Instrumentation {
       main(this::testNavigation);
       record("five native tabs");
       testQueryLayoutContract();
-      record("52dp header, 62dp icon tabs and equal-height 272dp query modes");
+      record("52dp header, 62dp icon tabs and equal-height 312dp query modes");
       main(this::testOfflineQueryAndSharedNotebooks);
       record("offline query, shared vocabulary references, result navigation");
       main(this::testConfirmationAndSessionImageIsolation);
@@ -120,7 +120,6 @@ public final class SmokeInstrumentation extends Instrumentation {
             activity.screen = "tabs";
             activity.page = 0;
             activity.query.homeMode = mode;
-            activity.query.contextExpanded=false;activity.query.context="";
             activity.render();
           });
       main(
@@ -128,8 +127,8 @@ public final class SmokeInstrumentation extends Instrumentation {
             View queryCard = activity.root.findViewWithTag("query-input-card");
             check(queryCard != null, "Query mode has no shared input card");
             check(
-                Math.abs(queryCard.getHeight() - activity.dp(LayoutStyle.HOME_BASE)) <= 1,
-                "Query modes do not preserve compact height");
+                Math.abs(queryCard.getHeight() - activity.dp(312)) <= 1,
+                "Query modes do not preserve 312dp height");
             check(
                 activity.nav.getHeight() == activity.dp(62),
                 "Bottom tab height diverged from reference");

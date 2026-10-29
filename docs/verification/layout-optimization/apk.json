@@ -1,9 +1,0 @@
-{
-  "path": "LexiNote-native-layout-20261029.apk",
-  "build_path": "app/build/outputs/apk/debug/app-debug.apk",
-  "bytes": 1470386,
-  "sha256": "f7ca894337013d89234c719c88c5685e3fa366981454cd3da402630990410664",
-  "signature": "Android debug key",
-  "minimum_android": "8.0 / API26",
-  "verified_device_api": 37
-}

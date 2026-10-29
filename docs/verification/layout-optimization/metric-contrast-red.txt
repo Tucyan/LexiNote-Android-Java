@@ -1,7 +1,0 @@
-
-RUN LC12 readable action colors
-
-PASS 0
-
-FAIL 1
-LC12 readable action colors: java.lang.RuntimeException: java.lang.AssertionError: mastery metric text contrast below4.5

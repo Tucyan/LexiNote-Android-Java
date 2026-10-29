@@ -20,7 +20,6 @@ final class QueryUi {
   String startDate = "", endDate = "", dateField = "created_at";
   int savedLimit = 10;
   boolean showDateFields = false;
-  boolean contextExpanded;
   int stage = 0;
   JSONObject guessReply;
   AssistantUi assistantView;
@@ -49,111 +48,152 @@ final class QueryUi {
     LinearLayout queryCard = a.card(null);
     queryCard.setTag("query-input-card");
     queryCard.setPadding(a.dp(12), a.dp(12), a.dp(12), a.dp(12));
-    int height = LayoutStyle.HOME_BASE + (homeMode.equals("text") && contextExpanded ? 144 : 0);
-    LinearLayout.LayoutParams queryLp = new LinearLayout.LayoutParams(-1, a.dp(height));
-    queryLp.bottomMargin = a.dp(a.space(16, 10));
+    LinearLayout.LayoutParams queryLp = new LinearLayout.LayoutParams(-1, a.dp(312));
+    queryLp.bottomMargin = a.dp(30);
     queryCard.setLayoutParams(queryLp);
 
     LinearLayout modes = a.row();
     modes.setPadding(a.dp(4), a.dp(3), a.dp(4), a.dp(3));
-    modes.setBackground(a.shape(a.inputBg, 13, 0));
-    int widthDp = Math.round(a.getResources().getDisplayMetrics().widthPixels
-        / a.getResources().getDisplayMetrics().density);
-    int modeHeight = LayoutStyle.modeHeight(widthDp, a.scale);
-    if (a.getResources().getConfiguration().fontScale > 1.1f)
-      modeHeight = Math.max(modeHeight, (int)Math.ceil(24 * a.scale
-          * a.getResources().getConfiguration().fontScale + 16));
+    android.graphics.drawable.GradientDrawable modeBg =
+        new android.graphics.drawable.GradientDrawable();
+    modeBg.setColor(a.inputBg);
+    modeBg.setCornerRadius(a.dp(13));
+    modes.setBackground(modeBg);
     String[] modeIds = {"text", "image", "both"};
     String[] modeLabels = {"文本查询", "图片查询", "图文+提问"};
-    String[] modeIcons = {"text-outline", "image-outline", "color-wand-outline"};
     for (int i = 0; i < modeIds.length; i++) {
       String mode = modeIds[i];
-      Button button = a.button(modeLabels[i], v -> { homeMode = mode; a.render(); });
+      Button button =
+          a.button(
+              modeLabels[i],
+              v -> {
+                homeMode = mode;
+                a.render();
+              });
       button.setTextSize(12 * a.scale);
-      button.setMaxLines(2);
-      button.setCompoundDrawables(a.new GlyphDrawable(modeIcons[i], 15,
-          mode.equals(homeMode) ? a.accent : a.muted), null, null, null);
+      String[] modeIcons = {"text-outline", "image-outline", "color-wand-outline"};
+      button.setCompoundDrawables(
+          a.new GlyphDrawable(modeIcons[i], 15, mode.equals(homeMode) ? a.accent : a.muted),
+          null,
+          null,
+          null);
       button.setCompoundDrawablePadding(a.dp(3));
-      button.setPadding(a.dp(8), a.dp(4), a.dp(6), a.dp(4));
+      button.setPadding(a.dp(8), 0, a.dp(6), 0);
+      button.setMinHeight(a.dp(36));
+      button.setMinimumHeight(a.dp(36));
       if (mode.equals(homeMode)) {
-        button.setBackground(a.shape(a.card, 12, a.border));
+        android.graphics.drawable.GradientDrawable active =
+            new android.graphics.drawable.GradientDrawable();
+        active.setColor(a.card);
+        active.setCornerRadius(a.dp(12));
+        active.setStroke(a.dp(1), a.border);
+        button.setBackground(active);
         button.setTextColor(a.accent);
       } else {
         button.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         button.setTextColor(a.muted);
       }
-      // Measure wrapped text with Android's actual font scaling/fallback metrics.
-      int available=Math.max(1,(a.getResources().getDisplayMetrics().widthPixels-a.dp(76))/3);
-      button.measure(View.MeasureSpec.makeMeasureSpec(available,View.MeasureSpec.EXACTLY),
-          View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));
-      modeHeight=Math.max(modeHeight,(int)Math.ceil(button.getMeasuredHeight()
-          /a.getResources().getDisplayMetrics().density));
-      modes.addView(button, new LinearLayout.LayoutParams(0, a.dp(modeHeight), 1));
+      modes.addView(button, new LinearLayout.LayoutParams(0, a.dp(36), 1));
     }
-    for(int i=0;i<modes.getChildCount();i++)modes.getChildAt(i).getLayoutParams().height=a.dp(modeHeight);
-    // Preserve compact empty modes, but reserve enough space for larger text and
-    // the two independent 48dp image actions after choosing an image.
-    float systemScale=a.getResources().getConfiguration().fontScale;
-    int imageMinimum=homeMode.equals("both")&&a.image!=null ? 120
-        : (int)Math.ceil(34*a.scale*systemScale)+40;
-    height += Math.max(0,modeHeight-48)+Math.max(0,imageMinimum-74);
-    queryLp.height=a.dp(height);
     queryCard.addView(modes);
-    queryCard.addView(a.gap(8));
+    queryCard.addView(new View(a), new LinearLayout.LayoutParams(1, a.dp(8)));
+
     if (!homeMode.equals("image")) {
-      String hint = homeMode.equals("both") ? "可输入目标词汇或问题"
-          : "输入英文单词或短语，如 serendipity, break a leg...";
+      String hint =
+          homeMode.equals("both") ? "可输入目标词汇或问题" : "输入英文单词或短语，如 serendipity, break a leg...";
       EditText target = a.input(hint, draft, false);
-      target.setCompoundDrawables(a.new GlyphDrawable(homeMode.equals("both")
-          ? "color-wand-outline" : "search-outline", 17, a.accent), null, null, null);
+      target.setCompoundDrawables(
+          a
+          .new GlyphDrawable(
+              homeMode.equals("both") ? "color-wand-outline" : "search-outline", 17, a.accent),
+          null,
+          null,
+          null);
       target.setCompoundDrawablePadding(a.dp(8));
-      track(target, value -> {
-        if (!draft.equals(value)) a.invalidateDraft();
-        draft = value;
-      });
-      queryCard.addView(target, new LinearLayout.LayoutParams(-1, a.dp(48)));
-      queryCard.addView(a.gap(8));
+      track(
+          target,
+          value -> {
+            if (!draft.equals(value)) a.invalidateDraft();
+            draft = value;
+          });
+      queryCard.addView(target, new LinearLayout.LayoutParams(-1, a.dp(42)));
     }
 
-    LinearLayout extra = a.column();
-    LinearLayout.LayoutParams extraLp = new LinearLayout.LayoutParams(-1, 0, 1);
-    extraLp.bottomMargin = a.dp(8);
-    queryCard.addView(extra, extraLp);
     if (homeMode.equals("text")) {
-      Button disclose = a.button(contextExpanded ? "收起语境与要求"
-          : context.isEmpty() ? "＋ 语境与要求（选填）" : "语境已填写 · 展开", v -> {
-            contextExpanded = !contextExpanded;
-            a.render();
+      LinearLayout contextBox = a.column();
+      contextBox.setPadding(a.dp(8), a.dp(7), a.dp(8), a.dp(7));
+      android.graphics.drawable.GradientDrawable contextBg =
+          new android.graphics.drawable.GradientDrawable();
+      contextBg.setColor(a.inputBg);
+      contextBg.setCornerRadius(a.dp(12));
+      contextBg.setStroke(a.dp(1), a.border);
+      contextBox.setBackground(contextBg);
+      TextView contextLabel = a.text("上下文例句 / 提问说明（选填）", 12, false);
+      contextLabel.setTextColor(a.muted);
+      contextBox.addView(contextLabel);
+      EditText ctx = a.input("粘贴包含该词的原句段落或特定要求，帮助 AI 精准契合语境解析…", context, true);
+      ctx.setTextSize(13 * a.scale);
+      ctx.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+      ctx.setPadding(0, a.dp(4), 0, 0);
+      track(
+          ctx,
+          value -> {
+            if (!context.equals(value)) a.invalidateDraft();
+            context = value;
           });
-      extra.addView(disclose, new LinearLayout.LayoutParams(-1, a.dp(48)));
-      if (contextExpanded) {
-        EditText ctx = a.input("粘贴包含该词的原句段落或特定要求，帮助 AI 精准契合语境解析…", context, true);
-        ctx.setTextSize(13 * a.scale);
-        track(ctx, value -> {
-          if (!context.equals(value)) a.invalidateDraft();
-          context = value;
-        });
-        extra.addView(ctx, new LinearLayout.LayoutParams(-1, 0, 1));
-      }
-    } else {
-      LinearLayout images = a.row();
+      LinearLayout.LayoutParams contextLp = new LinearLayout.LayoutParams(-1, 0, 1);
+      contextLp.topMargin = a.dp(8);
+      contextLp.bottomMargin = a.dp(8);
+      queryCard.addView(contextBox, contextLp);
+      contextBox.addView(ctx, new LinearLayout.LayoutParams(-1, 0, 1));
+    } else if (homeMode.equals("image")) {
       if (a.image == null) {
-        images.addView(imageTile("拍摄照片", "书页或屏幕", "camera-outline", () -> a.chooseImage(true)),
+        LinearLayout tiles = a.row();
+        tiles.addView(
+            imageTile("拍摄照片", "拍照识别书籍 / 屏幕", "camera-outline", () -> a.chooseImage(true)),
             new LinearLayout.LayoutParams(0, -1, 1));
-        LinearLayout.LayoutParams second = new LinearLayout.LayoutParams(0, -1, 1);
-        second.leftMargin = a.dp(8);
-        images.addView(imageTile("相册选取", "手机截图或照片", "images-outline", () -> a.chooseImage(false)), second);
+        tiles.addView(
+            imageTile("相册选取", "选择手机截图或照片", "images-outline", () -> a.chooseImage(false)),
+            new LinearLayout.LayoutParams(0, -1, 1));
+        ((LinearLayout.LayoutParams) tiles.getChildAt(1).getLayoutParams()).leftMargin = a.dp(8);
+        LinearLayout.LayoutParams tilesLp = new LinearLayout.LayoutParams(-1, 0, 1);
+        tilesLp.bottomMargin = a.dp(8);
+        queryCard.addView(tiles, tilesLp);
       } else {
         ImageView preview = new ImageView(a);
         preview.setImageURI(a.image);
         preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        images.addView(preview, new LinearLayout.LayoutParams(0, -1, 1));
-        LinearLayout actions = a.column();
-        actions.addView(a.button("更换", v -> a.chooseImage(false)));
-        actions.addView(a.button("移除", v -> { a.clearImage(); a.render(); }));
-        images.addView(actions);
+        LinearLayout.LayoutParams previewLp = new LinearLayout.LayoutParams(-1, 0, 1);
+        queryCard.addView(preview, previewLp);
+        queryCard.addView(a.button("更换图片", v -> a.chooseImage(false)));
       }
-      extra.addView(images, new LinearLayout.LayoutParams(-1, -1));
+    } else {
+      LinearLayout both = a.row();
+      if (a.image == null) {
+        both.addView(
+            imageTile("拍摄照片", "识别书页 / 屏幕", "camera-outline", () -> a.chooseImage(true)),
+            new LinearLayout.LayoutParams(0, -1, 1));
+        both.addView(
+            imageTile("相册选取", "选择手机截图或照片", "images-outline", () -> a.chooseImage(false)),
+            new LinearLayout.LayoutParams(0, -1, 1));
+        ((LinearLayout.LayoutParams) both.getChildAt(1).getLayoutParams()).leftMargin = a.dp(8);
+      } else {
+        ImageView preview = new ImageView(a);
+        preview.setImageURI(a.image);
+        preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        both.addView(preview, new LinearLayout.LayoutParams(0, a.dp(74), 1));
+        both.addView(
+            a.button(
+                "移除",
+                v -> {
+                  a.clearImage();
+                  a.render();
+                }));
+      }
+      LinearLayout.LayoutParams bothLp = new LinearLayout.LayoutParams(-1, 0, 1);
+      bothLp.topMargin = a.dp(8);
+      bothLp.bottomMargin = a.dp(8);
+      queryCard.addView(both, bothLp);
     }
     queryCard.addView(a.primaryButton("✦  智能查询", v -> submit()));
 
@@ -190,10 +230,9 @@ final class QueryUi {
     tile.setBackground(background);
     TextView tileIcon = a.icon(iconName, 22, a.accent);
     tileIcon.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 22, 0));
-    int iconSize = homeMode.equals("both") ? 32 : 44;
-    tile.addView(tileIcon, new LinearLayout.LayoutParams(a.dp(iconSize), a.dp(iconSize)));
-    tile.addView(a.gap(homeMode.equals("both") ? 4 : 8));
-    TextView tileTitle = a.text(title, homeMode.equals("both") ? 12 : 13, true);
+    tile.addView(tileIcon, new LinearLayout.LayoutParams(a.dp(44), a.dp(44)));
+    tile.addView(a.gap(8));
+    TextView tileTitle = a.text(title, 13, true);
     tileTitle.setGravity(Gravity.CENTER);
     tile.addView(tileTitle);
     tile.addView(a.gap(4));
@@ -222,8 +261,8 @@ final class QueryUi {
     savedCard.addView(savedTitle, savedTitleLp);
     LinearLayout searchRow = a.row();
     EditText filter = a.input("搜索会话名称", sessionFilter, false);
-    searchRow.addView(filter, new LinearLayout.LayoutParams(0, a.dp(48), 1));
-    Button dateFilter = a.button("日期筛选", v -> showDateFilter());
+    searchRow.addView(filter, new LinearLayout.LayoutParams(0, a.dp(44), 1));
+    TextView dateFilter = a.text("日期筛选", 14, false);
     dateFilter.setTextIsSelectable(false);
     dateFilter.setFocusable(false);
     dateFilter.setTextColor(a.accent);
@@ -729,7 +768,6 @@ final class QueryUi {
     a.session = Library.copy(existing == null ? s : existing);
     draft = a.session.optString("input_text");
     context = a.session.optString("source_context");
-    contextExpanded = !context.isEmpty();
     JSONArray images = a.session.optJSONArray("input_images");
     a.image = images != null && images.length() > 0 ? Uri.parse(images.optString(0)) : null;
     a.originalImage = a.image;
@@ -1118,10 +1156,10 @@ final class QueryUi {
       LinearLayout organizeActions = a.row();
       organizeActions.addView(
           a.outlineButton("添加到默认笔记", v -> a.notebooks.saveDefault(r)),
-          new LinearLayout.LayoutParams(0, a.dp(48), 1));
+          new LinearLayout.LayoutParams(0, a.dp(44), 1));
       organizeActions.addView(
           a.primaryButton("选择添加笔记", v -> a.notebooks.saveDialog(r)),
-          new LinearLayout.LayoutParams(0, a.dp(48), 1));
+          new LinearLayout.LayoutParams(0, a.dp(44), 1));
       actions.addView(organizeActions);
     }
   }
@@ -1159,7 +1197,7 @@ final class QueryUi {
         b.setTextColor(a.accent);
       }
       b.setTextSize(13 * a.scale);
-      modes.addView(b, new LinearLayout.LayoutParams(0, a.dp(48), 1));
+      modes.addView(b, new LinearLayout.LayoutParams(0, a.dp(36), 1));
     }
     intro.addView(modes);
     intro.addView(a.gap(12));
@@ -1176,10 +1214,10 @@ final class QueryUi {
         picks.setGravity(Gravity.CENTER);
         picks.addView(
             a.outlineButton("拍照", v -> a.chooseImage(true)),
-            new LinearLayout.LayoutParams(-2, a.dp(48)));
+            new LinearLayout.LayoutParams(-2, a.dp(36)));
         picks.addView(
             a.outlineButton("从相册选", v -> a.chooseImage(false)),
-            new LinearLayout.LayoutParams(-2, a.dp(48)));
+            new LinearLayout.LayoutParams(-2, a.dp(36)));
         photo.addView(picks);
         ((TextView) photo.getChildAt(2)).setGravity(Gravity.CENTER);
         intro.addView(photo, new LinearLayout.LayoutParams(-1, a.dp(220)));

@@ -42,8 +42,6 @@ public final class MainActivity extends Activity {
   SettingsUi settingsUi;
   int background, foreground, muted, card, accent, inputBg, border, subtle;
   float scale = 1;
-  boolean compact;
-  int accentFill;
   File pendingExport;
   boolean recoveryOnly;
   String loadFailure;
@@ -76,7 +74,6 @@ public final class MainActivity extends Activity {
       if (session == null) screen = "tabs";
       query.draft = state.getString("draft", "");
       query.context = state.getString("context", "");
-      query.contextExpanded = state.getBoolean("contextExpanded", !query.context.isEmpty());
       query.follow = state.getString("follow", "");
       query.guessTarget = state.getString("guessTarget", "");
       query.guessContext = state.getString("guessContext", "");
@@ -129,10 +126,7 @@ public final class MainActivity extends Activity {
     inputBg = Color.parseColor(dark ? "#0F172A" : "#F1F5F9");
     border = Color.parseColor(dark ? "#334155" : "#E2E8F0");
     String color = library.settings().optString("accent_color", "#10B981");
-    int savedAccent = Color.parseColor(color.matches("#[0-9a-fA-F]{6}") ? color : "#10B981");
-    accent = LayoutStyle.textAccent(savedAccent, card);
-    accentFill = LayoutStyle.fillAccent(savedAccent);
-    compact = library.settings().optString("density", "comfortable").equals("compact");
+    accent = Color.parseColor(color.matches("#[0-9a-fA-F]{6}") ? color : "#10B981");
     String size = library.settings().optString("font_size", "medium");
     scale = size.equals("large") ? 1.15f : size.equals("small") ? .9f : 1;
     getWindow().setStatusBarColor(card);
@@ -192,7 +186,7 @@ public final class MainActivity extends Activity {
     body = column();
     body.setTag("page-body");
     int padding = page == 0 || !screen.equals("tabs") ? 14 : 16;
-    body.setPadding(dp(padding), dp(space(16, 12)), dp(padding), dp(space(32, 24)));
+    body.setPadding(dp(padding), dp(14), dp(padding), dp(32));
     body.setBackgroundColor(background);
     scroll.addView(body);
     root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -245,16 +239,12 @@ public final class MainActivity extends Activity {
               ? session != null && query.saved(session) ? query.title(session) : "AI 助手"
               : result == null ? "查询信息" : result.optString("word", "查询信息");
     } else title = new String[] {"LexiNote · 查询和记录", "语境猜词辅助", "笔记管理与词库", "复习中心", "设置与数据管理"}[page];
-    boolean homeHeader = screen.equals("tabs") && page == 0;
-    int widthDp = Math.round(getResources().getDisplayMetrics().widthPixels
-        / getResources().getDisplayMetrics().density);
-    boolean compactHome = homeHeader && LayoutStyle.compactHeader(widthDp, scale);
-    if (compactHome) title = "LexiNote";
     TextView heading = text(title, 17, true);
     heading.setSingleLine(true);
-    heading.setEllipsize(android.text.TextUtils.TruncateAt.END);
     heading.setTag("page-title");
-    bar.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
+    boolean homeHeader = screen.equals("tabs") && page == 0;
+    bar.addView(
+        heading, new LinearLayout.LayoutParams(homeHeader ? -2 : 0, -2, homeHeader ? 0 : 1));
     if (screen.equals("assistant")) {
       Button save =
           button(
@@ -267,7 +257,6 @@ public final class MainActivity extends Activity {
       bar.addView(save);
     }
     if (screen.equals("tabs") && page == 0) {
-      if (!compactHome) {
       TextView version = text("v1.3", 11, true);
       version.setTextColor(accent);
       version.setPadding(dp(6), dp(3), dp(6), dp(3));
@@ -275,7 +264,7 @@ public final class MainActivity extends Activity {
       LinearLayout.LayoutParams versionLp = new LinearLayout.LayoutParams(-2, -2);
       versionLp.leftMargin = dp(8);
       bar.addView(version, versionLp);
-      }
+      bar.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
       LinearLayout recent = row();
       recent.setGravity(Gravity.CENTER);
       recent.addView(icon("time-outline", 17, foreground));
@@ -329,10 +318,6 @@ public final class MainActivity extends Activity {
     root.addView(nav, new LinearLayout.LayoutParams(-1, dp(62)));
   }
 
-  int space(int comfortable, int compactValue) {
-    return compact ? compactValue : comfortable;
-  }
-
   int dp(float value) {
     return Math.round(value * getResources().getDisplayMetrics().density);
   }
@@ -384,10 +369,10 @@ public final class MainActivity extends Activity {
     value.setTextSize(14 * scale);
     value.setTextColor(accent);
     value.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-    value.setMinHeight(dp(LayoutStyle.TOUCH_MIN));
-    value.setMinimumHeight(dp(LayoutStyle.TOUCH_MIN));
-    value.setMinWidth(dp(LayoutStyle.TOUCH_MIN));
-    value.setMinimumWidth(dp(LayoutStyle.TOUCH_MIN));
+    value.setMinHeight(dp(36));
+    value.setMinimumHeight(dp(36));
+    value.setMinWidth(0);
+    value.setMinimumWidth(0);
     value.setElevation(0);
     value.setStateListAnimator(null);
     value.setBackgroundTintList(null);
@@ -405,10 +390,10 @@ public final class MainActivity extends Activity {
   Button primaryButton(String label, View.OnClickListener click) {
     Button value = button(label, click);
     value.setTextColor(Color.WHITE);
-    value.setBackground(shape(accentFill, 10, 0));
-    value.setMinHeight(dp(LayoutStyle.TOUCH_MIN));
-    value.setMinimumHeight(dp(LayoutStyle.TOUCH_MIN));
-    value.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(LayoutStyle.TOUCH_MIN)));
+    value.setBackground(shape(accent, 10, 0));
+    value.setMinHeight(dp(44));
+    value.setMinimumHeight(dp(44));
+    value.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(44)));
     return value;
   }
 
@@ -416,7 +401,7 @@ public final class MainActivity extends Activity {
     Button value = button(label, click);
     value.setTextColor(foreground);
     value.setBackground(shape(Color.TRANSPARENT, 10, border));
-    value.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(LayoutStyle.TOUCH_MIN)));
+    value.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(44)));
     return value;
   }
 
@@ -427,7 +412,7 @@ public final class MainActivity extends Activity {
     value.setBackground(
         shape(
             selected ? (accent & 0xFFFFFF) | 0x1A000000 : inputBg, 10, selected ? accent : border));
-    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(LayoutStyle.TOUCH_MIN));
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(36));
     lp.rightMargin = dp(8);
     value.setLayoutParams(lp);
     return value;
@@ -441,7 +426,7 @@ public final class MainActivity extends Activity {
     edit.setHintTextColor(subtle);
     edit.setTextSize(14 * scale);
     edit.setSingleLine(!multiline);
-    edit.setMinHeight(dp(LayoutStyle.TOUCH_MIN));
+    edit.setMinHeight(dp(44));
     if (multiline) {
       edit.setMinLines(2);
       edit.setGravity(Gravity.TOP);
@@ -454,11 +439,10 @@ public final class MainActivity extends Activity {
 
   LinearLayout card(String title) {
     LinearLayout value = column();
-    int inset = LayoutStyle.cardPadding(compact);
-    value.setPadding(dp(inset), dp(inset), dp(inset), dp(inset));
+    value.setPadding(dp(14), dp(14), dp(14), dp(14));
     value.setBackground(shape(card, 16, border));
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-    lp.bottomMargin = dp(LayoutStyle.cardGap(compact));
+    lp.bottomMargin = dp(14);
     value.setLayoutParams(lp);
     if (title != null) {
       TextView heading = text(title, 16, true);
@@ -896,7 +880,6 @@ public final class MainActivity extends Activity {
     if (query != null) {
       state.putString("draft", query.draft);
       state.putString("context", query.context);
-      state.putBoolean("contextExpanded", query.contextExpanded);
       state.putString("follow", query.follow);
       state.putString("guessTarget", query.guessTarget);
       state.putString("guessContext", query.guessContext);
