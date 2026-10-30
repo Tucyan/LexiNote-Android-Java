@@ -55,7 +55,10 @@ final class ProviderDraft {
       boolean allowed = value.optString("reasoning_effort", "off").equals("off");
       for (int i = 0; i < levels.length(); i++)
         if (levels.optString(i).equals(value.optString("reasoning_effort"))) allowed = true;
-      if (!allowed) set("reasoning_effort", "off");
+      if (!allowed) {
+        set("reasoning_effort", "off");
+        value.remove("reasoning_gear");
+      }
     } else value.remove("reasoning_levels");
     revision++;
   }

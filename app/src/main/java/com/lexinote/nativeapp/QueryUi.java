@@ -16,7 +16,7 @@ final class QueryUi {
       guessTarget = "",
       guessContext = "",
       sessionFilter = "";
-  String homeMode = "text", guessMode = "image";
+  String homeMode = "text", guessMode = "image", sessionTab = "saved";
   String startDate = "", endDate = "", dateField = "created_at";
   int savedLimit = 10;
   boolean showDateFields = false;
@@ -254,71 +254,63 @@ final class QueryUi {
       else if (Library.isTemporary(item)) temporaryItems.add(item);
     }
 
-    LinearLayout savedCard = a.card(null);
-    TextView savedTitle = a.text("AI 会话 · 已保存", 17, true);
-    LinearLayout.LayoutParams savedTitleLp = new LinearLayout.LayoutParams(-1, -2);
-    savedTitleLp.bottomMargin = a.dp(12);
-    savedCard.addView(savedTitle, savedTitleLp);
-    LinearLayout searchRow = a.row();
-    EditText filter = a.input("搜索会话名称", sessionFilter, false);
-    searchRow.addView(filter, new LinearLayout.LayoutParams(0, a.dp(44), 1));
-    TextView dateFilter = a.text("日期筛选", 14, false);
-    dateFilter.setTextIsSelectable(false);
-    dateFilter.setFocusable(false);
-    dateFilter.setTextColor(a.accent);
-    dateFilter.setTypeface(null, android.graphics.Typeface.NORMAL);
-    dateFilter.setPadding(a.dp(8), 0, 0, 0);
-    dateFilter.setOnClickListener(v -> showDateFilter());
-    searchRow.addView(dateFilter);
-    savedCard.addView(searchRow);
-    track(
-        filter,
-        value -> {
-          sessionFilter = value;
-          savedLimit = 10;
-        });
-    filter.setOnEditorActionListener(
-        (v, action, event) -> {
-          sessionFilter = filter.getText().toString();
-          savedLimit = 10;
-          a.render();
-          return true;
-        });
-    if (showDateFields) addDateFields(savedCard);
+    LinearLayout sessionCard = a.column();
+    sessionCard.setTag("ai-sessions-card");
+    sessionCard.setPadding(0, a.dp(6), 0, a.dp(20));
+    a.body.addView(sessionCard, new LinearLayout.LayoutParams(-1, -2));
 
-    int shown = 0, matched = 0;
-    for (JSONObject item : savedItems) {
-      if (!Library.normalized(title(item)).contains(Library.normalized(sessionFilter))
-          || !matchesDate(item)) continue;
-      matched++;
-      if (shown++ < savedLimit) addConversationRow(savedCard, item);
-    }
-    if (matched == 0) {
-      TextView empty =
-          a.text(
-              sessionFilter.isEmpty() && startDate.isEmpty() && endDate.isEmpty()
-                  ? "在 AI 助手中点击“保存会话”，即可在这里继续交流。"
-                  : "没有符合条件的会话。",
-              13,
-              false);
-      empty.setPadding(0, a.dp(16), 0, a.dp(16));
-      savedCard.addView(empty);
-    }
-    if (matched > savedLimit)
-      savedCard.addView(
+    // Header row with tabs on left and "+" on right
+    LinearLayout headerRow = a.row();
+    headerRow.setGravity(Gravity.CENTER_VERTICAL);
+    LinearLayout.LayoutParams headerLp = new LinearLayout.LayoutParams(-1, -2);
+    headerLp.bottomMargin = a.dp(12);
+    headerRow.setLayoutParams(headerLp);
+
+    // Segmented tabs: 已保存 vs 临时
+    LinearLayout tabs = a.row();
+    tabs.setPadding(a.dp(3), a.dp(3), a.dp(3), a.dp(3));
+    android.graphics.drawable.GradientDrawable tabBg =
+        new android.graphics.drawable.GradientDrawable();
+    tabBg.setColor(a.inputBg);
+    tabBg.setCornerRadius(a.dp(10));
+    tabs.setBackground(tabBg);
+
+    String[] tabKeys = {"saved", "temporary"};
+    String[] tabLabels = {
+      "已保存 (" + savedItems.size() + ")",
+      "临时 (" + temporaryItems.size() + "/5)"
+    };
+    for (int i = 0; i < tabKeys.length; i++) {
+      String key = tabKeys[i];
+      Button tabBtn =
           a.button(
-              "查看更多（共 " + matched + " 个）",
+              tabLabels[i],
               v -> {
-                savedLimit += 10;
+                sessionTab = key;
                 a.render();
-              }));
+              });
+      tabBtn.setTextSize(12 * a.scale);
+      tabBtn.setPadding(a.dp(10), 0, a.dp(10), 0);
+      tabBtn.setMinHeight(a.dp(32));
+      tabBtn.setMinimumHeight(a.dp(32));
+      if (key.equals(sessionTab)) {
+        android.graphics.drawable.GradientDrawable active =
+            new android.graphics.drawable.GradientDrawable();
+        active.setColor(a.card);
+        active.setCornerRadius(a.dp(8));
+        active.setStroke(a.dp(1), a.border);
+        tabBtn.setBackground(active);
+        tabBtn.setTextColor(a.accent);
+      } else {
+        tabBtn.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        tabBtn.setTextColor(a.muted);
+      }
+      tabs.addView(tabBtn);
+    }
+    headerRow.addView(tabs, new LinearLayout.LayoutParams(0, -2, 1));
 
-    LinearLayout tempCard = a.card(null);
-    LinearLayout tempHeader = a.row();
-    tempHeader.addView(
-        a.text("临时 AI 会话（" + temporaryItems.size() + "/5）", 17, true),
-        new LinearLayout.LayoutParams(0, -2, 1));
-    tempHeader.addView(
+    // Right side: "+" new conversation button (with "＋ 新建" text for accessibility and existing test compat)
+    Button newBtn =
         a.button(
             "＋ 新建",
             v -> {
@@ -327,38 +319,132 @@ final class QueryUi {
               a.session = a.library.newSession("");
               a.screen = "assistant";
               a.render();
-            }));
-    tempCard.addView(tempHeader);
-    TextView temporaryNote = a.text("自动命名，最多保留 5 个；保存后的会话不占名额。", 11, false);
-    LinearLayout.LayoutParams temporaryNoteLp = new LinearLayout.LayoutParams(-1, -2);
-    temporaryNoteLp.topMargin = a.dp(8);
-    temporaryNoteLp.bottomMargin = a.dp(8);
-    tempCard.addView(temporaryNote, temporaryNoteLp);
-    if (temporaryItems.isEmpty()) {
-      TextView empty = a.text("直接开始对话，无需先查词。", 13, false);
-      empty.setTextColor(a.subtle);
-      empty.setPadding(0, a.dp(10), 0, a.dp(10));
-      tempCard.addView(empty);
-    } else for (JSONObject item : temporaryItems) addConversationRow(tempCard, item);
+            });
+    newBtn.setTextSize(13 * a.scale);
+    newBtn.setPadding(a.dp(8), 0, a.dp(8), 0);
+    newBtn.setMinHeight(a.dp(32));
+    newBtn.setMinimumHeight(a.dp(32));
+    headerRow.addView(newBtn);
+
+    sessionCard.addView(headerRow);
+
+    if ("saved".equals(sessionTab)) {
+      LinearLayout searchRow = a.row();
+      searchRow.setGravity(Gravity.CENTER_VERTICAL);
+      LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(-1, -2);
+      searchLp.bottomMargin = a.dp(8);
+      searchRow.setLayoutParams(searchLp);
+      EditText filter = a.input("搜索会话名称", sessionFilter, false);
+      filter.setBackground(a.shape(a.card, 10, a.border));
+      searchRow.addView(filter, new LinearLayout.LayoutParams(0, a.dp(44), 1));
+      TextView dateFilter = a.text("日期筛选", 14, false);
+      dateFilter.setTextIsSelectable(false);
+      dateFilter.setFocusable(false);
+      dateFilter.setTextColor(a.accent);
+      dateFilter.setTypeface(null, android.graphics.Typeface.NORMAL);
+      dateFilter.setPadding(a.dp(8), 0, 0, 0);
+      dateFilter.setOnClickListener(v -> showDateFilter());
+      searchRow.addView(dateFilter);
+      sessionCard.addView(searchRow);
+      track(
+          filter,
+          value -> {
+            sessionFilter = value;
+            savedLimit = 10;
+          });
+      filter.setOnEditorActionListener(
+          (v, action, event) -> {
+            sessionFilter = filter.getText().toString();
+            savedLimit = 10;
+            a.render();
+            return true;
+          });
+      if (showDateFields) addDateFields(sessionCard);
+
+      int shown = 0, matched = 0;
+      for (JSONObject item : savedItems) {
+        if (!Library.normalized(title(item)).contains(Library.normalized(sessionFilter))
+            || !matchesDate(item)) continue;
+        matched++;
+        if (shown++ < savedLimit) addConversationRow(sessionCard, item);
+      }
+      if (matched == 0) {
+        TextView empty =
+            a.text(
+                sessionFilter.isEmpty() && startDate.isEmpty() && endDate.isEmpty()
+                    ? "在 AI 助手中点击“保存会话”，即可在这里继续交流。"
+                    : "没有符合条件的会话。",
+                13,
+                false);
+        empty.setPadding(0, a.dp(16), 0, a.dp(16));
+        sessionCard.addView(empty);
+      }
+      if (matched > savedLimit)
+        sessionCard.addView(
+            a.button(
+                "查看更多（共 " + matched + " 个）",
+                v -> {
+                  savedLimit += 10;
+                  a.render();
+                }));
+    } else {
+      TextView temporaryNote = a.text("自动命名，最多保留 5 个；保存后的会话不占名额。", 11, false);
+      LinearLayout.LayoutParams temporaryNoteLp = new LinearLayout.LayoutParams(-1, -2);
+      temporaryNoteLp.topMargin = a.dp(4);
+      temporaryNoteLp.bottomMargin = a.dp(8);
+      sessionCard.addView(temporaryNote, temporaryNoteLp);
+      if (temporaryItems.isEmpty()) {
+        TextView empty = a.text("直接开始对话，无需先查词。", 13, false);
+        empty.setTextColor(a.subtle);
+        empty.setPadding(0, a.dp(10), 0, a.dp(10));
+        sessionCard.addView(empty);
+      } else {
+        for (JSONObject item : temporaryItems) addConversationRow(sessionCard, item);
+      }
+    }
+  }
+
+  void confirmDeleteConversation(JSONObject s, Runnable onDeleted) {
+    String name = title(s);
+    new AlertDialog.Builder(a)
+        .setTitle("删除会话")
+        .setMessage("确定删除「" + name + "」吗？已保存的词汇笔记不受影响。")
+        .setNegativeButton("取消", null)
+        .setPositiveButton(
+            "删除",
+            (d, w) -> {
+              a.change(() -> deleteConversation(s));
+              if (onDeleted != null) onDeleted.run();
+            })
+        .show();
   }
 
   void addConversationRow(LinearLayout parent, JSONObject item) {
     LinearLayout row = a.row();
+    row.setGravity(Gravity.CENTER_VERTICAL);
+    row.setPadding(0, a.dp(4), 0, a.dp(4));
     LinearLayout info = a.column();
-    info.setPadding(a.dp(2), a.dp(8), a.dp(2), a.dp(8));
-    info.addView(
+    info.setPadding(0, a.dp(2), a.dp(8), a.dp(2));
+    Button titleBtn =
         a.button(
             title(item),
             v -> {
               open(item);
               a.screen = "assistant";
               a.render();
-            }));
+            });
+    titleBtn.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+    info.addView(titleBtn);
     info.addView(a.text("最近使用 " + sessionDate(item, "last_used_at"), 11, false));
     info.addView(a.text("创建于 " + sessionDate(item, "created_at"), 10, false));
     row.addView(info, new LinearLayout.LayoutParams(0, -2, 1));
-    row.addView(a.button("删除", v -> a.change(() -> deleteConversation(item))));
+    Button delBtn = a.button("删除", v -> confirmDeleteConversation(item, null));
+    delBtn.setTextColor(android.graphics.Color.parseColor("#EF4444"));
+    row.addView(delBtn);
     parent.addView(row);
+    View divider = new View(a);
+    divider.setBackgroundColor(a.border);
+    parent.addView(divider, new LinearLayout.LayoutParams(-1, a.dp(1)));
   }
 
   String sessionDate(JSONObject item, String field) {

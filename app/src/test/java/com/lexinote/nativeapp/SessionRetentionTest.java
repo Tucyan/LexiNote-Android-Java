@@ -34,4 +34,38 @@ public class SessionRetentionTest {
   JSONObject legacy=l.newSession("legacy"); legacy.remove("metadata"); l.touchSession(legacy,true);
   assertEquals("query",new Library(l.backup()).find("conversations",legacy.optString("id")).getJSONObject("metadata").getString("retention"));
  }
+ @Test public void mixedChronologicalOrderingAndFilter() throws Exception {
+  Library l = new Library();
+  JSONObject saved1 = l.newSession("Alpha discussion");
+  Library.put(saved1, "id", "s1");
+  Library.put(saved1, "saved", true);
+  Library.put(saved1.getJSONObject("metadata"), "last_used_at", "2026-02-01T10:00:00Z");
+  l.array("conversations").put(saved1);
+
+  JSONObject temp1 = l.newSession("Beta query");
+  Library.put(temp1, "id", "t1");
+  Library.promoteTemporary(temp1);
+  Library.put(temp1.getJSONObject("metadata"), "last_used_at", "2026-02-02T10:00:00Z");
+  l.array("conversations").put(temp1);
+
+  JSONObject saved2 = l.newSession("Gamma words");
+  Library.put(saved2, "id", "s2");
+  Library.put(saved2, "saved", true);
+  Library.put(saved2.getJSONObject("metadata"), "last_used_at", "2026-02-03T10:00:00Z");
+  l.array("conversations").put(saved2);
+
+  JSONArray sorted = Library.sortedSessions(l.array("conversations"), true);
+  assertEquals(3, sorted.length());
+  assertEquals("s2", sorted.getJSONObject(0).getString("id"));
+  assertEquals("t1", sorted.getJSONObject(1).getString("id"));
+  assertEquals("s1", sorted.getJSONObject(2).getString("id"));
+
+  int matchCount = 0;
+  for (int i = 0; i < sorted.length(); i++) {
+    JSONObject item = sorted.getJSONObject(i);
+    String title = item.getJSONObject("metadata").getString("title");
+    if (Library.normalized(title).contains(Library.normalized("beta"))) matchCount++;
+  }
+  assertEquals(1, matchCount);
+ }
 }

@@ -97,6 +97,7 @@ public final class ProviderProfiles {
               .put("is_custom", custom)
               .put("is_custom_model_id", input.optBoolean("is_custom_model_id", false))
               .put("is_custom_base_url", input.optBoolean("is_custom_base_url", false));
+      if (input.has("reasoning_gear")) safe.put("reasoning_gear", input.optInt("reasoning_gear", 0));
       JSONArray levels = input.optJSONArray("reasoning_levels");
       if (input.has("vision_known")) safe.put("vision_known", input.optBoolean("vision_known"));
       if (levels != null) {

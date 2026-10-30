@@ -27,6 +27,7 @@ public final class MainActivity extends Activity {
   String screen = "tabs";
   JSONObject session;
   JSONObject committed;
+  JSONObject activeVocabulary;
   Uri image, originalImage, pendingCameraUri;
   ImageEditorState imageEditorState = ImageEditorState.initial();
   JSONObject imageRegion;
@@ -41,10 +42,15 @@ public final class MainActivity extends Activity {
   ReviewUi review;
   SettingsUi settingsUi;
   int background, foreground, muted, card, accent, inputBg, border, subtle;
+  boolean isDark;
   float scale = 1;
   File pendingExport;
   boolean recoveryOnly;
   String loadFailure;
+  int lastPage = -1;
+  String lastScreen = "";
+  int savedScrollX = 0;
+  int savedScrollY = 0;
 
   @Override
   public void onCreate(Bundle state) {
@@ -71,7 +77,13 @@ public final class MainActivity extends Activity {
       String sessionId = state.getString("session");
       JSONObject saved = sessionId == null ? null : library.find("conversations", sessionId);
       session = saved == null ? null : Library.copy(saved);
-      if (session == null) screen = "tabs";
+      String activeVocabId = state.getString("activeVocabulary");
+      if (activeVocabId != null && library != null) {
+        activeVocabulary = library.find("vocabularies", activeVocabId);
+      }
+      if (screen.equals("vocabulary")) {
+        if (activeVocabulary == null) screen = "tabs";
+      } else if (session == null) screen = "tabs";
       query.draft = state.getString("draft", "");
       query.context = state.getString("context", "");
       query.follow = state.getString("follow", "");
@@ -118,6 +130,7 @@ public final class MainActivity extends Activity {
             || mode.equals("system")
                 && (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
                     == Configuration.UI_MODE_NIGHT_YES;
+    isDark = dark;
     background = Color.parseColor(dark ? "#0F172A" : "#F8FAFC");
     foreground = Color.parseColor(dark ? "#F8FAFC" : "#0F172A");
     muted = Color.parseColor(dark ? "#94A3B8" : "#475569");
@@ -146,30 +159,44 @@ public final class MainActivity extends Activity {
       query.assistantView = null;
     }
     palette();
-    root = column();
-    root.setBackgroundColor(card);
-    root.setOnApplyWindowInsetsListener(
-        (view, insets) -> {
-          int left, top, right, bottom;
-          if (Build.VERSION.SDK_INT >= 30) {
-            android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
-            left = bars.left;
-            top = bars.top;
-            right = bars.right;
-            bottom = bars.bottom;
-            if (insets.isVisible(WindowInsets.Type.ime()))
-              bottom = Math.max(bottom, insets.getInsets(WindowInsets.Type.ime()).bottom);
-          } else {
-            left = insets.getSystemWindowInsetLeft();
-            top = insets.getSystemWindowInsetTop();
-            right = insets.getSystemWindowInsetRight();
-            bottom = insets.getSystemWindowInsetBottom();
-          }
-          view.setPadding(left, top, right, bottom);
-          return insets;
-        });
-    setContentView(root);
-    root.requestApplyInsets();
+    if (scroll != null && page == lastPage && Objects.equals(screen, lastScreen)) {
+      savedScrollX = scroll.getScrollX();
+      savedScrollY = scroll.getScrollY();
+    } else {
+      savedScrollX = 0;
+      savedScrollY = 0;
+    }
+    lastPage = page;
+    lastScreen = screen;
+    if (root == null) {
+      root = column();
+      root.setBackgroundColor(card);
+      root.setOnApplyWindowInsetsListener(
+          (view, insets) -> {
+            int left, top, right, bottom;
+            if (Build.VERSION.SDK_INT >= 30) {
+              android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
+              left = bars.left;
+              top = bars.top;
+              right = bars.right;
+              bottom = bars.bottom;
+              if (insets.isVisible(WindowInsets.Type.ime()))
+                bottom = Math.max(bottom, insets.getInsets(WindowInsets.Type.ime()).bottom);
+            } else {
+              left = insets.getSystemWindowInsetLeft();
+              top = insets.getSystemWindowInsetTop();
+              right = insets.getSystemWindowInsetRight();
+              bottom = insets.getSystemWindowInsetBottom();
+            }
+            view.setPadding(left, top, right, bottom);
+            return insets;
+          });
+      setContentView(root);
+      root.requestApplyInsets();
+    } else {
+      root.removeAllViews();
+      root.setBackgroundColor(card);
+    }
     if (recoveryOnly) {
       root.setPadding(dp(16), dp(60), dp(16), dp(16));
       root.addView(text("恢复本地数据", 22, true));
@@ -178,11 +205,14 @@ public final class MainActivity extends Activity {
       root.addView(button("退出", v -> finish()));
       return;
     }
-    renderHeader();
+    if (!(screen.equals("tabs") && page == 2)) {
+      renderHeader();
+    }
     scroll = new ScrollView(this);
     scroll.setBackgroundColor(background);
     scroll.setFillViewport(true);
     scroll.setClipToPadding(false);
+    scroll.setFocusableInTouchMode(true);
     body = column();
     body.setTag("page-body");
     int padding = page == 0 || !screen.equals("tabs") ? 14 : 16;
@@ -196,6 +226,7 @@ public final class MainActivity extends Activity {
     footer.setVisibility(View.GONE);
     if (screen.equals("assistant")) query.assistant();
     else if (screen.equals("result")) query.result();
+    else if (screen.equals("vocabulary")) notebooks.renderVocabularyDetail();
     else
       switch (page) {
         case 0:
@@ -216,6 +247,18 @@ public final class MainActivity extends Activity {
     root.addView(footer, new LinearLayout.LayoutParams(-1, -2));
     if (screen.equals("tabs")) renderNavigation();
     else nav = null;
+    if (savedScrollY > 0 || savedScrollX > 0) {
+      final int restoreX = savedScrollX;
+      final int restoreY = savedScrollY;
+      scroll.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+        @Override
+        public void onGlobalLayout() {
+          scroll.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+          scroll.scrollTo(restoreX, restoreY);
+        }
+      });
+      scroll.post(() -> scroll.scrollTo(restoreX, restoreY));
+    }
   }
 
   void renderHeader() {
@@ -233,11 +276,24 @@ public final class MainActivity extends Activity {
             render();
           });
       bar.addView(back, new LinearLayout.LayoutParams(dp(40), dp(48)));
+      if (screen.equals("assistant")) {
+        TextView menu = icon("chatbubble-ellipses-outline", 22, foreground);
+        menu.setContentDescription("会话列表");
+        menu.setOnClickListener(
+            v -> {
+              if (query != null && query.assistantView != null) {
+                query.assistantView.toggleDrawer();
+              }
+            });
+        bar.addView(menu, new LinearLayout.LayoutParams(dp(36), dp(48)));
+      }
       JSONObject result = session == null ? null : session.optJSONObject("query_results");
       title =
           screen.equals("assistant")
               ? session != null && query.saved(session) ? query.title(session) : "AI 助手"
-              : result == null ? "查询信息" : result.optString("word", "查询信息");
+              : screen.equals("vocabulary")
+                  ? (activeVocabulary != null ? activeVocabulary.optString("content", "词汇详情") : "词汇详情")
+                  : result == null ? "查询信息" : result.optString("word", "查询信息");
     } else title = new String[] {"LexiNote · 查询和记录", "语境猜词辅助", "笔记管理与词库", "复习中心", "设置与数据管理"}[page];
     TextView heading = text(title, 17, true);
     heading.setSingleLine(true);
@@ -245,6 +301,10 @@ public final class MainActivity extends Activity {
     boolean homeHeader = screen.equals("tabs") && page == 0;
     bar.addView(
         heading, new LinearLayout.LayoutParams(homeHeader ? -2 : 0, -2, homeHeader ? 0 : 1));
+    if (screen.equals("vocabulary") && activeVocabulary != null) {
+      Button editBtn = button("编辑", v -> notebooks.editWord(activeVocabulary));
+      bar.addView(editBtn);
+    }
     if (screen.equals("assistant")) {
       Button save =
           button(
@@ -877,6 +937,7 @@ public final class MainActivity extends Activity {
     state.putInt("page", page);
     state.putString("screen", screen);
     if (session != null) state.putString("session", session.optString("id"));
+    if (activeVocabulary != null) state.putString("activeVocabulary", activeVocabulary.optString("id"));
     if (query != null) {
       state.putString("draft", query.draft);
       state.putString("context", query.context);
@@ -1048,8 +1109,16 @@ public final class MainActivity extends Activity {
 
   // API 33+ uses the system back dispatcher; older versions invoke onBackPressed.
   void handleBack() {
+    if (query != null && query.assistantView != null && query.assistantView.isDrawerOpen()) {
+      query.assistantView.closeDrawer();
+      return;
+    }
     if (!screen.equals("tabs")) {
       screen = "tabs";
+      render();
+    } else if (page == 2 && notebooks != null && (notebooks.selected != null || !notebooks.filter.isEmpty())) {
+      notebooks.selected = null;
+      notebooks.filter = "";
       render();
     } else if (page != 0) {
       page = 0;

@@ -23,16 +23,18 @@ final class SettingsUi {
     LinearLayout themeRow = a.row();
     for (int i = 0; i < tids.length; i++) {
       final String id = tids[i];
+      LinearLayout.LayoutParams chipLp = new LinearLayout.LayoutParams(0, a.dp(40), 1);
+      if (i > 0) chipLp.leftMargin = a.dp(8);
       themeRow.addView(
           a.chip(
               tnames[i],
               theme.equals(id),
               v -> a.change(() -> Library.put(a.library.settings(), "theme_mode", id))),
-          new LinearLayout.LayoutParams(0, a.dp(40), 1));
+          chipLp);
     }
     LinearLayout.LayoutParams themeRowLp = new LinearLayout.LayoutParams(-1, -2);
-    themeRowLp.topMargin = a.dp(6);
-    themeRowLp.bottomMargin = a.dp(14);
+    themeRowLp.topMargin = a.dp(8);
+    themeRowLp.bottomMargin = a.dp(16);
     themeRow.setLayoutParams(themeRowLp);
     appearance.addView(themeRow);
     appearance.addView(a.text("强调色", 13, true));
@@ -52,12 +54,12 @@ final class SettingsUi {
       dot.setOnClickListener(
           v -> a.change(() -> Library.put(a.library.settings(), "accent_color", color)));
       LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(a.dp(36), a.dp(36));
-      dotLp.rightMargin = a.dp(10);
+      dotLp.rightMargin = a.dp(12);
       colors.addView(dot, dotLp);
     }
     LinearLayout.LayoutParams colorsLp = new LinearLayout.LayoutParams(-1, -2);
     colorsLp.topMargin = a.dp(8);
-    colorsLp.bottomMargin = a.dp(14);
+    colorsLp.bottomMargin = a.dp(16);
     colors.setLayoutParams(colorsLp);
     appearance.addView(colors);
     appearance.addView(a.text("字号", 13, true));
@@ -66,30 +68,38 @@ final class SettingsUi {
     LinearLayout fonts = a.row();
     for (int i = 0; i < fids.length; i++) {
       final String id = fids[i];
+      LinearLayout.LayoutParams chipLp = new LinearLayout.LayoutParams(0, a.dp(40), 1);
+      if (i > 0) chipLp.leftMargin = a.dp(8);
       fonts.addView(
           a.chip(
               fnames[i],
               font.equals(id),
               v -> a.change(() -> Library.put(a.library.settings(), "font_size", id))),
-          new LinearLayout.LayoutParams(0, a.dp(40), 1));
+          chipLp);
     }
     LinearLayout.LayoutParams fontsLp = new LinearLayout.LayoutParams(-1, -2);
-    fontsLp.topMargin = a.dp(6);
-    fontsLp.bottomMargin = a.dp(14);
+    fontsLp.topMargin = a.dp(8);
+    fontsLp.bottomMargin = a.dp(16);
     fonts.setLayoutParams(fontsLp);
     appearance.addView(fonts);
     appearance.addView(a.text("显示密度", 13, true));
     String density = prefs.optString("density", "comfortable");
     LinearLayout densities = a.row();
-    for (String d : new String[] {"comfortable", "compact"})
+    String[] densityKeys = {"comfortable", "compact"};
+    String[] densityNames = {"舒适", "紧凑"};
+    for (int i = 0; i < densityKeys.length; i++) {
+      final String d = densityKeys[i];
+      LinearLayout.LayoutParams chipLp = new LinearLayout.LayoutParams(0, a.dp(40), 1);
+      if (i > 0) chipLp.leftMargin = a.dp(8);
       densities.addView(
           a.chip(
-              d.equals("comfortable") ? "舒适" : "紧凑",
+              densityNames[i],
               density.equals(d),
               v -> a.change(() -> Library.put(a.library.settings(), "density", d))),
-          new LinearLayout.LayoutParams(0, a.dp(40), 1));
+          chipLp);
+    }
     LinearLayout.LayoutParams densitiesLp = new LinearLayout.LayoutParams(-1, -2);
-    densitiesLp.topMargin = a.dp(6);
+    densitiesLp.topMargin = a.dp(8);
     densities.setLayoutParams(densitiesLp);
     appearance.addView(densities);
     LinearLayout notebook = a.card("查询偏好");
@@ -102,13 +112,21 @@ final class SettingsUi {
             a.change(() -> Library.put(a.library.settings(), "auto_record_extra_info", checked)));
     notebook.addView(auto);
     notebook.addView(a.text("仅成功生成并确认的词条自动入库；聊天、失败和本地命中不会重复记录。", 12, false));
-    notebook.addView(a.button("默认记录显示字段", v -> defaultFields()));
+    Button defaultFieldsBtn = a.button("默认记录显示字段", v -> defaultFields());
+    LinearLayout.LayoutParams dfLp = new LinearLayout.LayoutParams(-1, a.dp(40));
+    dfLp.topMargin = a.dp(8);
+    dfLp.bottomMargin = a.dp(6);
+    notebook.addView(defaultFieldsBtn, dfLp);
     String defaultId = prefs.optString("default_notebook_id", "");
     JSONObject defaultNote = a.library.find("notebooks", defaultId);
     notebook.addView(
         a.text(
             "默认保存分类：" + (defaultNote == null ? "未设置" : defaultNote.optString("name")), 14, false));
-    notebook.addView(a.button("选择默认分类", v -> chooseDefaultNotebook()));
+    Button chooseDefaultBtn = a.button("选择默认分类", v -> chooseDefaultNotebook());
+    LinearLayout.LayoutParams cdLp = new LinearLayout.LayoutParams(-1, a.dp(40));
+    cdLp.topMargin = a.dp(4);
+    cdLp.bottomMargin = a.dp(4);
+    notebook.addView(chooseDefaultBtn, cdLp);
     LinearLayout backup = a.card("数据与备份");
     backup.addView(
         a.text(
@@ -116,37 +134,46 @@ final class SettingsUi {
                 + " JSON 图片路径可能无法跨设备读取。",
             14,
             false));
-    backup.addView(a.button("保存完整 ZIP 备份（含图片）", v -> a.backupZip()));
-    backup.addView(
-        a.button(
-            "保存全量 JSON 备份",
-            v ->
-                a.export(
-                    "lexinote-backup.json", "application/json", a.library.backup().toString())));
-    backup.addView(a.button("选择 ZIP / JSON 备份恢复", v -> a.restore()));
-    backup.addView(
-        a.button(
-            "回到上次恢复前",
-            v ->
-                new AlertDialog.Builder(a)
-                    .setMessage("覆盖当前数据，恢复到上次导入前？")
-                    .setNegativeButton("取消", null)
-                    .setPositiveButton(
-                        "恢复",
-                        (d, w) -> {
-                          try {
-                            a.cancel();
-                            a.library = a.repository.rollback();
-                            a.titles.reset();
-                            a.committed = a.library.snapshot();
-                            a.session = null;
-                            a.render();
-                            a.say("已回退");
-                          } catch (Exception e) {
-                            a.error(e);
-                          }
-                        })
-                    .show()));
+    Button zipBackupBtn = a.button("保存完整 ZIP 备份（含图片）", v -> a.backupZip());
+    LinearLayout.LayoutParams zbLp = new LinearLayout.LayoutParams(-1, a.dp(40));
+    zbLp.topMargin = a.dp(6);
+    zbLp.bottomMargin = a.dp(4);
+    backup.addView(zipBackupBtn, zbLp);
+    Button jsonBackupBtn = a.button(
+        "保存全量 JSON 备份",
+        v -> a.export("lexinote-backup.json", "application/json", a.library.backup().toString()));
+    LinearLayout.LayoutParams jbLp = new LinearLayout.LayoutParams(-1, a.dp(40));
+    jbLp.bottomMargin = a.dp(4);
+    backup.addView(jsonBackupBtn, jbLp);
+    Button restoreBtn = a.button("选择 ZIP / JSON 备份恢复", v -> a.restore());
+    LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(-1, a.dp(40));
+    rLp.bottomMargin = a.dp(4);
+    backup.addView(restoreBtn, rLp);
+    Button rollbackBtn = a.button(
+        "回到上次恢复前",
+        v ->
+            new AlertDialog.Builder(a)
+                .setMessage("覆盖当前数据，恢复到上次导入前？")
+                .setNegativeButton("取消", null)
+                .setPositiveButton(
+                    "恢复",
+                    (d, w) -> {
+                      try {
+                        a.cancel();
+                        a.library = a.repository.rollback();
+                        a.titles.reset();
+                        a.committed = a.library.snapshot();
+                        a.session = null;
+                        a.render();
+                        a.say("已回退");
+                      } catch (Exception e) {
+                        a.error(e);
+                      }
+                    })
+                .show());
+    LinearLayout.LayoutParams rbLp = new LinearLayout.LayoutParams(-1, a.dp(40));
+    rbLp.bottomMargin = a.dp(4);
+    backup.addView(rollbackBtn, rbLp);
     LinearLayout about = a.card("LexiNote · Android Java");
     about.addView(
         a.text(

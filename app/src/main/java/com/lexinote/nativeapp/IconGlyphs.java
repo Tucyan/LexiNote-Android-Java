@@ -47,5 +47,7 @@ final class IconGlyphs {
     VALUES.put("hardware-chip-outline", 62309);
     VALUES.put("color-palette-outline", 62078);
     VALUES.put("eye-outline", 62186);
+    VALUES.put("menu-outline", 62363);
+    VALUES.put("close-outline", 62065);
   }
 }

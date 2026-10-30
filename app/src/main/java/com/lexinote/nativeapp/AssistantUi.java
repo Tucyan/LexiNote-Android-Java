@@ -1,9 +1,13 @@
 package com.lexinote.nativeapp;
 
+import android.graphics.Color;
 import android.net.Uri;
+import android.text.TextUtils;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -11,7 +15,10 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
+import android.widget.ScrollView;
 import android.widget.TextView;
+import java.util.ArrayList;
+import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -28,6 +35,79 @@ final class AssistantUi {
   private final Button latest;
   private EditText composer;
   private String partial = "";
+  private FrameLayout drawerOverlay;
+  private View scrim;
+  private DrawerPanelLayout drawerPanel;
+  private EditText drawerSearchInput;
+  private LinearLayout drawerList;
+  private String drawerFilter = "";
+  private boolean drawerOpen = false;
+  private int drawerWidth;
+
+  final class DrawerSwipeLayout extends FrameLayout {
+    private float downX, downY;
+    private boolean tracking;
+
+    DrawerSwipeLayout(android.content.Context context) {
+      super(context);
+    }
+
+    @Override
+    public boolean onInterceptTouchEvent(MotionEvent ev) {
+      if (isDrawerOpen()) return false;
+      switch (ev.getActionMasked()) {
+        case MotionEvent.ACTION_DOWN:
+          downX = ev.getX();
+          downY = ev.getY();
+          tracking = downX < a.dp(80);
+          break;
+        case MotionEvent.ACTION_MOVE:
+          if (tracking) {
+            float dx = ev.getX() - downX;
+            float dy = Math.abs(ev.getY() - downY);
+            if (dx > a.dp(35) && dx > dy * 1.2f) {
+              tracking = false;
+              openDrawer();
+              return true;
+            }
+          }
+          break;
+        case MotionEvent.ACTION_UP:
+        case MotionEvent.ACTION_CANCEL:
+          tracking = false;
+          break;
+      }
+      return super.onInterceptTouchEvent(ev);
+    }
+  }
+
+  final class DrawerPanelLayout extends LinearLayout {
+    private float panelDownX, panelDownY;
+
+    DrawerPanelLayout(android.content.Context context) {
+      super(context);
+      setOrientation(VERTICAL);
+    }
+
+    @Override
+    public boolean onInterceptTouchEvent(MotionEvent ev) {
+      switch (ev.getActionMasked()) {
+        case MotionEvent.ACTION_DOWN:
+          panelDownX = ev.getX();
+          panelDownY = ev.getY();
+          break;
+        case MotionEvent.ACTION_MOVE:
+          float dx = ev.getX() - panelDownX;
+          float dy = Math.abs(ev.getY() - panelDownY);
+          if (dx < -a.dp(35) && Math.abs(dx) > dy * 1.2f) {
+            closeDrawer();
+            return true;
+          }
+          break;
+      }
+      return super.onInterceptTouchEvent(ev);
+    }
+  }
 
   private AssistantUi(MainActivity activity, QueryUi query) {
     a = activity;
@@ -60,16 +140,248 @@ final class AssistantUi {
     int index = a.root.indexOfChild(a.scroll);
     if (index < 0) index = Math.max(0, a.root.getChildCount() - 1);
     a.scroll.setVisibility(View.GONE);
-    FrameLayout timeline = new FrameLayout(a);
+    DrawerSwipeLayout timeline = ui.new DrawerSwipeLayout(a);
     timeline.addView(ui.list, new FrameLayout.LayoutParams(-1, -1));
     FrameLayout.LayoutParams latestLp =
         new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.RIGHT);
     latestLp.setMargins(0, 0, a.dp(16), a.dp(12));
     timeline.addView(ui.latest, latestLp);
+    ui.buildDrawer(timeline);
     a.root.addView(timeline, index, new LinearLayout.LayoutParams(-1, 0, 1));
     ui.composer();
+    if (android.os.Build.VERSION.SDK_INT >= 29) {
+      timeline.post(
+          () -> {
+            List<android.graphics.Rect> rects = new ArrayList<>();
+            rects.add(new android.graphics.Rect(0, 0, a.dp(48), timeline.getHeight()));
+            timeline.setSystemGestureExclusionRects(rects);
+          });
+    }
     ui.list.post(ui::restoreAnchor);
     return ui;
+  }
+
+  private void buildDrawer(ViewGroup container) {
+    drawerWidth =
+        Math.min(a.dp(310), (int) (a.getResources().getDisplayMetrics().widthPixels * 0.85f));
+    drawerOverlay = new FrameLayout(a);
+    drawerOverlay.setVisibility(View.GONE);
+
+    // Semi-transparent scrim
+    scrim = new View(a);
+    scrim.setBackgroundColor(0x66000000);
+    scrim.setOnClickListener(v -> closeDrawer());
+    drawerOverlay.addView(scrim, new FrameLayout.LayoutParams(-1, -1));
+
+    // Drawer panel
+    drawerPanel = new DrawerPanelLayout(a);
+    drawerPanel.setBackground(a.shape(a.card, 0, 0));
+    drawerPanel.setElevation(a.dp(12));
+
+    // Panel Header
+    LinearLayout panelHeader = a.row();
+    panelHeader.setPadding(a.dp(14), a.dp(14), a.dp(14), a.dp(8));
+    TextView title = a.text("AI 会话", 16, true);
+    panelHeader.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+
+    Button newBtn =
+        a.button(
+            "＋ 新建",
+            v -> {
+              closeDrawer();
+              a.cancel();
+              a.clearImage();
+              a.session = a.library.newSession("");
+              a.screen = "assistant";
+              a.render();
+            });
+    newBtn.setTextSize(12 * a.scale);
+    panelHeader.addView(newBtn);
+
+    TextView closeIcon = a.text("✕", 18, false);
+    closeIcon.setTextColor(a.muted);
+    closeIcon.setPadding(a.dp(8), a.dp(4), a.dp(4), a.dp(4));
+    closeIcon.setContentDescription("关闭");
+    closeIcon.setOnClickListener(v -> closeDrawer());
+    panelHeader.addView(closeIcon);
+    drawerPanel.addView(panelHeader);
+
+    // Search box
+    LinearLayout searchWrapper = a.column();
+    searchWrapper.setPadding(a.dp(14), 0, a.dp(14), a.dp(8));
+    drawerSearchInput = a.input("搜索会话…", drawerFilter, false);
+    drawerSearchInput.setTextSize(13 * a.scale);
+    drawerSearchInput.setPadding(a.dp(10), a.dp(8), a.dp(10), a.dp(8));
+    q.track(
+        drawerSearchInput,
+        val -> {
+          drawerFilter = val;
+          renderDrawerItems();
+        });
+    searchWrapper.addView(drawerSearchInput);
+    drawerPanel.addView(searchWrapper);
+
+    // List in a ScrollView
+    ScrollView scroll = new ScrollView(a);
+    scroll.setFillViewport(true);
+    drawerList = a.column();
+    drawerList.setPadding(a.dp(10), 0, a.dp(10), a.dp(20));
+    scroll.addView(drawerList);
+    drawerPanel.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+
+    FrameLayout.LayoutParams panelLp = new FrameLayout.LayoutParams(drawerWidth, -1, Gravity.LEFT);
+    drawerOverlay.addView(drawerPanel, panelLp);
+
+    container.addView(drawerOverlay, new FrameLayout.LayoutParams(-1, -1));
+  }
+
+  boolean isDrawerOpen() {
+    return drawerOpen;
+  }
+
+  void openDrawer() {
+    if (drawerOverlay == null || drawerOpen) return;
+    drawerOpen = true;
+    InputMethodManager imm =
+        (InputMethodManager) a.getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
+    if (imm != null && a.getCurrentFocus() != null) {
+      imm.hideSoftInputFromWindow(a.getCurrentFocus().getWindowToken(), 0);
+    }
+    if (composer != null) composer.clearFocus();
+    renderDrawerItems();
+    drawerOverlay.setVisibility(View.VISIBLE);
+    drawerPanel.setTranslationX(-drawerWidth);
+    drawerPanel.animate().translationX(0).setDuration(220).start();
+    scrim.setAlpha(0f);
+    scrim.animate().alpha(1f).setDuration(220).start();
+  }
+
+  void closeDrawer() {
+    if (drawerOverlay == null || !drawerOpen) return;
+    drawerOpen = false;
+    drawerPanel.animate().translationX(-drawerWidth).setDuration(180).start();
+    scrim
+        .animate()
+        .alpha(0f)
+        .setDuration(180)
+        .withEndAction(
+            () -> {
+              if (!drawerOpen) drawerOverlay.setVisibility(View.GONE);
+            })
+        .start();
+  }
+
+  void toggleDrawer() {
+    if (drawerOpen) closeDrawer();
+    else openDrawer();
+  }
+
+  void renderDrawerItems() {
+    if (drawerList == null) return;
+    drawerList.removeAllViews();
+    JSONArray conversations = Library.sortedSessions(a.library.array("conversations"), true);
+    List<JSONObject> items = new ArrayList<>();
+    String currentId = a.session != null ? a.session.optString("id") : "";
+
+    for (int i = 0; i < conversations.length(); i++) {
+      JSONObject item = conversations.optJSONObject(i);
+      if (item == null) continue;
+      if (q.saved(item) || Library.isTemporary(item)) {
+        String itemTitle = q.title(item);
+        if (drawerFilter.isEmpty()
+            || Library.normalized(itemTitle).contains(Library.normalized(drawerFilter))) {
+          items.add(item);
+        }
+      }
+    }
+
+    if (items.isEmpty()) {
+      TextView empty =
+          a.text(drawerFilter.isEmpty() ? "暂无会话" : "没有符合条件的会话", 13, false);
+      empty.setGravity(Gravity.CENTER);
+      empty.setPadding(0, a.dp(30), 0, a.dp(30));
+      drawerList.addView(empty);
+      return;
+    }
+
+    for (JSONObject item : items) {
+      boolean isCurrent = item.optString("id").equals(currentId);
+      boolean isSaved = q.saved(item);
+
+      LinearLayout row = a.row();
+      row.setPadding(a.dp(10), a.dp(10), a.dp(6), a.dp(10));
+      row.setBackground(
+          a.shape(
+              isCurrent ? (a.accent & 0xFFFFFF) | 0x18000000 : Color.TRANSPARENT,
+              10,
+              isCurrent ? a.accent : 0));
+
+      LinearLayout info = a.column();
+      TextView itemTitle = a.text(q.title(item), 14, isCurrent);
+      if (isCurrent) itemTitle.setTextColor(a.accent);
+      itemTitle.setSingleLine(true);
+      itemTitle.setEllipsize(TextUtils.TruncateAt.END);
+      info.addView(itemTitle);
+
+      LinearLayout metaRow = a.row();
+      metaRow.setPadding(0, a.dp(3), 0, 0);
+
+      TextView badge = a.text(isSaved ? "已保存" : "临时", 10, false);
+      badge.setTextColor(isSaved ? a.accent : a.muted);
+      badge.setBackground(
+          a.shape(
+              isSaved
+                  ? (a.accent & 0xFFFFFF) | 0x20000000
+                  : (a.muted & 0xFFFFFF) | 0x1A000000,
+              4,
+              0));
+      badge.setPadding(a.dp(4), a.dp(1), a.dp(4), a.dp(1));
+      metaRow.addView(badge);
+
+      TextView date = a.text(" · " + q.sessionDate(item, "last_used_at"), 11, false);
+      date.setTextColor(a.subtle);
+      date.setSingleLine(true);
+      metaRow.addView(date);
+
+      info.addView(metaRow);
+
+      row.addView(info, new LinearLayout.LayoutParams(0, -2, 1));
+
+      info.setOnClickListener(
+          v -> {
+            closeDrawer();
+            if (!isCurrent) {
+              q.open(item);
+              a.screen = "assistant";
+              a.render();
+            }
+          });
+      a.passiveLabels(info);
+
+      TextView deleteIcon = a.icon("trash-outline", 18, a.muted);
+      deleteIcon.setPadding(a.dp(8), a.dp(8), a.dp(8), a.dp(8));
+      deleteIcon.setContentDescription("删除" + q.title(item));
+      deleteIcon.setOnClickListener(
+          v -> {
+            q.confirmDeleteConversation(
+                item,
+                () -> {
+                  if (isCurrent) {
+                    closeDrawer();
+                    a.session = null;
+                    a.screen = "tabs";
+                    a.page = 0;
+                    a.render();
+                  } else {
+                    renderDrawerItems();
+                  }
+                });
+          });
+      row.addView(deleteIcon);
+
+      drawerList.addView(row);
+      drawerList.addView(a.gap(4));
+    }
   }
 
   void updatePartial(String safeText) {
