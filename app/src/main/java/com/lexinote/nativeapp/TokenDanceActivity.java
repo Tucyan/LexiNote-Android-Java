@@ -741,22 +741,84 @@ public final class TokenDanceActivity extends Activity {
       return;
     }
 
-    TextView amtLabel = text("充值金额（元）", 12, true);
-    amtLabel.setPadding(0, dp(12), 0, dp(4));
-    card.addView(amtLabel);
+    if (payment != null && payment.status.equals("pending")) {
+      LinearLayout pendingCard = new LinearLayout(this);
+      pendingCard.setOrientation(LinearLayout.VERTICAL);
+      pendingCard.setBackground(shape(inputBgColor, 12, borderColor));
+      pendingCard.setPadding(dp(14), dp(12), dp(14), dp(12));
+      LinearLayout.LayoutParams pcLp = new LinearLayout.LayoutParams(-1, -2);
+      pcLp.topMargin = dp(14);
+      pendingCard.setLayoutParams(pcLp);
 
-    EditText amount = new EditText(this);
-    amount.setHint("充值金额（整数元）");
-    amount.setText(payment == null ? paymentAmount : String.valueOf(payment.amount));
-    amount.setTextColor(foregroundColor);
-    amount.setHintTextColor(mutedColor);
-    amount.setInputType(InputType.TYPE_CLASS_NUMBER);
-    amount.setEnabled(!busy && (payment == null || !payment.status.equals("pending")));
-    amount.setBackground(shape(inputBgColor, 10, borderColor));
-    amount.setPadding(dp(12), dp(10), dp(12), dp(10));
-    card.addView(amount);
+      LinearLayout headerRow = new LinearLayout(this);
+      headerRow.setOrientation(LinearLayout.HORIZONTAL);
+      headerRow.setGravity(Gravity.CENTER_VERTICAL);
 
-    if (payment == null || !payment.status.equals("pending")) {
+      TextView pTitle = text("进行中的充值", 13, true);
+      headerRow.addView(pTitle, new LinearLayout.LayoutParams(0, -2, 1));
+
+      TextView badge = text("待支付", 11, true);
+      badge.setTextColor(accentColor);
+      badge.setBackground(shape((accentColor & 0xFFFFFF) | 0x1A000000, 6, accentColor));
+      badge.setPadding(dp(8), dp(2), dp(8), dp(2));
+      headerRow.addView(badge);
+      pendingCard.addView(headerRow);
+
+      TextView amountBig = text("¥" + payment.amount, 22, true);
+      amountBig.setTextColor(accentColor);
+      amountBig.setPadding(0, dp(4), 0, dp(4));
+      pendingCard.addView(amountBig);
+
+      boolean expired = payment.expiredAt <= System.currentTimeMillis() / 1000L;
+      String tipStr = expired
+          ? "支付入口已到期，实际到账状态尚待服务端确认。请检查到账状态或放弃订单重新创建。"
+          : "如已在支付宝完成付款，请点击「检查到账状态」；若取消了支付，可点击「放弃本次充值」重新操作。";
+      TextView pSub = text(tipStr, 12, false);
+      pSub.setTextColor(mutedColor);
+      pendingCard.addView(pSub);
+
+      card.addView(pendingCard);
+
+      if (payment.alipayUrl != null && !expired) {
+        Button payBtn = primaryButton("支付宝支付 ¥" + payment.amount, () -> confirmPayment(payment.alipayUrl));
+        LinearLayout.LayoutParams pbLp = new LinearLayout.LayoutParams(-1, dp(42));
+        pbLp.topMargin = dp(12);
+        card.addView(payBtn, pbLp);
+      }
+
+      LinearLayout actRow = new LinearLayout(this);
+      actRow.setOrientation(LinearLayout.HORIZONTAL);
+      actRow.setGravity(Gravity.CENTER_VERTICAL);
+      LinearLayout.LayoutParams arLp = new LinearLayout.LayoutParams(-1, -2);
+      arLp.topMargin = dp(10);
+      actRow.setLayoutParams(arLp);
+
+      Button checkBtn = outlineButton("检查到账状态", this::checkPaymentManual);
+      Button cancelBtn = outlineButton("放弃本次充值", this::promptCancelPayment);
+      cancelBtn.setTextColor(errorColor);
+
+      LinearLayout.LayoutParams cbLp = new LinearLayout.LayoutParams(0, dp(40), 1);
+      cbLp.rightMargin = dp(8);
+      actRow.addView(checkBtn, cbLp);
+      actRow.addView(cancelBtn, new LinearLayout.LayoutParams(0, dp(40), 1));
+      card.addView(actRow);
+
+    } else {
+      TextView amtLabel = text("充值金额（元）", 12, true);
+      amtLabel.setPadding(0, dp(12), 0, dp(4));
+      card.addView(amtLabel);
+
+      EditText amount = new EditText(this);
+      amount.setHint("充值金额（整数元）");
+      amount.setText(payment == null ? paymentAmount : String.valueOf(payment.amount));
+      amount.setTextColor(foregroundColor);
+      amount.setHintTextColor(mutedColor);
+      amount.setInputType(InputType.TYPE_CLASS_NUMBER);
+      amount.setEnabled(!busy);
+      amount.setBackground(shape(inputBgColor, 10, borderColor));
+      amount.setPadding(dp(12), dp(10), dp(12), dp(10));
+      card.addView(amount);
+
       Button createBtn = primaryButton("创建充值会话", () -> {
         String value = amount.getText().toString().trim();
         if (!value.matches("[0-9]{1,6}") || Integer.parseInt(value) < 1 || Integer.parseInt(value) > 100000) {
@@ -778,29 +840,37 @@ public final class TokenDanceActivity extends Activity {
       LinearLayout.LayoutParams cbLp = new LinearLayout.LayoutParams(-1, dp(42));
       cbLp.topMargin = dp(14);
       card.addView(createBtn, cbLp);
-    }
 
-    if (payment != null) {
-      if (payment.status.equals("pending") && payment.alipayUrl != null && payment.expiredAt > System.currentTimeMillis() / 1000L) {
-        Button payBtn = primaryButton("支付宝支付 ¥" + payment.amount, () -> confirmPayment(payment.alipayUrl));
-        LinearLayout.LayoutParams pbLp = new LinearLayout.LayoutParams(-1, dp(42));
-        pbLp.topMargin = dp(10);
-        card.addView(payBtn, pbLp);
-      }
-      Button checkBtn = outlineButton("检查到账状态", this::checkPayment);
-      LinearLayout.LayoutParams ckbLp = new LinearLayout.LayoutParams(-1, dp(40));
-      ckbLp.topMargin = dp(10);
-      card.addView(checkBtn, ckbLp);
-
-      if (payment.status.equals("pending") && payment.expiredAt > System.currentTimeMillis() / 1000L) {
-        TextView expTip = text("充值会话将在到期后停止检查。返回应用时会自动确认到账。", 11.5f, false);
-        expTip.setTextColor(mutedColor);
-        expTip.setPadding(0, dp(8), 0, 0);
-        card.addView(expTip);
+      if (payment != null && payment.status.equals("paid")) {
+        TextView successTip = text("上一笔充值 ¥" + payment.amount + " 已成功到账，可返回继续查词，或继续充值。", 12, false);
+        successTip.setTextColor(accentColor);
+        successTip.setPadding(0, dp(10), 0, 0);
+        card.addView(successTip);
       }
     }
 
     rechargeContent.addView(card);
+  }
+
+  void cancelPayment() {
+    handler.removeCallbacks(poll);
+    payment = null;
+    try {
+      secure.saveTokenDancePayment(null);
+    } catch (Exception ignored) { }
+    notice = "已放弃当前充值，可重新输入金额创建。";
+    showRecharge();
+    Toast.makeText(this, "已取消当前充值订单", Toast.LENGTH_SHORT).show();
+  }
+
+  void promptCancelPayment() {
+    if (busy || payment == null) return;
+    new AlertDialog.Builder(this)
+        .setTitle("放弃当前充值")
+        .setMessage("确认放弃当前的 ¥" + payment.amount + " 充值订单？\n（若已在支付宝完成付款，稍后到账依然有效）")
+        .setNegativeButton("继续保留", null)
+        .setPositiveButton("放弃并重新输入", (d, w) -> cancelPayment())
+        .show();
   }
 
   void createPayment(int amount) {
@@ -879,6 +949,15 @@ public final class TokenDanceActivity extends Activity {
   }
 
   void checkPayment() {
+    checkPaymentWithFeedback(false);
+  }
+
+  void checkPaymentManual() {
+    if (busy) return;
+    checkPaymentWithFeedback(true);
+  }
+
+  void checkPaymentWithFeedback(boolean manualCheck) {
     if (busy || payment == null || !mode.equals("recharge") || !foreground) return;
     expiryChecked = payment.expiredAt <= System.currentTimeMillis() / 1000L;
     final String id = payment.id;
@@ -893,8 +972,23 @@ public final class TokenDanceActivity extends Activity {
         savePayment();
         pollFailures = 0;
         updatePaymentNotice();
+
+        if (manualCheck) {
+          if (payment.status.equals("paid")) {
+            Toast.makeText(this, "充值已到账！¥" + payment.amount, Toast.LENGTH_LONG).show();
+          } else if (payment.status.equals("pending")) {
+            String timeStr = new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(new java.util.Date());
+            Toast.makeText(this, "尚未查询到支付成功记录，请确认是否已完成付款", Toast.LENGTH_SHORT).show();
+            notice = "已检查：尚未到账（更新于 " + timeStr + "），可点击下方按钮继续支付或放弃充值。";
+          } else if (payment.status.equals("expired")) {
+            Toast.makeText(this, "充值会话已过期，请重新创建", Toast.LENGTH_SHORT).show();
+          }
+        }
+
         showRecharge();
-        schedulePoll(3000);
+        if (payment.status.equals("pending")) {
+          schedulePoll(3000);
+        }
       }, "暂时无法确认到账，可点检查到账状态重试。");
     } catch (Exception e) {
       fail("无法读取 TokenDance 密钥，请重新连接。");
@@ -980,6 +1074,10 @@ public final class TokenDanceActivity extends Activity {
     super.onResume();
     foreground = true;
     expiryChecked = false;
+    if (mode.equals("recharge") && payment != null && payment.status.equals("pending")) {
+      notice = "已从外部返回。若已完成支付，可稍候或点击「检查到账状态」；若取消了支付，可点击「放弃本次充值」。";
+      showRecharge();
+    }
     schedulePoll(100);
   }
 
