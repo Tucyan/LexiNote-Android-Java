@@ -876,15 +876,6 @@ final class NotebookUi {
         selected = null;
         return;
       }
-      String p = n.optString("parent_id", "");
-      if (!p.isEmpty() && !p.equals("null"))
-        a.body.addView(
-            a.button(
-                "↑ 上一级",
-                v -> {
-                  selected = p;
-                  a.render();
-                }));
     }
     List<JSONObject> rows = visible();
     pruneSelection(rows);
