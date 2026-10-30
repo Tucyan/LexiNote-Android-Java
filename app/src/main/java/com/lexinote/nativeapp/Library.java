@@ -7,6 +7,9 @@ import org.json.*;
 /** JSON-preserving domain model, independent from Android. */
 public final class Library {
   private JSONObject data;
+  private ReviewPlans reviewPlans;
+
+  public ReviewPlans reviewPlans() { return reviewPlans; }
 
   public static String id() {
     return UUID.randomUUID().toString();
@@ -39,6 +42,7 @@ public final class Library {
       put(data, k, new JSONArray());
     put(data, "settings", new JSONObject());
     normalizeSystemRoots();
+    reviewPlans = new ReviewPlans(this, data);
   }
 
   public Library(JSONObject source) {
@@ -49,6 +53,7 @@ public final class Library {
     if (!data.has("settings")) put(data, "settings", new JSONObject());
     normalizeSystemRoots();
     normalizeSessionMetadata();
+    reviewPlans = new ReviewPlans(this, data);
   }
 
   public static boolean systemGlobal(JSONObject n) {
@@ -173,6 +178,11 @@ public final class Library {
   }
 
   public void deleteNotebook(String id) {
+    reviewPlans.checkNotebookDeletion(id);
+    deleteNotebookUnchecked(id);
+  }
+
+  private void deleteNotebookUnchecked(String id) {
     JSONObject n = find("notebooks", id);
     if (n == null) return;
     if (n.optBoolean("is_default")
@@ -180,7 +190,7 @@ public final class Library {
         || id.equals(settings().optString("default_notebook_id")))
       throw new IllegalArgumentException("默认笔记和全局视图不能删除");
     JSONArray children = n.optJSONArray("child_notebook_ids");
-    for (int i = children.length() - 1; i >= 0; i--) deleteNotebook(children.optString(i));
+    for (int i = children.length() - 1; i >= 0; i--) deleteNotebookUnchecked(children.optString(i));
     for (int i = array("notebooks").length() - 1; i >= 0; i--) {
       JSONObject p = array("notebooks").optJSONObject(i);
       removeValue(p.optJSONArray("child_notebook_ids"), id);
@@ -622,6 +632,7 @@ public final class Library {
   }
 
   public static void validate(JSONObject d) {
+    ReviewPlanSchema.validate(d);
     String version = d.optString("version", "1.1");
     if (!Arrays.asList("1.0", "1.1", "2.0", "2.1", "2.2").contains(version))
       throw new IllegalArgumentException("不支持的备份版本");

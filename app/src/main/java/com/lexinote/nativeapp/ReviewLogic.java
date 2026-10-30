@@ -62,6 +62,10 @@ final class ReviewLogic {
     return years + "年后";
   }
 
+  private static int bounded(long value) {
+    return (int) Math.min(Integer.MAX_VALUE, Math.max(0, value));
+  }
+
   static ScheduleResult calculateSchedule(JSONObject word, String grade, long now) {
     int count = (word != null) ? word.optInt("review_count", 0) : 0;
     Integer currentLevel = (word != null && word.has("review_mastery_level") && !word.isNull("review_mastery_level"))
@@ -74,11 +78,11 @@ final class ReviewLogic {
     if (prevInterval <= 0) {
       if (count == 1) prevInterval = 1;
       else if (count == 2) prevInterval = 3;
-      else if (count >= 3) prevInterval = Math.max(4, count * 2);
+      else if (count >= 3) prevInterval = Math.max(4, bounded((long) count * 2));
     }
 
     int nextLvl = nextLevel(currentLevel, count, prevGrade, grade);
-    int nextCnt = count + 1;
+    int nextCnt = bounded((long) count + 1);
     double nextEf = ef;
     int nextDays;
     long nextDue;
@@ -96,7 +100,7 @@ final class ReviewLogic {
       } else if (count == 1) {
         nextDays = 2;
       } else {
-        nextDays = Math.max(prevInterval + 1, (int) Math.round(prevInterval * 1.2));
+        nextDays = bounded(Math.max((long) prevInterval + 1, Math.round(prevInterval * 1.2)));
       }
       nextDue = now + ((long) nextDays * 86400000L);
       label = formatInterval(nextDays);
@@ -107,7 +111,7 @@ final class ReviewLogic {
       } else if (count == 1) {
         nextDays = 6;
       } else {
-        nextDays = Math.max(prevInterval + 2, (int) Math.round(prevInterval * nextEf));
+        nextDays = bounded(Math.max((long) prevInterval + 2, Math.round(prevInterval * nextEf)));
       }
       nextDue = now + ((long) nextDays * 86400000L);
       label = formatInterval(nextDays);

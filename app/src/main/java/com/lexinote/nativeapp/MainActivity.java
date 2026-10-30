@@ -124,6 +124,7 @@ public final class MainActivity extends Activity {
           review.selectedTags.clear();
           review.selectedTags.addAll(tags);
         }
+        review.activePlanId = state.getString("review_active_plan_id", null);
       }
     }
     if (state != null && state.getString("export") != null) {
@@ -964,6 +965,9 @@ public final class MainActivity extends Activity {
       state.putInt("review_batch_size", review.batchSize);
       if (!review.selectedTags.isEmpty()) {
         state.putStringArrayList("review_selected_tags", new ArrayList<>(review.selectedTags));
+      }
+      if (review.activePlanId != null) {
+        state.putString("review_active_plan_id", review.activePlanId);
       }
     }
     if (query != null) {
