@@ -9,12 +9,16 @@ import java.util.*;
 import org.json.*;
 
 final class NotebookUi {
+  static final Set<String> SYSTEM_STATUS_TAGS = new HashSet<>(Arrays.asList("已学习", "待复习", "未学习"));
+
   final MainActivity a;
-  String selected = null, filter = "", typeFilter = "全部", tagFilter = "全部";
+  String selected = null, filter = "", typeFilter = "全部";
+  final LinkedHashSet<String> selectedTags = new LinkedHashSet<>();
   String statusFilter = "全部"; // 全部, 待复习, 已学习
   String featureFilter = "全部"; // 全部, 有批注, 多释义
   String sortOrder = "最新"; // 最新, 最早, A-Z, Z-A
   String viewMode = "compact"; // compact, detailed
+  String activeCollectionId = null;
   boolean selecting = false;
   final LinkedHashSet<String> selectedVocabularyIds = new LinkedHashSet<>();
 
@@ -25,7 +29,7 @@ final class NotebookUi {
   int activeFilterCount() {
     int count = 0;
     if (!"全部".equals(typeFilter)) count++;
-    if (!"全部".equals(tagFilter)) count++;
+    count += selectedTags.size();
     if (!"全部".equals(statusFilter)) count++;
     if (!"全部".equals(featureFilter)) count++;
     if (!"最新".equals(sortOrder)) count++;
@@ -34,7 +38,7 @@ final class NotebookUi {
 
   void resetFilters() {
     typeFilter = "全部";
-    tagFilter = "全部";
+    selectedTags.clear();
     statusFilter = "全部";
     featureFilter = "全部";
     sortOrder = "最新";
@@ -53,19 +57,31 @@ final class NotebookUi {
     return false;
   }
 
+  static boolean isChildNotebook(JSONObject n) {
+    if (n == null || !n.has("parent_id") || n.isNull("parent_id")) return false;
+    String p = n.optString("parent_id", "").trim();
+    return !p.isEmpty() && !"null".equalsIgnoreCase(p);
+  }
+
   boolean isMastered(JSONObject v) {
     if (v == null) return false;
-    if (contains(v.optJSONArray("tags"), "已学习")) return true;
     Integer level = v.has("review_mastery_level") && !v.isNull("review_mastery_level")
         ? v.optInt("review_mastery_level") : null;
-    return ReviewLogic.mastered(level, v.optInt("review_count"), v.optString("review_grade", ""));
+    int count = v.optInt("review_count", 0);
+    String grade = v.optString("review_grade", "");
+    if (ReviewLogic.mastered(level, count, grade)) return true;
+    if (count == 0 && contains(v.optJSONArray("tags"), "已学习")) return true;
+    return false;
   }
 
   boolean isDue(JSONObject v) {
     if (v == null) return false;
-    if (contains(v.optJSONArray("tags"), "待复习")) return true;
     if (isMastered(v)) return false;
-    return v.optLong("review_due", 0) <= System.currentTimeMillis();
+    int count = v.optInt("review_count", 0);
+    long due = v.optLong("review_due", 0);
+    if (count > 0 && due <= System.currentTimeMillis()) return true;
+    if (count == 0 && contains(v.optJSONArray("tags"), "待复习")) return true;
+    return false;
   }
 
   List<String> findReferencingNotebooks(String vocabId) {
@@ -81,7 +97,31 @@ final class NotebookUi {
     return names;
   }
 
-  int countMatches(String type, String status, String feature, String tag) {
+  int countTotalVocabRecursive(JSONObject notebook) {
+    if (notebook == null) return 0;
+    Set<String> allVocabIds = new HashSet<>();
+    collectVocabIdsRecursive(notebook, allVocabIds);
+    return allVocabIds.size();
+  }
+
+  void collectVocabIdsRecursive(JSONObject notebook, Set<String> out) {
+    if (notebook == null) return;
+    JSONArray direct = notebook.optJSONArray("vocabulary_ids");
+    for (int i = 0; direct != null && i < direct.length(); i++) {
+      String vid = direct.optString(i);
+      if (!vid.isEmpty()) out.add(vid);
+    }
+    JSONArray children = notebook.optJSONArray("child_notebook_ids");
+    for (int i = 0; children != null && i < children.length(); i++) {
+      String cid = children.optString(i);
+      JSONObject child = a.library.find("notebooks", cid);
+      if (child != null) {
+        collectVocabIdsRecursive(child, out);
+      }
+    }
+  }
+
+  int countMatches(String type, String status, String feature, Set<String> tags) {
     JSONObject n = (selected == null || "nb_global_root".equals(selected))
         ? null : a.library.find("notebooks", selected);
     JSONArray refs = n == null ? null : n.optJSONArray("vocabulary_ids");
@@ -94,7 +134,17 @@ final class NotebookUi {
       if (!type.equals("全部")
           && !v.optString("type", "word").equals(type.equals("短语") ? "phrase" : "word"))
         continue;
-      if (!tag.equals("全部") && !contains(v.optJSONArray("tags"), tag)) continue;
+      if (tags != null && !tags.isEmpty()) {
+        boolean allMatched = true;
+        JSONArray vTags = v.optJSONArray("tags");
+        for (String t : tags) {
+          if (!contains(vTags, t)) {
+            allMatched = false;
+            break;
+          }
+        }
+        if (!allMatched) continue;
+      }
       if (!status.equals("全部")) {
         if ("待复习".equals(status) && !isDue(v)) continue;
         if ("已学习".equals(status) && !isMastered(v)) continue;
@@ -124,7 +174,17 @@ final class NotebookUi {
       if (!typeFilter.equals("全部")
           && !v.optString("type", "word").equals(typeFilter.equals("短语") ? "phrase" : "word"))
         continue;
-      if (!tagFilter.equals("全部") && !contains(v.optJSONArray("tags"), tagFilter)) continue;
+      if (!selectedTags.isEmpty()) {
+        boolean allMatched = true;
+        JSONArray vTags = v.optJSONArray("tags");
+        for (String t : selectedTags) {
+          if (!contains(vTags, t)) {
+            allMatched = false;
+            break;
+          }
+        }
+        if (!allMatched) continue;
+      }
       if (!statusFilter.equals("全部")) {
         if ("待复习".equals(statusFilter) && !isDue(v)) continue;
         if ("已学习".equals(statusFilter) && !isMastered(v)) continue;
@@ -170,7 +230,11 @@ final class NotebookUi {
   void show() {
     boolean showBookshelf = (selected == null && filter.trim().isEmpty());
     if (showBookshelf) {
-      renderBookshelf();
+      if (activeCollectionId != null) {
+        renderSubBookshelf();
+      } else {
+        renderBookshelf();
+      }
     } else {
       renderNotebookVocabList();
     }
@@ -240,7 +304,7 @@ final class NotebookUi {
 
     JSONObject defaultNb = a.library.find("notebooks", "nb_default");
     if (defaultNb != null) {
-      bookCards.add(createNotebookBookCard(defaultNb, "#10B981"));
+      bookCards.add(createNotebookBookCard(defaultNb, "#10B981", false));
     }
 
     JSONArray allNb = a.library.array("notebooks");
@@ -253,11 +317,99 @@ final class NotebookUi {
       if (n == null) continue;
       String id = n.optString("id");
       if ("nb_global_root".equals(id) || "nb_default".equals(id)) continue;
+      if (isChildNotebook(n)) continue; // 子分类不平铺展示在一级书架
       String color = spineColors[colorIdx % spineColors.length];
       colorIdx++;
-      bookCards.add(createNotebookBookCard(n, color));
+      bookCards.add(createNotebookBookCard(n, color, false));
     }
     bookCards.add(createAddBookCard());
+
+    for (int i = 0; i < bookCards.size(); i += 2) {
+      LinearLayout gridRow = a.row();
+      gridRow.setPadding(0, 0, 0, a.dp(12));
+      gridRow.addView(bookCards.get(i), new LinearLayout.LayoutParams(0, a.dp(130), 1));
+      if (i + 1 < bookCards.size()) {
+        View spacer = new View(a);
+        gridRow.addView(spacer, new LinearLayout.LayoutParams(a.dp(12), 1));
+        gridRow.addView(bookCards.get(i + 1), new LinearLayout.LayoutParams(0, a.dp(130), 1));
+      } else {
+        View placeholder = new View(a);
+        gridRow.addView(placeholder, new LinearLayout.LayoutParams(0, 1, 1));
+      }
+      a.body.addView(gridRow);
+    }
+  }
+
+  void renderSubBookshelf() {
+    a.body.removeAllViews();
+    a.body.setPadding(a.dp(16), a.dp(8), a.dp(16), a.dp(32));
+
+    JSONObject collection = a.library.find("notebooks", activeCollectionId);
+    if (collection == null) {
+      activeCollectionId = null;
+      renderBookshelf();
+      return;
+    }
+
+    String colName = collection.optString("name", "合集");
+    JSONArray childIds = collection.optJSONArray("child_notebook_ids");
+    int totalChildNotes = childIds == null ? 0 : childIds.length();
+    int totalVocabs = countTotalVocabRecursive(collection);
+
+    // 1. Navigation Top Bar (返回一级书架)
+    LinearLayout navRow = a.row();
+    navRow.setGravity(Gravity.CENTER_VERTICAL);
+    navRow.setPadding(0, a.dp(4), 0, a.dp(12));
+
+    Button backBtn = a.chip("‹ 电子书架", true, v -> {
+      activeCollectionId = null;
+      filter = "";
+      a.render();
+    });
+    navRow.addView(backBtn);
+
+    TextView navTitle = a.text(" " + colName, 17, true);
+    navTitle.setSingleLine(true);
+    navTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
+    LinearLayout.LayoutParams ntLp = new LinearLayout.LayoutParams(0, -2, 1);
+    ntLp.leftMargin = a.dp(8);
+    navRow.addView(navTitle, ntLp);
+
+    Button manageBtn = a.chip("管理合集", false, v -> manage(collection));
+    manageBtn.setTextSize(12 * a.scale);
+    navRow.addView(manageBtn);
+    a.body.addView(navRow);
+
+    // 2. Collection Sub-header
+    LinearLayout colHeader = a.row();
+    colHeader.setGravity(Gravity.CENTER_VERTICAL);
+    colHeader.setPadding(0, 0, 0, a.dp(14));
+
+    LinearLayout colInfo = a.column();
+    TextView subtitle = a.text("合集内共 " + totalChildNotes + " 本分册 · " + totalVocabs + " 条词汇", 12, false);
+    subtitle.setTextColor(a.muted);
+    colInfo.addView(subtitle);
+    colHeader.addView(colInfo, new LinearLayout.LayoutParams(0, -2, 1));
+
+    Button addSubBtn = a.chip("＋ 新建分册", true, v -> create(activeCollectionId));
+    addSubBtn.setTextSize(12 * a.scale);
+    colHeader.addView(addSubBtn);
+    a.body.addView(colHeader);
+
+    // 3. Child Notebook Cards Grid (2 columns)
+    List<View> bookCards = new ArrayList<>();
+    String[] spineColors = new String[] {
+      "#8B5CF6", "#EC4899", "#F59E0B", "#06B6D4", "#3B82F6", "#14B8A6", "#6366F1"
+    };
+
+    for (int i = 0; childIds != null && i < childIds.length(); i++) {
+      String cid = childIds.optString(i);
+      JSONObject childNb = a.library.find("notebooks", cid);
+      if (childNb == null) continue;
+      String color = spineColors[i % spineColors.length];
+      bookCards.add(createNotebookBookCard(childNb, color, true));
+    }
+    bookCards.add(createAddSubBookCard(activeCollectionId));
 
     for (int i = 0; i < bookCards.size(); i += 2) {
       LinearLayout gridRow = a.row();
@@ -334,7 +486,7 @@ final class NotebookUi {
     return card;
   }
 
-  View createNotebookBookCard(JSONObject n, String spineColor) {
+  View createNotebookBookCard(JSONObject n, String spineColor, boolean isSubBookshelf) {
     LinearLayout card = a.column();
     card.setBackground(a.shape(a.card, 16, a.border));
     card.setPadding(0, 0, 0, 0);
@@ -342,14 +494,29 @@ final class NotebookUi {
     card.setFocusable(true);
 
     String id = n.optString("id");
-    card.setOnClickListener(v -> {
-      selected = id;
-      a.render();
-    });
-    card.setOnLongClickListener(v -> {
-      manage(n);
-      return true;
-    });
+    JSONArray children = n.optJSONArray("child_notebook_ids");
+    boolean isCollection = children != null && children.length() > 0;
+    int recursiveVocabs = countTotalVocabRecursive(n);
+
+    if (isCollection && !isSubBookshelf) {
+      card.setOnClickListener(v -> {
+        activeCollectionId = id;
+        a.render();
+      });
+      card.setOnLongClickListener(v -> {
+        manage(n);
+        return true;
+      });
+    } else {
+      card.setOnClickListener(v -> {
+        selected = id;
+        a.render();
+      });
+      card.setOnLongClickListener(v -> {
+        manage(n);
+        return true;
+      });
+    }
 
     LinearLayout inner = a.row();
     inner.setLayoutParams(new LinearLayout.LayoutParams(-1, -1));
@@ -364,25 +531,25 @@ final class NotebookUi {
 
     LinearLayout topRow = a.row();
     topRow.setGravity(Gravity.CENTER_VERTICAL);
-    String iconName = n.optBoolean("is_default") ? "bookmark-outline" : "folder-outline";
+    String iconName = n.optBoolean("is_default") ? "bookmark-outline"
+        : (isCollection && !isSubBookshelf) ? "library-outline" : "folder-outline";
     topRow.addView(a.icon(iconName, 18, Color.parseColor(spineColor)));
 
     View metaSpacer = new View(a);
     topRow.addView(metaSpacer, new LinearLayout.LayoutParams(0, 1, 1));
 
-    JSONArray children = n.optJSONArray("child_notebook_ids");
     if (n.optBoolean("is_default")) {
       TextView defBadge = a.text("默认", 10, true);
       defBadge.setTextColor(Color.parseColor(spineColor));
       defBadge.setPadding(a.dp(4), a.dp(1), a.dp(4), a.dp(1));
       defBadge.setBackground(a.shape((Color.parseColor(spineColor) & 0x00FFFFFF) | 0x1A000000, 6, 0));
       topRow.addView(defBadge);
-    } else if (children != null && children.length() > 0) {
-      TextView childBadge = a.text(children.length() + " 个子分类", 10, false);
-      childBadge.setTextColor(a.muted);
-      childBadge.setPadding(a.dp(4), a.dp(1), a.dp(4), a.dp(1));
-      childBadge.setBackground(a.shape(a.inputBg, 6, a.border));
-      topRow.addView(childBadge);
+    } else if (isCollection && !isSubBookshelf) {
+      TextView colBadge = a.text("📚 合集", 10, true);
+      colBadge.setTextColor(Color.parseColor(spineColor));
+      colBadge.setPadding(a.dp(4), a.dp(1), a.dp(4), a.dp(1));
+      colBadge.setBackground(a.shape((Color.parseColor(spineColor) & 0x00FFFFFF) | 0x1A000000, 6, 0));
+      topRow.addView(colBadge);
     }
     content.addView(topRow);
 
@@ -394,9 +561,15 @@ final class NotebookUi {
     tLp.topMargin = a.dp(6);
     content.addView(titleTv, tLp);
 
-    JSONArray vocabIds = n.optJSONArray("vocabulary_ids");
-    int count = vocabIds == null ? 0 : vocabIds.length();
-    TextView countTv = a.text(count + " 条词汇", 11, false);
+    String countStr;
+    if (isCollection && !isSubBookshelf) {
+      countStr = children.length() + " 本分册 · " + recursiveVocabs + " 词";
+    } else {
+      JSONArray vocabIds = n.optJSONArray("vocabulary_ids");
+      int count = vocabIds == null ? 0 : vocabIds.length();
+      countStr = count + " 条词汇";
+    }
+    TextView countTv = a.text(countStr, 11, false);
     countTv.setTextColor(a.muted);
     content.addView(countTv);
 
@@ -438,26 +611,65 @@ final class NotebookUi {
     return card;
   }
 
+  View createAddSubBookCard(String parentId) {
+    LinearLayout card = a.column();
+    card.setBackground(a.shape(a.card, 16, a.border));
+    card.setPadding(a.dp(10), a.dp(10), a.dp(10), a.dp(10));
+    card.setGravity(Gravity.CENTER);
+    card.setClickable(true);
+    card.setFocusable(true);
+    card.setOnClickListener(v -> create(parentId));
+
+    LinearLayout col = a.column();
+    col.setGravity(Gravity.CENTER);
+
+    TextView icon = a.icon("add-circle-outline", 28, a.accent);
+    col.addView(icon);
+
+    TextView label = a.text("新建分册", 14, true);
+    label.setTextColor(a.accent);
+    LinearLayout.LayoutParams lLp = new LinearLayout.LayoutParams(-2, -2);
+    lLp.topMargin = a.dp(6);
+    col.addView(label, lLp);
+
+    TextView sub = a.text("在此合集下添加", 11, false);
+    sub.setTextColor(a.muted);
+    LinearLayout.LayoutParams sLp = new LinearLayout.LayoutParams(-2, -2);
+    sLp.topMargin = a.dp(2);
+    col.addView(sub, sLp);
+
+    card.addView(col);
+    a.passiveLabels(card);
+    return card;
+  }
+
   void renderNotebookVocabList() {
     LinearLayout controls = a.column();
     controls.setBackgroundColor(a.card);
     a.root.addView(controls, a.root.indexOfChild(a.scroll));
     a.body.setPadding(a.dp(14), 0, a.dp(14), a.dp(32));
 
+    JSONObject selectedNote = (selected == null || "nb_global_root".equals(selected))
+        ? null : a.library.find("notebooks", selected);
+
+    if (selectedNote != null && activeCollectionId == null) {
+      if (isChildNotebook(selectedNote)) {
+        activeCollectionId = selectedNote.optString("parent_id");
+      }
+    }
+
     // 1. Navigation Top Bar
     LinearLayout navBar = a.row();
     navBar.setGravity(Gravity.CENTER_VERTICAL);
     navBar.setPadding(a.dp(14), a.dp(6), a.dp(14), a.dp(6));
 
-    Button backBtn = a.chip("‹ 切换笔记", true, v -> {
+    String backText = activeCollectionId != null ? "‹ 返回合集" : "‹ 切换笔记";
+    Button backBtn = a.chip(backText, true, v -> {
       selected = null;
       filter = "";
       a.render();
     });
     navBar.addView(backBtn);
-
-    JSONObject selectedNote = (selected == null || "nb_global_root".equals(selected))
-        ? null : a.library.find("notebooks", selected);
 
     String displayName;
     String iconName;
@@ -588,8 +800,11 @@ final class NotebookUi {
       lp.rightMargin = a.dp(4);
       activeChips.addView(c, lp);
     }
-    if (!"全部".equals(tagFilter)) {
-      Button c = a.chip("#" + tagFilter + " ✕", true, v -> { tagFilter = "全部"; a.render(); });
+    for (String tag : selectedTags) {
+      Button c = a.chip("#" + tag + " ✕", true, v -> {
+        selectedTags.remove(tag);
+        a.render();
+      });
       c.setTextSize(10 * a.scale);
       c.setPadding(a.dp(6), 0, a.dp(6), 0);
       LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, a.dp(26));
@@ -734,7 +949,7 @@ final class NotebookUi {
     final String[] tempStatus = {statusFilter};
     final String[] tempFeature = {featureFilter};
     final String[] tempSort = {sortOrder};
-    final String[] tempTag = {tagFilter};
+    final LinkedHashSet<String> tempTags = new LinkedHashSet<>(selectedTags);
 
     ScrollView scroll = new ScrollView(a);
     scroll.setFillViewport(true);
@@ -764,12 +979,12 @@ final class NotebookUi {
     dLp1.bottomMargin = a.dp(12);
     sheet.addView(div1, dLp1);
 
-    Button applyBtn = a.button("应用筛选 (" + countMatches(tempType[0], tempStatus[0], tempFeature[0], tempTag[0]) + " 条)", null);
+    Button applyBtn = a.button("应用筛选 (" + countMatches(tempType[0], tempStatus[0], tempFeature[0], tempTags) + " 条)", null);
     applyBtn.setBackground(a.shape(a.accent, 10, a.accent));
     applyBtn.setTextColor(Color.WHITE);
 
     Runnable updateApplyCount = () -> {
-      int count = countMatches(tempType[0], tempStatus[0], tempFeature[0], tempTag[0]);
+      int count = countMatches(tempType[0], tempStatus[0], tempFeature[0], tempTags);
       applyBtn.setText("应用筛选 (" + count + " 条结果)");
     };
 
@@ -871,25 +1086,34 @@ final class NotebookUi {
     }
     sheet.addView(sortRow);
 
-    // 5. 标签分类 (带快速搜索)
+    // 5. 标签分类 (按当前笔记本上下文动态统计 + 频次降序 + 流式自适应多选)
+    JSONObject currentNb = (selected == null || "nb_global_root".equals(selected))
+        ? null : a.library.find("notebooks", selected);
+    JSONArray currentRefs = currentNb == null ? null : currentNb.optJSONArray("vocabulary_ids");
+    String currentNbName = currentNb != null ? currentNb.optString("name") : null;
+
     Map<String, Integer> tagCounts = new LinkedHashMap<>();
     JSONArray allVocab = a.library.array("vocabularies");
     for (int i = 0; i < allVocab.length(); i++) {
       JSONObject v = allVocab.optJSONObject(i);
       if (v == null) continue;
+      if (currentRefs != null && !contains(currentRefs, v.optString("id"))) continue;
       JSONArray ts = v.optJSONArray("tags");
       for (int j = 0; ts != null && j < ts.length(); j++) {
-        String t = ts.optString(j);
-        if (!t.isEmpty()) {
-          tagCounts.put(t, tagCounts.getOrDefault(t, 0) + 1);
-        }
+        String t = ts.optString(j).trim();
+        if (t.isEmpty() || SYSTEM_STATUS_TAGS.contains(t)) continue;
+        if (currentNbName != null && currentNbName.equals(t)) continue;
+        tagCounts.put(t, tagCounts.getOrDefault(t, 0) + 1);
       }
     }
+
+    List<Map.Entry<String, Integer>> sortedTags = new ArrayList<>(tagCounts.entrySet());
+    sortedTags.sort((e1, e2) -> e2.getValue().compareTo(e1.getValue()));
 
     LinearLayout tagHeaderRow = a.row();
     tagHeaderRow.setGravity(Gravity.CENTER_VERTICAL);
     tagHeaderRow.addView(a.text("标签分类", 13, true));
-    TextView tagCountLabel = a.text(" (共 " + tagCounts.size() + " 个)", 12, false);
+    TextView tagCountLabel = a.text(" (共 " + tagCounts.size() + " 个, 可多选)", 12, false);
     tagCountLabel.setTextColor(a.muted);
     tagHeaderRow.addView(tagCountLabel);
     sheet.addView(tagHeaderRow);
@@ -914,53 +1138,84 @@ final class NotebookUi {
       allTagChips.clear();
       String query = tagSearch.getText().toString().trim().toLowerCase();
 
-      List<String> filteredTags = new ArrayList<>();
-      filteredTags.add("全部");
-      for (String tag : tagCounts.keySet()) {
+      List<String> displayTags = new ArrayList<>();
+      for (Map.Entry<String, Integer> entry : sortedTags) {
+        String tag = entry.getKey();
         if (query.isEmpty() || tag.toLowerCase().contains(query)) {
-          filteredTags.add(tag);
+          displayTags.add(tag);
         }
       }
 
-      int perRow = 3;
-      LinearLayout curRow = null;
-      for (int i = 0; i < filteredTags.size(); i++) {
-        if (i % perRow == 0) {
-          curRow = a.row();
-          curRow.setPadding(0, a.dp(2), 0, a.dp(2));
-          tagContainer.addView(curRow);
+      int maxLineWidth = a.root.getWidth() > 0 ? a.root.getWidth() - a.dp(64) : a.dp(320);
+      int currentLineWidth = 0;
+      LinearLayout curRow = a.row();
+      curRow.setPadding(0, a.dp(3), 0, a.dp(3));
+      tagContainer.addView(curRow);
+
+      // "全部" 标签按钮
+      Button allChip = a.chip("全部", tempTags.isEmpty(), null);
+      allChip.setTag("__ALL__");
+      allChip.setTextSize(11 * a.scale);
+      allChip.setPadding(a.dp(10), 0, a.dp(10), 0);
+      allChip.setOnClickListener(v -> {
+        tempTags.clear();
+        for (Button b : allTagChips) {
+          boolean isAll = "__ALL__".equals(b.getTag());
+          b.setTextColor(isAll ? Color.WHITE : a.foreground);
+          b.setBackground(a.shape(isAll ? a.accent : a.inputBg, 12, isAll ? a.accent : a.border));
         }
-        String tag = filteredTags.get(i);
-        String label = "全部".equals(tag) ? "全部 (" + allVocab.length() + ")" : "#" + tag + " (" + tagCounts.get(tag) + ")";
-        boolean isSel = tempTag[0].equals(tag);
+        updateApplyCount.run();
+      });
+      allTagChips.add(allChip);
+
+      allChip.measure(
+          View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+          View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+      int allChipWidth = allChip.getMeasuredWidth() + a.dp(8);
+      LinearLayout.LayoutParams allLp = new LinearLayout.LayoutParams(-2, a.dp(30));
+      allLp.rightMargin = a.dp(6);
+      curRow.addView(allChip, allLp);
+      currentLineWidth += allChipWidth;
+
+      for (String tag : displayTags) {
+        String label = "#" + tag + " (" + tagCounts.get(tag) + ")";
+        boolean isSel = tempTags.contains(tag);
         Button chip = a.chip(label, isSel, null);
         chip.setTag(tag);
-        chip.setTextSize(10 * a.scale);
-        chip.setSingleLine(true);
-        chip.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        chip.setPadding(a.dp(4), 0, a.dp(4), 0);
+        chip.setTextSize(11 * a.scale);
+        chip.setPadding(a.dp(10), 0, a.dp(10), 0);
         chip.setOnClickListener(v -> {
-          tempTag[0] = tag;
+          if (tempTags.contains(tag)) {
+            tempTags.remove(tag);
+          } else {
+            tempTags.add(tag);
+          }
           for (Button b : allTagChips) {
-            boolean sel = tag.equals(b.getTag());
+            String bTag = (String) b.getTag();
+            boolean sel = "__ALL__".equals(bTag) ? tempTags.isEmpty() : tempTags.contains(bTag);
             b.setTextColor(sel ? Color.WHITE : a.foreground);
             b.setBackground(a.shape(sel ? a.accent : a.inputBg, 12, sel ? a.accent : a.border));
           }
           updateApplyCount.run();
         });
         allTagChips.add(chip);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, a.dp(30), 1);
-        if (i % perRow > 0) lp.leftMargin = a.dp(4);
-        curRow.addView(chip, lp);
-      }
-      if (curRow != null && curRow.getChildCount() < perRow) {
-        int remain = perRow - curRow.getChildCount();
-        for (int k = 0; k < remain; k++) {
-          View spacer = new View(a);
-          LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, 1, 1);
-          lp.leftMargin = a.dp(4);
-          curRow.addView(spacer, lp);
+
+        chip.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        int chipWidth = chip.getMeasuredWidth() + a.dp(8);
+
+        if (currentLineWidth + chipWidth > maxLineWidth && curRow.getChildCount() > 0) {
+          curRow = a.row();
+          curRow.setPadding(0, a.dp(3), 0, a.dp(3));
+          tagContainer.addView(curRow);
+          currentLineWidth = 0;
         }
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, a.dp(30));
+        lp.rightMargin = a.dp(6);
+        curRow.addView(chip, lp);
+        currentLineWidth += chipWidth;
       }
     };
     renderTags.run();
@@ -976,7 +1231,7 @@ final class NotebookUi {
       tempStatus[0] = "全部";
       tempFeature[0] = "全部";
       tempSort[0] = "最新";
-      tempTag[0] = "全部";
+      tempTags.clear();
       tagSearch.setText("");
       for (Button b : typeChips) {
         boolean sel = "全部".equals(b.getText().toString());
@@ -1020,7 +1275,8 @@ final class NotebookUi {
       statusFilter = tempStatus[0];
       featureFilter = tempFeature[0];
       sortOrder = tempSort[0];
-      tagFilter = tempTag[0];
+      selectedTags.clear();
+      selectedTags.addAll(tempTags);
       dialog.dismiss();
       a.render();
     });
@@ -1086,16 +1342,28 @@ final class NotebookUi {
     typeBadge.setOnClickListener(view -> { if (selecting) { toggleSelected(vocabulary.optString("id")); a.render(); } else detail(vocabulary); });
     title.addView(typeBadge, badgeLp);
     JSONArray tags = vocabulary.optJSONArray("tags");
-    for (int i = 0; tags != null && i < tags.length(); i++) {
-      String tagValue = tags.optString(i);
-      TextView tag = a.text("#" + tagValue, 11, true);
-      tag.setTextColor(a.accent);
-      tag.setPadding(a.dp(7), a.dp(3), a.dp(7), a.dp(3));
-      tag.setBackground(a.shape((a.accent & 0x00FFFFFF) | 0x1A000000, 16, 0));
-      tag.setOnClickListener(view -> { tagFilter = tagValue; a.render(); });
-      LinearLayout.LayoutParams tagLp = new LinearLayout.LayoutParams(-2, -2);
-      tagLp.leftMargin = a.dp(4);
-      title.addView(tag, tagLp);
+    if (tags != null) {
+      for (int i = 0; i < tags.length(); i++) {
+        String tagValue = tags.optString(i);
+        if (SYSTEM_STATUS_TAGS.contains(tagValue)) continue;
+        boolean isSelected = selectedTags.contains(tagValue);
+        TextView tag = a.text("#" + tagValue, 11, true);
+        tag.setFocusable(false);
+        tag.setTextColor(isSelected ? Color.WHITE : a.accent);
+        tag.setPadding(a.dp(7), a.dp(3), a.dp(7), a.dp(3));
+        tag.setBackground(a.shape(isSelected ? a.accent : ((a.accent & 0x00FFFFFF) | 0x1A000000), 16, 0));
+        tag.setOnClickListener(view -> {
+          if (selectedTags.contains(tagValue)) {
+            selectedTags.remove(tagValue);
+          } else {
+            selectedTags.add(tagValue);
+          }
+          a.render();
+        });
+        LinearLayout.LayoutParams tagLp = new LinearLayout.LayoutParams(-2, -2);
+        tagLp.leftMargin = a.dp(4);
+        title.addView(tag, tagLp);
+      }
     }
     HorizontalScrollView titleScroll = new HorizontalScrollView(a);
     titleScroll.setHorizontalScrollBarEnabled(false);
@@ -1155,6 +1423,7 @@ final class NotebookUi {
       card.addView(summary, lp);
     }
     LinearLayout footer = a.row();
+    footer.setGravity(Gravity.CENTER_VERTICAL);
     LinearLayout.LayoutParams footerLp = new LinearLayout.LayoutParams(-1, -2);
     footerLp.topMargin = a.dp(5);
     footer.addView(a.text("共 " + visibleCount + " 条释义", 11, false));
@@ -1163,15 +1432,22 @@ final class NotebookUi {
       annotations.setTextColor(a.accent);
       footer.addView(annotations);
     }
+    View spacer = new View(a);
+    footer.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1));
+    if (isMastered(vocabulary)) {
+      TextView st = a.text("✓ 已掌握", 11, true);
+      st.setTextColor(Color.parseColor("#10B981"));
+      footer.addView(st);
+    } else if (isDue(vocabulary)) {
+      TextView st = a.text("⏳ 待复习", 11, true);
+      st.setTextColor(Color.parseColor("#F59E0B"));
+      footer.addView(st);
+    }
     card.addView(footer, footerLp);
     a.passiveLabels(card);
     View.OnClickListener open = view -> { if (selecting) { toggleSelected(vocabulary.optString("id")); a.render(); } else detail(vocabulary); };
     word.setOnClickListener(open);
     typeBadge.setOnClickListener(open);
-    for (int i = 0; tags != null && i < tags.length(); i++) {
-      final String tagValue = tags.optString(i);
-      title.getChildAt(i + 2).setOnClickListener(view -> { tagFilter = tagValue; a.render(); });
-    }
   }
 
   void renderVocabularyDetailedCard(JSONObject vocabulary, JSONObject display) {
@@ -1261,11 +1537,21 @@ final class NotebookUi {
 
       for (int i = 0; tags != null && i < tags.length(); i++) {
         String tagValue = tags.optString(i);
+        if (SYSTEM_STATUS_TAGS.contains(tagValue)) continue;
+        boolean isSelected = selectedTags.contains(tagValue);
         TextView tag = a.text("#" + tagValue, 11, true);
-        tag.setTextColor(a.accent);
+        tag.setFocusable(false);
+        tag.setTextColor(isSelected ? Color.WHITE : a.accent);
         tag.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
-        tag.setBackground(a.shape((a.accent & 0x00FFFFFF) | 0x1A000000, 10, 0));
-        tag.setOnClickListener(view -> { tagFilter = tagValue; a.render(); });
+        tag.setBackground(a.shape(isSelected ? a.accent : ((a.accent & 0x00FFFFFF) | 0x1A000000), 10, 0));
+        tag.setOnClickListener(view -> {
+          if (selectedTags.contains(tagValue)) {
+            selectedTags.remove(tagValue);
+          } else {
+            selectedTags.add(tagValue);
+          }
+          a.render();
+        });
         LinearLayout.LayoutParams tagLp = new LinearLayout.LayoutParams(-2, -2);
         tagLp.rightMargin = a.dp(4);
         metaRow.addView(tag, tagLp);
@@ -1417,7 +1703,7 @@ final class NotebookUi {
     cardFooter.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1));
 
     if (isMastered(vocabulary)) {
-      TextView st = a.text("✓ 已学习", 11, true);
+      TextView st = a.text("✓ 已掌握", 11, true);
       st.setTextColor(Color.parseColor("#10B981"));
       cardFooter.addView(st);
     } else if (isDue(vocabulary)) {
@@ -1637,6 +1923,10 @@ final class NotebookUi {
   }
 
   void create() {
+    create(selected);
+  }
+
+  void create(String parentId) {
     EditText name = a.input("笔记名称", "", false);
     new AlertDialog.Builder(a)
         .setTitle("创建笔记")
@@ -1644,7 +1934,7 @@ final class NotebookUi {
         .setNegativeButton("取消", null)
         .setPositiveButton(
             "创建",
-            (d, w) -> a.change(() -> a.library.createNotebook(name.getText().toString(), selected)))
+            (d, w) -> a.change(() -> a.library.createNotebook(name.getText().toString(), parentId)))
         .show();
   }
 

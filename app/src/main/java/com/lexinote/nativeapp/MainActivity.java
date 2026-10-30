@@ -110,6 +110,9 @@ public final class MainActivity extends Activity {
       query.homeMode = state.getString("homeMode", "text");
       query.guessMode = state.getString("guessMode", "image");
       query.organizing = state.getBoolean("organizing");
+      if (notebooks != null) {
+        notebooks.activeCollectionId = state.getString("notebook_active_collection", null);
+      }
     }
     if (state != null && state.getString("export") != null) {
       File candidate = new File(getCacheDir(), new File(state.getString("export")).getName());
@@ -396,7 +399,7 @@ public final class MainActivity extends Activity {
   }
 
   void passiveLabels(View view) {
-    if (view instanceof TextView && !(view instanceof Button))
+    if (view instanceof TextView && !(view instanceof Button) && !view.hasOnClickListeners())
       ((TextView) view).setTextIsSelectable(false);
     if (view instanceof ViewGroup) {
       ViewGroup group = (ViewGroup) view;
@@ -938,6 +941,9 @@ public final class MainActivity extends Activity {
     state.putString("screen", screen);
     if (session != null) state.putString("session", session.optString("id"));
     if (activeVocabulary != null) state.putString("activeVocabulary", activeVocabulary.optString("id"));
+    if (notebooks != null && notebooks.activeCollectionId != null) {
+      state.putString("notebook_active_collection", notebooks.activeCollectionId);
+    }
     if (query != null) {
       state.putString("draft", query.draft);
       state.putString("context", query.context);
@@ -1116,10 +1122,19 @@ public final class MainActivity extends Activity {
     if (!screen.equals("tabs")) {
       screen = "tabs";
       render();
-    } else if (page == 2 && notebooks != null && (notebooks.selected != null || !notebooks.filter.isEmpty())) {
-      notebooks.selected = null;
-      notebooks.filter = "";
-      render();
+    } else if (page == 2 && notebooks != null) {
+      if (notebooks.selected != null || !notebooks.filter.isEmpty()) {
+        notebooks.selected = null;
+        notebooks.filter = "";
+        render();
+      } else if (notebooks.activeCollectionId != null) {
+        notebooks.activeCollectionId = null;
+        notebooks.filter = "";
+        render();
+      } else if (page != 0) {
+        page = 0;
+        render();
+      } else finish();
     } else if (page != 0) {
       page = 0;
       render();
