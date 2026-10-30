@@ -113,6 +113,13 @@ public final class MainActivity extends Activity {
       if (notebooks != null) {
         notebooks.activeCollectionId = state.getString("notebook_active_collection", null);
       }
+      if (review != null) {
+        review.phase = state.getString("review_phase", "dashboard");
+        review.notebook = state.getString("review_notebook", null);
+        review.reverse = state.getBoolean("review_reverse", false);
+        review.revealed = state.getBoolean("review_revealed", false);
+        review.batchSize = state.getInt("review_batch_size", 10);
+      }
     }
     if (state != null && state.getString("export") != null) {
       File candidate = new File(getCacheDir(), new File(state.getString("export")).getName());
@@ -208,7 +215,7 @@ public final class MainActivity extends Activity {
       root.addView(button("退出", v -> finish()));
       return;
     }
-    if (!(screen.equals("tabs") && page == 2)) {
+    if (!(screen.equals("tabs") && (page == 2 || page == 3))) {
       renderHeader();
     }
     scroll = new ScrollView(this);
@@ -248,7 +255,7 @@ public final class MainActivity extends Activity {
           settingsUi.show();
       }
     root.addView(footer, new LinearLayout.LayoutParams(-1, -2));
-    if (screen.equals("tabs")) renderNavigation();
+    if (screen.equals("tabs") && !(page == 3 && review != null && "active".equals(review.phase))) renderNavigation();
     else nav = null;
     if (savedScrollY > 0 || savedScrollX > 0) {
       final int restoreX = savedScrollX;
@@ -944,6 +951,13 @@ public final class MainActivity extends Activity {
     if (notebooks != null && notebooks.activeCollectionId != null) {
       state.putString("notebook_active_collection", notebooks.activeCollectionId);
     }
+    if (review != null) {
+      state.putString("review_phase", review.phase);
+      if (review.notebook != null) state.putString("review_notebook", review.notebook);
+      state.putBoolean("review_reverse", review.reverse);
+      state.putBoolean("review_revealed", review.revealed);
+      state.putInt("review_batch_size", review.batchSize);
+    }
     if (query != null) {
       state.putString("draft", query.draft);
       state.putString("context", query.context);
@@ -1130,6 +1144,16 @@ public final class MainActivity extends Activity {
       } else if (notebooks.activeCollectionId != null) {
         notebooks.activeCollectionId = null;
         notebooks.filter = "";
+        render();
+      } else if (page != 0) {
+        page = 0;
+        render();
+      } else finish();
+    } else if (page == 3 && review != null) {
+      if ("active".equals(review.phase)) {
+        review.confirmExit();
+      } else if ("completed".equals(review.phase)) {
+        review.phase = "dashboard";
         render();
       } else if (page != 0) {
         page = 0;
