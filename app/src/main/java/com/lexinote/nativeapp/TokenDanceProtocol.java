@@ -62,6 +62,14 @@ public final class TokenDanceProtocol {
  private static String decode(String s) { try { return URLDecoder.decode(s, "UTF-8"); } catch (UnsupportedEncodingException e) { throw new AssertionError(e); } }
  private static String encode(String s) { try { return URLEncoder.encode(s, "UTF-8"); } catch (UnsupportedEncodingException e) { throw new AssertionError(e); } }
  public static String authorizationUrl(Session s) { String url=ORIGIN+"/auth?code_challenge="+encode(s.challenge)+"&code_challenge_method=S256&app_url="+encode("app://lexinote")+"&key_name=LexiNote"; return s.callback == null ? url : url+"&callback_url="+encode(s.callback+"?state="+encode(s.state)); }
- public static boolean isNativeCallback(String raw) { try { URI u=new URI(raw); return "https".equalsIgnoreCase(u.getScheme()) && "taskstream.xyz".equalsIgnoreCase(u.getHost()) && (u.getPort()==-1 || u.getPort()==443) && u.getUserInfo()==null && "/lexinote/auth/callback".equals(u.getRawPath()) && u.getFragment()==null; } catch(Exception e){return false;} }
+ public static boolean isNativeCallback(String raw) {
+  try {
+   URI u=new URI(raw);
+   String scheme=u.getScheme(), host=u.getHost(), path=u.getRawPath();
+   if ("https".equalsIgnoreCase(scheme) && "taskstream.xyz".equalsIgnoreCase(host) && (u.getPort()==-1 || u.getPort()==443) && u.getUserInfo()==null && "/lexinote/auth/callback".equals(path) && u.getFragment()==null) return true;
+   if ("lexinote".equalsIgnoreCase(scheme) && "tokendance".equalsIgnoreCase(host) && (u.getPort()==-1) && u.getUserInfo()==null && "/callback".equals(path) && u.getFragment()==null) return true;
+   return false;
+  } catch(Exception e){return false;}
+ }
  public static Page classifyPageUrl(String raw) { try { URI u=new URI(raw); String scheme=u.getScheme(), host=u.getHost(), path=u.getRawPath(); if (u.getUserInfo()!=null || scheme==null || host==null) return Page.BLOCKED; if (isNativeCallback(raw)) return Page.CALLBACK; if (scheme.equalsIgnoreCase("lexinote") && host.equalsIgnoreCase("tokendance") && "/callback".equals(path) && u.getPort()==-1) return Page.CALLBACK; if (scheme.equalsIgnoreCase("alipays") && host.equalsIgnoreCase("platformapi") && "/startapp".equals(path) && u.getPort()==-1) return Page.PAYMENT; if (scheme.equalsIgnoreCase("https")) return host.equalsIgnoreCase("tokendance.space") && (u.getPort()==-1 || u.getPort()==443) ? Page.INTERNAL : Page.EXTERNAL_HTTPS; return Page.BLOCKED; } catch(Exception e) {return Page.BLOCKED;} }
 }
