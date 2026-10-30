@@ -119,6 +119,11 @@ public final class MainActivity extends Activity {
         review.reverse = state.getBoolean("review_reverse", false);
         review.revealed = state.getBoolean("review_revealed", false);
         review.batchSize = state.getInt("review_batch_size", 10);
+        ArrayList<String> tags = state.getStringArrayList("review_selected_tags");
+        if (tags != null) {
+          review.selectedTags.clear();
+          review.selectedTags.addAll(tags);
+        }
       }
     }
     if (state != null && state.getString("export") != null) {
@@ -957,6 +962,9 @@ public final class MainActivity extends Activity {
       state.putBoolean("review_reverse", review.reverse);
       state.putBoolean("review_revealed", review.revealed);
       state.putInt("review_batch_size", review.batchSize);
+      if (!review.selectedTags.isEmpty()) {
+        state.putStringArrayList("review_selected_tags", new ArrayList<>(review.selectedTags));
+      }
     }
     if (query != null) {
       state.putString("draft", query.draft);

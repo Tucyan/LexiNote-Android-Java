@@ -16,6 +16,7 @@ final class ReviewUi {
   final ArrayDeque<String> queue = new ArrayDeque<>();
   final List<String> initialBatchIds = new ArrayList<>();
   String notebook = null;
+  final Set<String> selectedTags = new HashSet<>();
   boolean reverse = false, revealed = false;
   int batchSize = 10;
   ReviewLogic.Progress progressState = new ReviewLogic.Progress(0);
@@ -84,11 +85,42 @@ final class ReviewUi {
     for (int i = 0; i < all.length(); i++) {
       JSONObject v = all.optJSONObject(i);
       if (v == null) continue;
-      if (filterIds == null || filterIds.contains(v.optString("id"))) {
-        pool.add(v);
+      if (filterIds != null && !filterIds.contains(v.optString("id"))) {
+        continue;
       }
+      if (!selectedTags.isEmpty()) {
+        boolean match = false;
+        JSONArray vTags = v.optJSONArray("tags");
+        for (int t = 0; vTags != null && t < vTags.length(); t++) {
+          if (selectedTags.contains(vTags.optString(t))) {
+            match = true;
+            break;
+          }
+        }
+        if (!match) continue;
+      }
+      pool.add(v);
     }
     return pool;
+  }
+
+  Map<String, Integer> getAvailableTagCounts() {
+    JSONArray all = a.library.array("vocabularies");
+    Set<String> filterIds = (notebook == null || "all".equals(notebook)) ? null : getNotebookVocabIdsRecursive(notebook);
+    Map<String, Integer> counts = new TreeMap<>();
+    for (int i = 0; i < all.length(); i++) {
+      JSONObject v = all.optJSONObject(i);
+      if (v == null) continue;
+      if (filterIds != null && !filterIds.contains(v.optString("id"))) continue;
+      JSONArray tags = v.optJSONArray("tags");
+      if (tags == null) continue;
+      for (int t = 0; t < tags.length(); t++) {
+        String tag = tags.optString(t).trim();
+        if (tag.isEmpty() || NotebookUi.SYSTEM_STATUS_TAGS.contains(tag)) continue;
+        counts.put(tag, counts.getOrDefault(tag, 0) + 1);
+      }
+    }
+    return counts;
   }
 
   void renderDashboard() {
@@ -97,13 +129,18 @@ final class ReviewUi {
 
     List<JSONObject> currentPool = getVocabPool();
     long now = System.currentTimeMillis();
-    int due = 0, mastered = 0;
+    int due = 0, mastered = 0, newCount = 0, learningCount = 0;
     for (JSONObject v : currentPool) {
       if (v.optLong("review_due", 0) <= now) due++;
       Integer level = v.has("review_mastery_level") && !v.isNull("review_mastery_level")
           ? v.optInt("review_mastery_level") : null;
-      if (ReviewLogic.mastered(level, v.optInt("review_count"), v.optString("review_grade", ""))) {
+      int c = v.optInt("review_count", 0);
+      if (ReviewLogic.mastered(level, c, v.optString("review_grade", ""))) {
         mastered++;
+      } else if (c > 0) {
+        learningCount++;
+      } else {
+        newCount++;
       }
     }
 
@@ -147,6 +184,62 @@ final class ReviewUi {
     addMetric(metrics, due, "待复习强化", a.accent);
     stats.addView(metrics);
 
+    if (!currentPool.isEmpty()) {
+      LinearLayout bar = a.row();
+      bar.setClipToOutline(true);
+      GradientDrawable barBg = new GradientDrawable();
+      barBg.setCornerRadius(a.dp(4));
+      barBg.setColor(a.inputBg);
+      bar.setBackground(barBg);
+      LinearLayout.LayoutParams barLp = new LinearLayout.LayoutParams(-1, a.dp(6));
+      barLp.topMargin = a.dp(12);
+      bar.setLayoutParams(barLp);
+
+      int total = Math.max(1, currentPool.size());
+      if (newCount > 0) {
+        View vNew = new View(a);
+        vNew.setBackgroundColor(Color.parseColor("#94A3B8"));
+        bar.addView(vNew, new LinearLayout.LayoutParams(0, -1, (float) newCount / total));
+      }
+      if (learningCount > 0) {
+        View vLearn = new View(a);
+        vLearn.setBackgroundColor(Color.parseColor("#F59E0B"));
+        bar.addView(vLearn, new LinearLayout.LayoutParams(0, -1, (float) learningCount / total));
+      }
+      if (mastered > 0) {
+        View vMast = new View(a);
+        vMast.setBackgroundColor(Color.parseColor("#10B981"));
+        bar.addView(vMast, new LinearLayout.LayoutParams(0, -1, (float) mastered / total));
+      }
+      stats.addView(bar);
+
+      LinearLayout legend = a.row();
+      legend.setGravity(Gravity.CENTER_VERTICAL);
+      LinearLayout.LayoutParams legLp = new LinearLayout.LayoutParams(-1, -2);
+      legLp.topMargin = a.dp(6);
+      legend.setLayoutParams(legLp);
+
+      TextView legNew = a.text("● 新生词 " + newCount, 11, false);
+      legNew.setTextColor(Color.parseColor("#64748B"));
+      legend.addView(legNew);
+
+      View legGap1 = new View(a);
+      legend.addView(legGap1, new LinearLayout.LayoutParams(0, 1, 1));
+
+      TextView legLearn = a.text("● 巩固中 " + learningCount, 11, false);
+      legLearn.setTextColor(Color.parseColor("#D97706"));
+      legend.addView(legLearn);
+
+      View legGap2 = new View(a);
+      legend.addView(legGap2, new LinearLayout.LayoutParams(0, 1, 1));
+
+      TextView legMast = a.text("● 熟练掌握 " + mastered, 11, false);
+      legMast.setTextColor(Color.parseColor("#059669"));
+      legend.addView(legMast);
+
+      stats.addView(legend);
+    }
+
     if (currentPool.isEmpty()) {
       LinearLayout empty = a.card(null);
       empty.setGravity(Gravity.CENTER);
@@ -173,9 +266,10 @@ final class ReviewUi {
       collectLp.topMargin = a.dp(18);
       empty.addView(collect, collectLp);
 
-      if (notebook != null) {
-        Button resetScope = a.button("返回全部复习范围", v -> {
+      if (notebook != null || !selectedTags.isEmpty()) {
+        Button resetScope = a.button("清除筛选，查看全部生词", v -> {
           notebook = null;
+          selectedTags.clear();
           queue.clear();
           a.render();
         });
@@ -192,8 +286,8 @@ final class ReviewUi {
     optLp.topMargin = a.dp(12);
     options.setLayoutParams(optLp);
 
-    // Scope selection
-    TextView scopeTitle = a.text("1. 选择复习范围", 14, true);
+    // 1. Notebook selection
+    TextView scopeTitle = a.text("1. 选择笔记本范围", 14, true);
     options.addView(scopeTitle);
     LinearLayout scopes = a.row();
     scopes.setPadding(0, a.dp(8), 0, a.dp(8));
@@ -228,8 +322,51 @@ final class ReviewUi {
     scopeScroll.addView(scopes);
     options.addView(scopeScroll);
 
+    // 2. Tag filter (optional)
+    Map<String, Integer> availableTags = getAvailableTagCounts();
+    int stepIndex = 2;
+    if (!availableTags.isEmpty()) {
+      TextView tagTitle = a.text(stepIndex + ". 按标签筛选（可选）", 14, true);
+      LinearLayout.LayoutParams tagTitleLp = new LinearLayout.LayoutParams(-1, -2);
+      tagTitleLp.topMargin = a.dp(12);
+      options.addView(tagTitle, tagTitleLp);
+
+      LinearLayout tagPills = a.row();
+      tagPills.setPadding(0, a.dp(8), 0, a.dp(8));
+
+      int scopeTotal = (notebook == null || "all".equals(notebook))
+          ? a.library.array("vocabularies").length()
+          : getNotebookVocabIdsRecursive(notebook).size();
+      tagPills.addView(scopePill("全部标签 (" + scopeTotal + ")", selectedTags.isEmpty(), () -> {
+        selectedTags.clear();
+        queue.clear();
+        a.render();
+      }));
+
+      for (Map.Entry<String, Integer> entry : availableTags.entrySet()) {
+        String t = entry.getKey();
+        int cnt = entry.getValue();
+        boolean isTagSelected = selectedTags.contains(t);
+        tagPills.addView(scopePill("#" + t + " (" + cnt + ")", isTagSelected, () -> {
+          if (selectedTags.contains(t)) {
+            selectedTags.remove(t);
+          } else {
+            selectedTags.add(t);
+          }
+          queue.clear();
+          a.render();
+        }));
+      }
+
+      HorizontalScrollView tagScroll = new HorizontalScrollView(a);
+      tagScroll.setHorizontalScrollBarEnabled(false);
+      tagScroll.addView(tagPills);
+      options.addView(tagScroll);
+      stepIndex++;
+    }
+
     // Mode selection
-    TextView modeTitle = a.text("2. 复习模式", 14, true);
+    TextView modeTitle = a.text(stepIndex + ". 复习模式", 14, true);
     LinearLayout.LayoutParams modeTitleLp = new LinearLayout.LayoutParams(-1, -2);
     modeTitleLp.topMargin = a.dp(12);
     options.addView(modeTitle, modeTitleLp);
@@ -264,9 +401,10 @@ final class ReviewUi {
               a.render();
             }),
         new LinearLayout.LayoutParams(0, -1, 1));
+    stepIndex++;
 
     // Batch size selection
-    TextView sizeTitle = a.text("3. 本组复习量", 14, true);
+    TextView sizeTitle = a.text(stepIndex + ". 本组复习量", 14, true);
     LinearLayout.LayoutParams sizeTitleLp = new LinearLayout.LayoutParams(-1, -2);
     sizeTitleLp.topMargin = a.dp(14);
     options.addView(sizeTitle, sizeTitleLp);
@@ -280,7 +418,8 @@ final class ReviewUi {
     }
 
     // 3. Start Button
-    Button start = a.primaryButton("开启本组复习", v -> startReview());
+    int countToReview = Math.min(batchSize, currentPool.size());
+    Button start = a.primaryButton("开启本组复习（" + countToReview + " / " + currentPool.size() + " 词）", v -> startReview());
     LinearLayout.LayoutParams startLp = new LinearLayout.LayoutParams(-1, a.dp(52));
     startLp.topMargin = a.dp(16);
     start.setLayoutParams(startLp);
@@ -306,10 +445,27 @@ final class ReviewUi {
       else otherWords.add(v);
     }
 
-    Collections.sort(otherWords, (v1, v2) -> {
+    // Sort due words: overdue reviewed words first (furthest overdue first), then new words
+    Collections.sort(dueWords, (v1, v2) -> {
       int c1 = v1.optInt("review_count", 0);
       int c2 = v2.optInt("review_count", 0);
-      if (c1 != c2) return Integer.compare(c1, c2);
+      if (c1 > 0 && c2 > 0) {
+        return Long.compare(v1.optLong("review_due", 0), v2.optLong("review_due", 0));
+      }
+      if (c1 > 0 && c2 == 0) return -1;
+      if (c1 == 0 && c2 > 0) return 1;
+      return 0;
+    });
+
+    // Sort other words: lower mastery levels first, then earliest due
+    Collections.sort(otherWords, (v1, v2) -> {
+      int l1 = ReviewLogic.level(
+          v1.has("review_mastery_level") && !v1.isNull("review_mastery_level") ? v1.optInt("review_mastery_level") : null,
+          v1.optInt("review_count"), v1.optString("review_grade", ""));
+      int l2 = ReviewLogic.level(
+          v2.has("review_mastery_level") && !v2.isNull("review_mastery_level") ? v2.optInt("review_mastery_level") : null,
+          v2.optInt("review_count"), v2.optString("review_grade", ""));
+      if (l1 != l2) return Integer.compare(l1, l2);
       return Long.compare(v1.optLong("review_due", 0), v2.optLong("review_due", 0));
     });
 
@@ -665,17 +821,22 @@ final class ReviewUi {
       rateRow.setGravity(Gravity.CENTER_VERTICAL);
       rateRow.setLayoutParams(new LinearLayout.LayoutParams(-1, a.dp(52)));
 
+      long now = System.currentTimeMillis();
+      String againSub = ReviewLogic.previewInterval(word, "再次", now);
+      String hardSub = ReviewLogic.previewInterval(word, "困难", now);
+      String easySub = ReviewLogic.previewInterval(word, "简单", now);
+
       // 再次 (Red)
-      rateRow.addView(createRatingButton("再次", "<10分钟", Color.parseColor("#EF4444"), false, () -> {
+      rateRow.addView(createRatingButton("再次", againSub, Color.parseColor("#EF4444"), false, () -> {
         String id = queue.remove();
         queue.add(id); // Re-queue at tail for repeat review
-        Library.put(word, "review_due", System.currentTimeMillis());
-        Library.put(word, "review_mastery_level", ReviewLogic.nextLevel(
-            word.has("review_mastery_level") && !word.isNull("review_mastery_level")
-                ? word.optInt("review_mastery_level") : null,
-            word.optInt("review_count"), word.optString("review_grade", ""), "再次"));
-        Library.put(word, "review_grade", "再次");
-        Library.put(word, "review_count", word.optInt("review_count") + 1);
+        ReviewLogic.ScheduleResult sched = ReviewLogic.calculateSchedule(word, "再次", System.currentTimeMillis());
+        Library.put(word, "review_due", sched.nextDue);
+        Library.put(word, "review_mastery_level", sched.nextLevel);
+        Library.put(word, "review_grade", sched.nextGrade);
+        Library.put(word, "review_count", sched.nextCount);
+        Library.put(word, "review_efactor", sched.nextEf);
+        Library.put(word, "review_interval_days", sched.nextIntervalDays);
         Library.put(word, "reviewed_at", Library.now());
         sessionSummary.againCount++;
         progressState.rate("再次");
@@ -688,16 +849,15 @@ final class ReviewUi {
       rateRow.addView(gap1, new LinearLayout.LayoutParams(a.dp(8), 1));
 
       // 困难 (Amber)
-      rateRow.addView(createRatingButton("困难", "1天后", Color.parseColor("#F59E0B"), false, () -> {
+      rateRow.addView(createRatingButton("困难", hardSub, Color.parseColor("#F59E0B"), false, () -> {
         queue.remove();
-        long interval = 86400000L;
-        Library.put(word, "review_due", System.currentTimeMillis() + interval);
-        Library.put(word, "review_mastery_level", ReviewLogic.nextLevel(
-            word.has("review_mastery_level") && !word.isNull("review_mastery_level")
-                ? word.optInt("review_mastery_level") : null,
-            word.optInt("review_count"), word.optString("review_grade", ""), "困难"));
-        Library.put(word, "review_grade", "困难");
-        Library.put(word, "review_count", word.optInt("review_count") + 1);
+        ReviewLogic.ScheduleResult sched = ReviewLogic.calculateSchedule(word, "困难", System.currentTimeMillis());
+        Library.put(word, "review_due", sched.nextDue);
+        Library.put(word, "review_mastery_level", sched.nextLevel);
+        Library.put(word, "review_grade", sched.nextGrade);
+        Library.put(word, "review_count", sched.nextCount);
+        Library.put(word, "review_efactor", sched.nextEf);
+        Library.put(word, "review_interval_days", sched.nextIntervalDays);
         Library.put(word, "reviewed_at", Library.now());
         sessionSummary.hardCount++;
         progressState.rate("困难");
@@ -711,16 +871,15 @@ final class ReviewUi {
       rateRow.addView(gap2, new LinearLayout.LayoutParams(a.dp(8), 1));
 
       // 简单 (Green)
-      rateRow.addView(createRatingButton("简单", "4天后", Color.parseColor("#10B981"), true, () -> {
+      rateRow.addView(createRatingButton("简单", easySub, Color.parseColor("#10B981"), true, () -> {
         queue.remove();
-        long interval = 4 * 86400000L;
-        Library.put(word, "review_due", System.currentTimeMillis() + interval);
-        Library.put(word, "review_mastery_level", ReviewLogic.nextLevel(
-            word.has("review_mastery_level") && !word.isNull("review_mastery_level")
-                ? word.optInt("review_mastery_level") : null,
-            word.optInt("review_count"), word.optString("review_grade", ""), "简单"));
-        Library.put(word, "review_grade", "简单");
-        Library.put(word, "review_count", word.optInt("review_count") + 1);
+        ReviewLogic.ScheduleResult sched = ReviewLogic.calculateSchedule(word, "简单", System.currentTimeMillis());
+        Library.put(word, "review_due", sched.nextDue);
+        Library.put(word, "review_mastery_level", sched.nextLevel);
+        Library.put(word, "review_grade", sched.nextGrade);
+        Library.put(word, "review_count", sched.nextCount);
+        Library.put(word, "review_efactor", sched.nextEf);
+        Library.put(word, "review_interval_days", sched.nextIntervalDays);
         Library.put(word, "reviewed_at", Library.now());
         sessionSummary.easyCount++;
         progressState.rate("简单");
