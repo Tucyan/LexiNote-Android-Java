@@ -230,4 +230,45 @@ public class ReviewPlansTest {
     badCount.optJSONObject("review").optJSONArray("states").optJSONObject(0).put("review_count", 0);
     rejects(() -> new Library(badCount));
   }
+
+  @Test public void extendDailyQueueAppendsTasksAndValidates() throws Exception {
+    String v1 = word("apple"), v2 = word("banana"), v3 = word("cherry"), v4 = word("date");
+    String p = plan(1, 1);
+    JSONObject q1 = library.reviewPlans().dailyQueue(p, monday);
+    assertEquals(1, q1.optJSONArray("queue").length());
+    String firstVocab = q1.optJSONArray("queue").optJSONObject(0).optString("vocab_id");
+    assertNotNull(firstVocab);
+
+    // Rate firstVocab as 简单
+    library.reviewPlans().record(p, firstVocab, "简单", "ev1", 1000, monday);
+    JSONObject afterRecord = library.reviewPlans().dailyQueue(p, monday);
+    assertEquals(0, afterRecord.optJSONArray("queue").length());
+
+    // Check extra available
+    JSONObject avail = library.reviewPlans().extraAvailable(p, monday);
+    assertEquals(3, avail.optInt("available_new"));
+    assertEquals(0, avail.optInt("available_review"));
+    assertEquals(3, avail.optInt("available_total"));
+
+    // Extend queue by 2 fresh words
+    JSONObject extended = library.reviewPlans().extendDailyQueue(p, 2, 0, monday);
+    assertEquals(2, extended.optJSONArray("queue").length());
+    assertEquals(3, extended.optInt("new_target"));
+
+    // Validate schema
+    Library.validate(library.snapshot());
+
+    // Complete remaining extended words
+    String next1 = extended.optJSONArray("queue").optJSONObject(0).optString("vocab_id");
+    String next2 = extended.optJSONArray("queue").optJSONObject(1).optString("vocab_id");
+    library.reviewPlans().record(p, next1, "简单", "ev2", 1000, monday);
+    library.reviewPlans().record(p, next2, "简单", "ev3", 1000, monday);
+
+    JSONObject finish = library.reviewPlans().dailyQueue(p, monday);
+    assertEquals(0, finish.optJSONArray("queue").length());
+    assertEquals(3, finish.optInt("new_target"));
+
+    Library.validate(library.snapshot());
+    new Library(library.backup());
+  }
 }

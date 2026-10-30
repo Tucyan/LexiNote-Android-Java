@@ -228,6 +228,96 @@ public final class ReviewPlans {
     return view;
   }
 
+  public synchronized JSONObject extraAvailable(String id, long now) {
+    JSONObject p = active(id);
+    String localDate = date(p, now);
+    JSONObject day = savedDay(id, localDate);
+    Set<String> inToday = new HashSet<>();
+    if (day != null) {
+      JSONArray tasks = day.optJSONArray("tasks");
+      for (int i = 0; tasks != null && i < tasks.length(); i++) {
+        JSONObject t = tasks.optJSONObject(i);
+        if (t != null) inToday.add(t.optString("vocab_id"));
+      }
+    }
+    Set<String> available = pool(p);
+    int freshCount = 0, reviewCount = 0;
+    for (String vocabId : available) {
+      if (inToday.contains(vocabId)) continue;
+      JSONObject s = savedState(id, vocabId);
+      if (s == null || s.isNull("learned_at")) freshCount++;
+      else reviewCount++;
+    }
+    return object("plan_id", id, "available_new", freshCount, "available_review", reviewCount,
+        "available_total", freshCount + reviewCount,
+        "daily_new_limit", p.optInt("daily_new_limit"),
+        "daily_review_limit", p.optInt("daily_review_limit"));
+  }
+
+  public synchronized JSONObject extendDailyQueue(String id, int extraNew, int extraReview, long now) {
+    check(extraNew >= 0 && extraReview >= 0 && extraNew + extraReview > 0, "额外复习数量必须大于零");
+    JSONObject p = active(id);
+    String localDate = date(p, now);
+    JSONObject day = savedDay(id, localDate);
+    if (day == null) {
+      dailyQueue(id, now);
+      day = savedDay(id, localDate);
+    }
+    Set<String> available = pool(p);
+    JSONArray tasks = day.optJSONArray("tasks");
+    if (tasks == null) {
+      tasks = new JSONArray();
+      Library.put(day, "tasks", tasks);
+    }
+    Set<String> inToday = new HashSet<>();
+    for (int i = 0; i < tasks.length(); i++) {
+      JSONObject t = tasks.optJSONObject(i);
+      if (t != null) inToday.add(t.optString("vocab_id"));
+    }
+    List<String> fresh = new ArrayList<>(), due = new ArrayList<>();
+    for (String vocabId : available) {
+      if (inToday.contains(vocabId)) continue;
+      JSONObject s = savedState(id, vocabId);
+      if (s == null || s.isNull("learned_at")) fresh.add(vocabId);
+      else due.add(vocabId);
+    }
+    Collections.sort(fresh);
+    due.sort(Comparator.comparingLong((String v) -> savedState(id, v).optLong("review_due"))
+        .thenComparing(v -> v));
+
+    int addReview = Math.min(extraReview, due.size());
+    int addNew = Math.min(extraNew, fresh.size());
+    check(addReview + addNew > 0, "当前笔记本没有更多可供额外学习的词汇");
+
+    for (int i = 0; i < addReview; i++) tasks.put(task(due.get(i), "review"));
+    for (int i = 0; i < addNew; i++) tasks.put(task(fresh.get(i), "new"));
+
+    int newTarget = day.optInt("new_target") + addNew;
+    int reviewTarget = day.optInt("review_target") + addReview;
+    Library.put(day, "new_target", newTarget);
+    Library.put(day, "review_target", reviewTarget);
+    Library.put(day, "scheduled", true);
+    if (day.optInt("daily_new_limit") < newTarget) {
+      Library.put(day, "daily_new_limit", newTarget);
+    }
+    if (day.optInt("daily_review_limit") < reviewTarget) {
+      Library.put(day, "daily_review_limit", reviewTarget);
+    }
+
+    return dailyQueue(id, now);
+  }
+
+  public synchronized JSONObject extendDailyQueue(String id, int extraCount, long now) {
+    check(extraCount > 0, "额外复习数量必须大于零");
+    JSONObject avail = extraAvailable(id, now);
+    int revAvail = avail.optInt("available_review");
+    int newAvail = avail.optInt("available_new");
+    check(revAvail + newAvail > 0, "当前笔记本没有更多可供额外学习的词汇");
+    int takeRev = Math.min(extraCount, revAvail);
+    int takeNew = Math.min(extraCount - takeRev, newAvail);
+    return extendDailyQueue(id, takeNew, takeRev, now);
+  }
+
   private JSONObject task(String id, String kind) {
     return object("vocab_id", id, "kind", kind, "completed", false, "attempts", 0);
   }

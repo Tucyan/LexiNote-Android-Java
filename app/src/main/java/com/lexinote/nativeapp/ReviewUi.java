@@ -278,6 +278,11 @@ final class ReviewUi {
       cfLp2.topMargin = a.dp(14);
       changeFreqBtn.setLayoutParams(cfLp2);
       todayCard.addView(changeFreqBtn);
+
+      Button restExtraBtn = a.primaryButton("⚡ 今天也学一组", v -> showExtraReviewModal());
+      LinearLayout.LayoutParams reLp = new LinearLayout.LayoutParams(-1, a.dp(44));
+      reLp.topMargin = a.dp(8);
+      todayCard.addView(restExtraBtn, reLp);
     } else if (totalTarget == 0) {
       // No words available
       LinearLayout emptyWords = a.column();
@@ -311,6 +316,11 @@ final class ReviewUi {
       LinearLayout.LayoutParams dsLp = new LinearLayout.LayoutParams(-1, -2);
       dsLp.topMargin = a.dp(4);
       doneCol.addView(doneSub, dsLp);
+
+      Button extraBtn = a.primaryButton("🔥 再来一组 / 额外复习", v -> showExtraReviewModal());
+      LinearLayout.LayoutParams ebLp = new LinearLayout.LayoutParams(-1, a.dp(46));
+      ebLp.topMargin = a.dp(14);
+      doneCol.addView(extraBtn, ebLp);
 
       todayCard.addView(doneCol);
     } else {
@@ -927,15 +937,22 @@ final class ReviewUi {
     addMetric(statsBox, sessionSummary.hardCount + sessionSummary.againCount, "需再强化", Color.parseColor("#F59E0B"));
     card.addView(statsBox);
 
+    Button extraRoundBtn = a.primaryButton("🔥 再来一组（额外复习）", v -> showExtraReviewModal());
+    LinearLayout.LayoutParams erLp = new LinearLayout.LayoutParams(-1, a.dp(48));
+    erLp.topMargin = a.dp(20);
+    extraRoundBtn.setLayoutParams(erLp);
+    extraRoundBtn.setTextSize(15 * a.scale);
+    card.addView(extraRoundBtn);
+
     // Back to dashboard button
-    Button backHomeBtn = a.primaryButton("返回复习中心", v -> {
+    Button backHomeBtn = a.button("返回复习中心", v -> {
       phase = "dashboard";
       a.render();
     });
-    LinearLayout.LayoutParams bhLp = new LinearLayout.LayoutParams(-1, a.dp(48));
-    bhLp.topMargin = a.dp(24);
+    LinearLayout.LayoutParams bhLp = new LinearLayout.LayoutParams(-1, a.dp(42));
+    bhLp.topMargin = a.dp(8);
     backHomeBtn.setLayoutParams(bhLp);
-    backHomeBtn.setTextSize(15 * a.scale);
+    backHomeBtn.setTextSize(14 * a.scale);
     card.addView(backHomeBtn);
   }
 
@@ -1012,6 +1029,9 @@ final class ReviewUi {
     if (set.size() == 2 && set.contains(6) && set.contains(7)) {
       return "🏖 仅周末 (周六日)";
     }
+    if (set.size() == 4 && set.contains(1) && set.contains(3) && set.contains(5) && set.contains(7)) {
+      return "📅 隔天 (周一三五日)";
+    }
     StringBuilder sb = new StringBuilder("📅 周");
     String[] ch = {"一", "二", "三", "四", "五", "六", "日"};
     List<Integer> list = new ArrayList<>(set);
@@ -1021,6 +1041,109 @@ final class ReviewUi {
       if (d >= 1 && d <= 7) sb.append(ch[d - 1]);
     }
     return sb.toString();
+  }
+
+  View createWeekdaySelector(Set<Integer> selectedDays) {
+    LinearLayout container = a.column();
+
+    // 1. Presets Row
+    LinearLayout presetsRow = a.row();
+    presetsRow.setGravity(Gravity.CENTER_VERTICAL);
+    String[] presetLabels = {"每天", "工作日", "周末", "隔天"};
+    int[][] presetDays = {
+      {1, 2, 3, 4, 5, 6, 7},
+      {1, 2, 3, 4, 5},
+      {6, 7},
+      {1, 3, 5, 7}
+    };
+    List<Button> presetBtns = new ArrayList<>();
+    List<Button> dayBtns = new ArrayList<>();
+    TextView summaryTv = a.text("", 12, false);
+
+    Runnable refresh = () -> {
+      for (int i = 0; i < 7; i++) {
+        int d = i + 1;
+        Button db = dayBtns.get(i);
+        boolean sel = selectedDays.contains(d);
+        db.setTextColor(sel ? Color.WHITE : a.foreground);
+        db.setBackground(a.shape(sel ? a.accent : a.inputBg, 8, sel ? a.accent : a.border));
+        if (sel) db.setTypeface(null, android.graphics.Typeface.BOLD);
+        else db.setTypeface(null, android.graphics.Typeface.NORMAL);
+      }
+      for (int i = 0; i < presetLabels.length; i++) {
+        Button pb = presetBtns.get(i);
+        int[] pDays = presetDays[i];
+        boolean matches = selectedDays.size() == pDays.length;
+        if (matches) {
+          for (int d : pDays) {
+            if (!selectedDays.contains(d)) { matches = false; break; }
+          }
+        }
+        pb.setTextColor(matches ? Color.WHITE : a.foreground);
+        pb.setBackground(a.shape(matches ? a.accent : a.inputBg, 8, matches ? a.accent : a.border));
+      }
+      if (selectedDays.isEmpty()) {
+        summaryTv.setText("⚠️ 请至少选择一天学习频次");
+        summaryTv.setTextColor(Color.parseColor("#EF4444"));
+      } else {
+        JSONArray arr = new JSONArray();
+        for (int d : selectedDays) arr.put(d);
+        summaryTv.setText("已选 " + selectedDays.size() + " 天 (" + formatWeekdaysBadge(arr).replace("📅 ", "").replace("💼 ", "").replace("🏖 ", "") + ")");
+        summaryTv.setTextColor(a.muted);
+      }
+    };
+
+    for (int i = 0; i < presetLabels.length; i++) {
+      final int[] days = presetDays[i];
+      Button pb = a.chip(presetLabels[i], false, null);
+      pb.setTextSize(11.5f * a.scale);
+      pb.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
+      pb.setOnClickListener(v -> {
+        selectedDays.clear();
+        for (int d : days) selectedDays.add(d);
+        refresh.run();
+      });
+      LinearLayout.LayoutParams pbLp = new LinearLayout.LayoutParams(0, a.dp(30), 1);
+      if (i > 0) pbLp.leftMargin = a.dp(6);
+      presetsRow.addView(pb, pbLp);
+      presetBtns.add(pb);
+    }
+    LinearLayout.LayoutParams prLp = new LinearLayout.LayoutParams(-1, -2);
+    prLp.topMargin = a.dp(4);
+    prLp.bottomMargin = a.dp(8);
+    container.addView(presetsRow, prLp);
+
+    // 2. 7 Day Buttons Row
+    LinearLayout daysRow = a.row();
+    String[] dayNames = {"一", "二", "三", "四", "五", "六", "日"};
+    for (int d = 1; d <= 7; d++) {
+      final int dayVal = d;
+      Button db = a.button("周" + dayNames[d - 1], null);
+      db.setTextSize(11.5f * a.scale);
+      db.setPadding(0, 0, 0, 0);
+      db.setOnClickListener(v -> {
+        if (selectedDays.contains(dayVal)) {
+          selectedDays.remove(dayVal);
+        } else {
+          selectedDays.add(dayVal);
+        }
+        refresh.run();
+      });
+      LinearLayout.LayoutParams dbLp = new LinearLayout.LayoutParams(0, a.dp(34), 1);
+      if (d > 1) dbLp.leftMargin = a.dp(4);
+      daysRow.addView(db, dbLp);
+      dayBtns.add(db);
+    }
+    container.addView(daysRow);
+
+    summaryTv.setTextColor(a.muted);
+    LinearLayout.LayoutParams smLp = new LinearLayout.LayoutParams(-1, -2);
+    smLp.topMargin = a.dp(6);
+    smLp.bottomMargin = a.dp(10);
+    container.addView(summaryTv, smLp);
+
+    refresh.run();
+    return container;
   }
 
   void showCreatePlanModal() {
@@ -1084,15 +1207,9 @@ final class ReviewUi {
     layout.addView(qRow, qRowLp);
 
     // Frequency Selector
-    layout.addView(a.text("学习频次", 13, true));
-    Spinner freqSpinner = new Spinner(a);
-    String[] freqOptions = {"每天（周一至周日）", "仅工作日（周一至周五）", "仅周末（周六、周日）"};
-    ArrayAdapter<String> freqAdapter = new ArrayAdapter<>(a, android.R.layout.simple_spinner_dropdown_item, freqOptions);
-    freqSpinner.setAdapter(freqAdapter);
-    LinearLayout.LayoutParams fsLp = new LinearLayout.LayoutParams(-1, a.dp(44));
-    fsLp.topMargin = a.dp(4);
-    fsLp.bottomMargin = a.dp(12);
-    layout.addView(freqSpinner, fsLp);
+    layout.addView(a.text("学习频次（点击星期自由定制）", 13, true));
+    final Set<Integer> selectedDays = new TreeSet<>(Arrays.asList(1, 2, 3, 4, 5, 6, 7));
+    layout.addView(createWeekdaySelector(selectedDays));
 
     // Legacy import checkbox
     CheckBox importCb = new CheckBox(a);
@@ -1109,6 +1226,10 @@ final class ReviewUi {
         .setView(sv)
         .setNegativeButton("取消", null)
         .setPositiveButton("立即创建", (dialog, which) -> {
+          if (selectedDays.isEmpty()) {
+            a.say("请至少选择一天学习频次");
+            return;
+          }
           String name = nameEt.getText().toString().trim();
           if (name.isEmpty()) name = "复习计划";
           int nbIdx = nbSpinner.getSelectedItemPosition();
@@ -1119,12 +1240,9 @@ final class ReviewUi {
           int revLimit = 40;
           try { revLimit = Integer.parseInt(revLimitEt.getText().toString().trim()); } catch (Exception ignored) {}
 
-          int[] weekdays = new int[] {1, 2, 3, 4, 5, 6, 7};
-          if (freqSpinner.getSelectedItemPosition() == 1) {
-            weekdays = new int[] {1, 2, 3, 4, 5};
-          } else if (freqSpinner.getSelectedItemPosition() == 2) {
-            weekdays = new int[] {6, 7};
-          }
+          int[] weekdays = new int[selectedDays.size()];
+          int sIdx = 0;
+          for (int d : selectedDays) weekdays[sIdx++] = d;
 
           boolean importLegacy = importCb.isChecked();
           final String finalName = name;
@@ -1183,22 +1301,15 @@ final class ReviewUi {
     layout.addView(qRow, qRowLp);
 
     // Frequency Selector
-    layout.addView(a.text("学习频次", 13, true));
-    Spinner freqSpinner = new Spinner(a);
-    String[] freqOptions = {"每天（周一至周日）", "仅工作日（周一至周五）", "仅周末（周六、周日）"};
-    ArrayAdapter<String> freqAdapter = new ArrayAdapter<>(a, android.R.layout.simple_spinner_dropdown_item, freqOptions);
-    freqSpinner.setAdapter(freqAdapter);
-
+    layout.addView(a.text("学习频次（点击星期自由定制）", 13, true));
+    final Set<Integer> selectedDays = new TreeSet<>();
     JSONArray curWd = plan.optJSONArray("weekdays");
-    if (curWd != null) {
-      if (curWd.length() == 5) freqSpinner.setSelection(1);
-      else if (curWd.length() == 2) freqSpinner.setSelection(2);
-      else freqSpinner.setSelection(0);
+    if (curWd != null && curWd.length() > 0) {
+      for (int i = 0; i < curWd.length(); i++) selectedDays.add(curWd.optInt(i));
+    } else {
+      selectedDays.addAll(Arrays.asList(1, 2, 3, 4, 5, 6, 7));
     }
-    LinearLayout.LayoutParams fsLp = new LinearLayout.LayoutParams(-1, a.dp(44));
-    fsLp.topMargin = a.dp(4);
-    fsLp.bottomMargin = a.dp(12);
-    layout.addView(freqSpinner, fsLp);
+    layout.addView(createWeekdaySelector(selectedDays));
 
     // Notice: Notebook and Timezone are immutable as per domain rules
     TextView noteTv = a.text("注：绑定的笔记本与时区在计划创建后固定，如需调整可新建计划。", 11, false);
@@ -1213,6 +1324,10 @@ final class ReviewUi {
         .setView(sv)
         .setNegativeButton("取消", null)
         .setPositiveButton("保存修改", (dialog, which) -> {
+          if (selectedDays.isEmpty()) {
+            a.say("请至少选择一天学习频次");
+            return;
+          }
           String name = nameEt.getText().toString().trim();
           if (name.isEmpty()) name = plan.optString("name");
 
@@ -1221,17 +1336,10 @@ final class ReviewUi {
           int revLimit = plan.optInt("daily_review_limit", 40);
           try { revLimit = Integer.parseInt(revLimitEt.getText().toString().trim()); } catch (Exception ignored) {}
 
-          int[] weekdays = new int[] {1, 2, 3, 4, 5, 6, 7};
-          if (freqSpinner.getSelectedItemPosition() == 1) {
-            weekdays = new int[] {1, 2, 3, 4, 5};
-          } else if (freqSpinner.getSelectedItemPosition() == 2) {
-            weekdays = new int[] {6, 7};
-          }
-
           final String finalName = name;
           final int finalNew = newLimit;
           final int finalRev = revLimit;
-          final int[] finalWeekdays = weekdays;
+          final Set<Integer> finalDays = new TreeSet<>(selectedDays);
 
           boolean saved = a.change(() -> {
             JSONObject patch = new JSONObject();
@@ -1239,7 +1347,7 @@ final class ReviewUi {
             Library.put(patch, "daily_new_limit", finalNew);
             Library.put(patch, "daily_review_limit", finalRev);
             JSONArray wdArr = new JSONArray();
-            for (int w : finalWeekdays) wdArr.put(w);
+            for (int w : finalDays) wdArr.put(w);
             Library.put(patch, "weekdays", wdArr);
             a.library.reviewPlans().update(planId, patch, System.currentTimeMillis());
           });
@@ -1262,6 +1370,167 @@ final class ReviewUi {
           });
           if (saved) {
             a.say("计划已成功归档");
+          }
+        })
+        .show();
+  }
+
+  void showExtraReviewModal() {
+    if (activePlanId == null) return;
+    long now = System.currentTimeMillis();
+    JSONObject avail = a.library.reviewPlans().extraAvailable(activePlanId, now);
+    int availTotal = avail.optInt("available_total");
+    int availNew = avail.optInt("available_new");
+    int availRev = avail.optInt("available_review");
+    int dailyNew = avail.optInt("daily_new_limit", 15);
+    int dailyRev = avail.optInt("daily_review_limit", 40);
+
+    if (availTotal == 0) {
+      new AlertDialog.Builder(a)
+          .setTitle("暂无更多可用词汇")
+          .setMessage("该笔记本中所有词汇今天已全部在复习列表中，没有更多词汇可供加练。\n\n你可以前往「笔记」模块添加更多新词后再来！")
+          .setPositiveButton("知道了", null)
+          .show();
+      return;
+    }
+
+    LinearLayout layout = a.column();
+    layout.setPadding(a.dp(20), a.dp(16), a.dp(20), a.dp(16));
+
+    // Summary banner
+    LinearLayout tipBox = a.column();
+    tipBox.setPadding(a.dp(12), a.dp(10), a.dp(12), a.dp(10));
+    tipBox.setBackground(a.shape((a.accent & 0x00FFFFFF) | 0x12000000, 10, 0));
+    TextView tipTitle = a.text("趁热打铁，多记几个生词或强化记忆！", 13, true);
+    tipTitle.setTextColor(a.accent);
+    tipBox.addView(tipTitle);
+    TextView tipDetail = a.text("词库尚有 " + availTotal + " 词可用（未学新词 " + availNew + " · 巩固复习 " + availRev + "）", 12, false);
+    tipDetail.setTextColor(a.muted);
+    LinearLayout.LayoutParams tdLp = new LinearLayout.LayoutParams(-1, -2);
+    tdLp.topMargin = a.dp(3);
+    tipBox.addView(tipDetail, tdLp);
+    LinearLayout.LayoutParams tbLp = new LinearLayout.LayoutParams(-1, -2);
+    tbLp.bottomMargin = a.dp(14);
+    layout.addView(tipBox, tbLp);
+
+    layout.addView(a.text("加练模式", 13, true));
+
+    final int[] selectedMode = {0}; // default to 再来一天的量
+    int oneDayTarget = Math.min(dailyNew + dailyRev, availTotal);
+    int oneDayNew = Math.min(dailyNew, availNew);
+    int oneDayRev = Math.min(dailyRev, availRev);
+
+    String[] modeTitles = {
+      "再来一天的量 (+" + oneDayTarget + " 词)",
+      "微练习 (+5 词)",
+      "标准一组 (+10 词)",
+      "深度突破 (+20 词)",
+      "自由指定数量"
+    };
+    String[] modeSubs = {
+      "按计划配置配额：新词 " + oneDayNew + " + 复习 " + oneDayRev,
+      "轻松加练，只需 2~3 分钟",
+      "巩固记忆，推荐加练量",
+      "强化记忆深度，巩固生词群",
+      "自由输入本次想要加练的词汇数"
+    };
+
+    List<LinearLayout> optionCards = new ArrayList<>();
+    LinearLayout optionsGroup = a.column();
+
+    // Custom input container (visible when mode == 4)
+    LinearLayout customRow = a.row();
+    customRow.setGravity(Gravity.CENTER_VERTICAL);
+    customRow.setVisibility(View.GONE);
+    EditText customEt = a.input("输入词数", "10", false);
+    customEt.setInputType(InputType.TYPE_CLASS_NUMBER);
+    LinearLayout.LayoutParams ceLp = new LinearLayout.LayoutParams(0, a.dp(44), 1);
+    customRow.addView(customEt, ceLp);
+    TextView customUnit = a.text(" 词 (上限 " + availTotal + " 词)", 12, false);
+    customUnit.setTextColor(a.muted);
+    customRow.addView(customUnit);
+
+    Runnable updateSelection = () -> {
+      for (int i = 0; i < optionCards.size(); i++) {
+        LinearLayout card = optionCards.get(i);
+        boolean sel = selectedMode[0] == i;
+        card.setBackground(a.shape(sel ? ((a.accent & 0x00FFFFFF) | 0x12000000) : a.inputBg, 10, sel ? a.accent : a.border));
+        TextView tTitle = (TextView) card.getChildAt(0);
+        tTitle.setTextColor(sel ? a.accent : a.foreground);
+      }
+      customRow.setVisibility(selectedMode[0] == 4 ? View.VISIBLE : View.GONE);
+    };
+
+    for (int i = 0; i < modeTitles.length; i++) {
+      final int modeIdx = i;
+      LinearLayout oCard = a.column();
+      oCard.setPadding(a.dp(12), a.dp(8), a.dp(12), a.dp(8));
+      oCard.setClickable(true);
+      oCard.setOnClickListener(v -> {
+        selectedMode[0] = modeIdx;
+        updateSelection.run();
+      });
+
+      TextView oTitle = a.text(modeTitles[i], 14, true);
+      oCard.addView(oTitle);
+
+      TextView oSub = a.text(modeSubs[i], 11, false);
+      oSub.setTextColor(a.muted);
+      oCard.addView(oSub);
+
+      LinearLayout.LayoutParams ocLp = new LinearLayout.LayoutParams(-1, -2);
+      ocLp.topMargin = a.dp(6);
+      optionsGroup.addView(oCard, ocLp);
+      optionCards.add(oCard);
+    }
+    layout.addView(optionsGroup);
+
+    LinearLayout.LayoutParams crLp = new LinearLayout.LayoutParams(-1, -2);
+    crLp.topMargin = a.dp(8);
+    layout.addView(customRow, crLp);
+
+    updateSelection.run();
+
+    ScrollView sv = new ScrollView(a);
+    sv.addView(layout);
+
+    new AlertDialog.Builder(a)
+        .setTitle("🔥 再来一组")
+        .setView(sv)
+        .setNegativeButton("取消", null)
+        .setPositiveButton("开始加练", (dialog, which) -> {
+          int count = 10;
+          int addN = 0, addR = 0;
+          if (selectedMode[0] == 0) {
+            addN = oneDayNew;
+            addR = oneDayRev;
+            if (addN == 0 && addR == 0) {
+              addR = Math.min(oneDayTarget, availRev);
+              addN = Math.min(oneDayTarget - addR, availNew);
+            }
+          } else {
+            if (selectedMode[0] == 1) count = 5;
+            else if (selectedMode[0] == 2) count = 10;
+            else if (selectedMode[0] == 3) count = 20;
+            else {
+              try { count = Integer.parseInt(customEt.getText().toString().trim()); } catch (Exception ignored) {}
+            }
+            count = Math.max(1, Math.min(count, availTotal));
+            addR = Math.min(count, availRev);
+            addN = Math.min(count - addR, availNew);
+          }
+
+          final int finalN = addN;
+          final int finalR = addR;
+
+          boolean saved = a.change(() -> {
+            a.library.reviewPlans().extendDailyQueue(activePlanId, finalN, finalR, System.currentTimeMillis());
+            phase = "active";
+            revealed = false;
+            cardStartTime = System.currentTimeMillis();
+          });
+          if (saved) {
+            a.say("已加练 " + (finalN + finalR) + " 词，开始复习！");
           }
         })
         .show();
