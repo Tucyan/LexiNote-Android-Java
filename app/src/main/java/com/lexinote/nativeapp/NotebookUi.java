@@ -438,11 +438,12 @@ final class NotebookUi {
       a.render();
     });
     card.setOnLongClickListener(v -> {
-      new AlertDialog.Builder(a)
-          .setTitle("全部词汇")
-          .setMessage("全部词汇 · " + totalVocab + " 条词汇\n系统总词典，跨笔记本实体汇聚。")
-          .setPositiveButton("确定", null)
-          .show();
+      AlertDialog.Builder b =
+          new AlertDialog.Builder(a)
+              .setTitle("全部词汇")
+              .setMessage("全部词汇 · " + totalVocab + " 条词汇\n系统总词典，跨笔记本实体汇聚。")
+              .setPositiveButton("确定", null);
+      a.showDialog(b);
       return true;
     });
 
@@ -690,12 +691,13 @@ final class NotebookUi {
     Button manageBtn = a.chip(selectedNote == null ? "信息" : "管理", false, v -> {
       if (selectedNote != null) manage(selectedNote);
       else {
-        new AlertDialog.Builder(a)
-            .setTitle("分类信息")
-            .setMessage("全部词汇 · " + visible().size() + " 条词汇\n词汇实体可被多个笔记共享引用。")
-            .setNeutralButton("管理", (dialog, which) -> manage(null))
-            .setPositiveButton("确定", null)
-            .show();
+        AlertDialog.Builder b =
+            new AlertDialog.Builder(a)
+                .setTitle("分类信息")
+                .setMessage("全部词汇 · " + visible().size() + " 条词汇\n词汇实体可被多个笔记共享引用。")
+                .setNeutralButton("管理", (dialog, which) -> manage(null))
+                .setPositiveButton("确定", null);
+        a.showDialog(b);
       }
     });
     navBar.addView(manageBtn);
@@ -1276,7 +1278,7 @@ final class NotebookUi {
     bottomActions.addView(applyBtn, aLp);
     sheet.addView(bottomActions);
 
-    dialog.show();
+    a.showDialog(dialog);
   }
 
   void renderVocabularyListCard(JSONObject vocabulary, JSONObject display) {
@@ -1716,53 +1718,57 @@ final class NotebookUi {
     String noteId = (selected == null || "nb_global_root".equals(selected)) ? null : selected;
     String[] actions =
         noteId == null ? new String[] {"查看详情与管理"} : new String[] {"查看详情与管理", "从此笔记移除引用"};
-    new AlertDialog.Builder(a)
-        .setItems(
-            actions,
-            (dialog, which) -> {
-              if (which == 0) {
-                detail(vocabulary);
-              } else if (noteId != null) {
-                new AlertDialog.Builder(a)
-                    .setMessage("仅从此笔记移除此词汇引用，词汇本身和其他笔记不受影响。")
-                    .setNegativeButton("取消", null)
-                    .setPositiveButton(
-                        "移除",
-                        (confirmation, button) ->
-                            a.change(
-                                () -> {
-                                  JSONObject note = a.library.find("notebooks", noteId);
-                                  if (note != null)
-                                    Library.removeValue(
-                                        note.optJSONArray("vocabulary_ids"),
-                                        vocabulary.optString("id"));
-                                }))
-                    .show();
-              }
-            })
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setItems(
+                actions,
+                (dialog, which) -> {
+                  if (which == 0) {
+                    detail(vocabulary);
+                  } else if (noteId != null) {
+                    AlertDialog.Builder removeB =
+                        new AlertDialog.Builder(a)
+                            .setMessage("仅从此笔记移除此词汇引用，词汇本身和其他笔记不受影响。")
+                            .setNegativeButton("取消", null)
+                            .setPositiveButton(
+                                "移除",
+                                (confirmation, button) ->
+                                    a.change(
+                                        () -> {
+                                          JSONObject note = a.library.find("notebooks", noteId);
+                                          if (note != null)
+                                            Library.removeValue(
+                                                note.optJSONArray("vocabulary_ids"),
+                                                vocabulary.optString("id"));
+                                        }));
+                    AlertDialog removeD = a.showDialog(removeB);
+                    a.styleDestructive(removeD);
+                  }
+                });
+    a.showDialog(b);
   }
 
   void exportMenu() {
-    new AlertDialog.Builder(a)
-        .setTitle("导出当前筛选")
-        .setItems(
-            new String[] {"Markdown", "JSON", "CSV"},
-            (d, w) -> {
-              List<JSONObject> rows = visible();
-              if (w == 0) {
-                JSONObject note = (selected == null || "nb_global_root".equals(selected)) ? null : a.library.find("notebooks", selected);
-                a.export(
-                    "lexinote-filter.md",
-                    "text/markdown",
-                    NotebookExport.markdownForNotebook(rows, note));
-              } else if (w == 1) {
-                JSONArray arr = new JSONArray();
-                for (JSONObject r : rows) arr.put(r);
-                a.export("lexinote-filter.json", "application/json", arr.toString());
-              } else a.export("lexinote-filter.csv", "text/csv", "\uFEFF" + a.library.csv(rows));
-            })
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle("导出当前筛选")
+            .setItems(
+                new String[] {"Markdown", "JSON", "CSV"},
+                (d, w) -> {
+                  List<JSONObject> rows = visible();
+                  if (w == 0) {
+                    JSONObject note = (selected == null || "nb_global_root".equals(selected)) ? null : a.library.find("notebooks", selected);
+                    a.export(
+                        "lexinote-filter.md",
+                        "text/markdown",
+                        NotebookExport.markdownForNotebook(rows, note));
+                  } else if (w == 1) {
+                    JSONArray arr = new JSONArray();
+                    for (JSONObject r : rows) arr.put(r);
+                    a.export("lexinote-filter.json", "application/json", arr.toString());
+                  } else a.export("lexinote-filter.csv", "text/csv", "\uFEFF" + a.library.csv(rows));
+                });
+    a.showDialog(b);
   }
 
   void toggleSelected(String id) {
@@ -1801,24 +1807,25 @@ final class NotebookUi {
       options.add("复制引用到笔记");
     }
     options.add("全局删除词汇（所有笔记）");
-    new AlertDialog.Builder(a)
-        .setTitle("批量操作 · " + selectedVocabularyIds.size() + " 项")
-        .setItems(
-            options.toArray(new String[0]),
-            (dialog, which) -> {
-              String action = options.get(which);
-              if (action.startsWith("移动") || action.startsWith("复制"))
-                chooseBatchTargets(action.startsWith("复制"));
-              else if (action.startsWith("从当前"))
-                confirmBatch(
-                    "仅移除这些词汇在当前笔记中的引用，实体和其他笔记保持不变。",
-                    () -> a.library.removeReferences(selected, ids()));
-              else
-                confirmBatch(
-                    "永久删除所选词汇实体，并从所有笔记中移除引用。此操作无法恢复。",
-                    () -> a.library.deleteVocabularyEverywhere(ids()));
-            })
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle("批量操作 · " + selectedVocabularyIds.size() + " 项")
+            .setItems(
+                options.toArray(new String[0]),
+                (dialog, which) -> {
+                  String action = options.get(which);
+                  if (action.startsWith("移动") || action.startsWith("复制"))
+                    chooseBatchTargets(action.startsWith("复制"));
+                  else if (action.startsWith("从当前"))
+                    confirmBatch(
+                        "仅移除这些词汇在当前笔记中的引用，实体和其他笔记保持不变。",
+                        () -> a.library.removeReferences(selected, ids()));
+                  else
+                    confirmBatch(
+                        "永久删除所选词汇实体，并从所有笔记中移除引用。此操作无法恢复。",
+                        () -> a.library.deleteVocabularyEverywhere(ids()));
+                });
+    a.showDialog(b);
   }
 
   String[] ids() {
@@ -1827,18 +1834,20 @@ final class NotebookUi {
   }
 
   void confirmBatch(String message, Runnable action) {
-    new AlertDialog.Builder(a)
-        .setMessage(message)
-        .setNegativeButton("取消", null)
-        .setPositiveButton(
-            "确认",
-            (d, w) -> {
-              if (a.change(action::run)) {
-                selectedVocabularyIds.clear();
-                selecting = false;
-              }
-            })
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setMessage(message)
+            .setNegativeButton("取消", null)
+            .setPositiveButton(
+                "确认",
+                (d, w) -> {
+                  if (a.change(action::run)) {
+                    selectedVocabularyIds.clear();
+                    selecting = false;
+                  }
+                });
+    AlertDialog d = a.showDialog(b);
+    if (message.contains("永久删除")) a.styleDestructive(d);
   }
 
   void chooseBatchTargets(boolean copy) {
@@ -1849,28 +1858,29 @@ final class NotebookUi {
       names[i] = targets.get(i).optString("name");
       checked[i] = targets.get(i).optString("id").equals(selected);
     }
-    new AlertDialog.Builder(a)
-        .setTitle(copy ? "复制引用到目标笔记" : "移动到目标笔记")
-        .setMultiChoiceItems(names, checked, (dlg, index, value) -> checked[index] = value)
-        .setNegativeButton("取消", null)
-        .setPositiveButton(
-            "执行",
-            (dlg, w) -> {
-              List<String> targetIds = new ArrayList<>();
-              for (int i = 0; i < checked.length; i++)
-                if (checked[i]) targetIds.add(targets.get(i).optString("id"));
-              if (targetIds.isEmpty()) {
-                a.say("至少选择一个目标笔记");
-                return;
-              }
-              String sourceId = selected == null ? "nb_global_root" : selected;
-              confirmBatch(
-                  copy ? "将共享词汇引用复制到所选笔记，并保留各笔记显示设置。" : "将引用移动到所选笔记，并保留显示设置。",
-                  () ->
-                      a.library.batchReferences(
-                          sourceId, ids(), targetIds.toArray(new String[0]), copy));
-            })
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle(copy ? "复制引用到目标笔记" : "移动到目标笔记")
+            .setMultiChoiceItems(names, checked, (dlg, index, value) -> checked[index] = value)
+            .setNegativeButton("取消", null)
+            .setPositiveButton(
+                "执行",
+                (dlg, w) -> {
+                  List<String> targetIds = new ArrayList<>();
+                  for (int i = 0; i < checked.length; i++)
+                    if (checked[i]) targetIds.add(targets.get(i).optString("id"));
+                  if (targetIds.isEmpty()) {
+                    a.say("至少选择一个目标笔记");
+                    return;
+                  }
+                  String sourceId = selected == null ? "nb_global_root" : selected;
+                  confirmBatch(
+                      copy ? "将共享词汇引用复制到所选笔记，并保留各笔记显示设置。" : "将引用移动到所选笔记，并保留显示设置。",
+                      () ->
+                          a.library.batchReferences(
+                              sourceId, ids(), targetIds.toArray(new String[0]), copy));
+                });
+    a.showDialog(b);
   }
 
   void manage(JSONObject n) {
@@ -1881,19 +1891,22 @@ final class NotebookUi {
       actions.add(() -> rename(n));
       options.add("删除笔记树");
       actions.add(
-          () ->
-              new AlertDialog.Builder(a)
-                  .setMessage("删除当前笔记及其全部子笔记？词汇仍在全局词库。")
-                  .setNegativeButton("取消", null)
-                  .setPositiveButton(
-                      "删除",
-                      (d, w) ->
-                          a.change(
-                              () -> {
-                                a.library.deleteNotebook(selected);
-                                selected = null;
-                              }))
-                  .show());
+          () -> {
+            AlertDialog.Builder b =
+                new AlertDialog.Builder(a)
+                    .setMessage("删除当前笔记及其全部子笔记？词汇仍在全局词库。")
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton(
+                        "删除",
+                        (d, w) ->
+                            a.change(
+                                () -> {
+                                  a.library.deleteNotebook(selected);
+                                  selected = null;
+                                }));
+            AlertDialog d = a.showDialog(b);
+            a.styleDestructive(d);
+          });
       options.add("创建子分类");
       actions.add(() -> create());
     } else {
@@ -1902,10 +1915,11 @@ final class NotebookUi {
     }
     options.add("离线添加词汇");
     actions.add(() -> manual());
-    new AlertDialog.Builder(a)
-        .setTitle("分类管理")
-        .setItems(options.toArray(new String[0]), (d, w) -> actions.get(w).run())
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle("分类管理")
+            .setItems(options.toArray(new String[0]), (d, w) -> actions.get(w).run());
+    a.showDialog(b);
   }
 
   String path(String id) {
@@ -1919,14 +1933,15 @@ final class NotebookUi {
 
   void create(String parentId) {
     EditText name = a.input("笔记名称", "", false);
-    new AlertDialog.Builder(a)
-        .setTitle("创建笔记")
-        .setView(name)
-        .setNegativeButton("取消", null)
-        .setPositiveButton(
-            "创建",
-            (d, w) -> a.change(() -> a.library.createNotebook(name.getText().toString(), parentId)))
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle("创建笔记")
+            .setView(a.dialogInput(name))
+            .setNegativeButton("取消", null)
+            .setPositiveButton(
+                "创建",
+                (d, w) -> a.change(() -> a.library.createNotebook(name.getText().toString(), parentId)));
+    a.showDialog(b);
   }
 
   void rename(JSONObject n) {
@@ -1935,24 +1950,26 @@ final class NotebookUi {
       return;
     }
     EditText name = a.input("笔记名称", n.optString("name"), false);
-    new AlertDialog.Builder(a)
-        .setTitle("重命名")
-        .setView(name)
-        .setNegativeButton("取消", null)
-        .setPositiveButton(
-            "保存",
-            (d, w) -> {
-              if (name.getText().toString().trim().isEmpty()) {
-                a.say("名称不能为空");
-                return;
-              }
-              a.change(() -> Library.put(n, "name", name.getText().toString().trim()));
-            })
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle("重命名")
+            .setView(a.dialogInput(name))
+            .setNegativeButton("取消", null)
+            .setPositiveButton(
+                "保存",
+                (d, w) -> {
+                  if (name.getText().toString().trim().isEmpty()) {
+                    a.say("名称不能为空");
+                    return;
+                  }
+                  a.change(() -> Library.put(n, "name", name.getText().toString().trim()));
+                });
+    a.showDialog(b);
   }
 
   void manual() {
     LinearLayout box = a.column();
+    box.setPadding(a.dp(22), a.dp(10), a.dp(22), a.dp(6));
     EditText word = a.input("单词或短语", "", false),
         zh = a.input("中文释义", "", true),
         en = a.input("英文释义（可选）", "", true),
@@ -1961,26 +1978,27 @@ final class NotebookUi {
     box.addView(zh);
     box.addView(en);
     box.addView(example);
-    new AlertDialog.Builder(a)
-        .setTitle("离线添加词汇")
-        .setView(box)
-        .setNegativeButton("取消", null)
-        .setPositiveButton(
-            "选择笔记",
-            (d, w) -> {
-              JSONObject result = new JSONObject(), meaning = new JSONObject();
-              Library.put(result, "word", word.getText().toString().trim());
-              Library.put(
-                  result,
-                  "type",
-                  word.getText().toString().trim().contains(" ") ? "phrase" : "word");
-              Library.put(meaning, "zh_definition", zh.getText().toString());
-              Library.put(meaning, "en_definition", en.getText().toString());
-              Library.put(meaning, "example", example.getText().toString());
-              Library.put(result, "meanings", new JSONArray().put(meaning));
-              saveDialog(result);
-            })
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle("离线添加词汇")
+            .setView(box)
+            .setNegativeButton("取消", null)
+            .setPositiveButton(
+                "选择笔记",
+                (d, w) -> {
+                  JSONObject result = new JSONObject(), meaning = new JSONObject();
+                  Library.put(result, "word", word.getText().toString().trim());
+                  Library.put(
+                      result,
+                      "type",
+                      word.getText().toString().trim().contains(" ") ? "phrase" : "word");
+                  Library.put(meaning, "zh_definition", zh.getText().toString());
+                  Library.put(meaning, "en_definition", en.getText().toString());
+                  Library.put(meaning, "example", example.getText().toString());
+                  Library.put(result, "meanings", new JSONArray().put(meaning));
+                  saveDialog(result);
+                });
+    a.showDialog(b);
   }
 
   List<JSONObject> leaves() {
@@ -2032,15 +2050,17 @@ final class NotebookUi {
       box.addView(cb);
       fs.add(cb);
     }
+    box.setPadding(a.dp(20), a.dp(8), a.dp(20), a.dp(8));
     ScrollView scroll = new ScrollView(a);
     scroll.addView(box);
-    new AlertDialog.Builder(a)
-        .setTitle("保存到多个笔记")
-        .setView(scroll)
-        .setNegativeButton("取消", null)
-        .setPositiveButton(
-            "保存",
-            (d, w) -> {
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle("保存到多个笔记")
+            .setView(scroll)
+            .setNegativeButton("取消", null)
+            .setPositiveButton(
+                "保存",
+                (d, w) -> {
               try {
                 List<String> ids = new ArrayList<>();
                 for (int i = 0; i < checks.size(); i++)
@@ -2068,8 +2088,8 @@ final class NotebookUi {
               } catch (Exception e) {
                 a.error(e);
               }
-            })
-        .show();
+            });
+    a.showDialog(b);
   }
 
   void saveDefault(JSONObject result) {
@@ -2229,47 +2249,51 @@ final class NotebookUi {
 
     EditText phoneticInput = a.input("音标 (选填)", v.optString("phonetic"), false);
     box.addView(phoneticInput);
+    box.setPadding(a.dp(22), a.dp(10), a.dp(22), a.dp(6));
 
-    new AlertDialog.Builder(a)
-        .setTitle("编辑词汇与类型")
-        .setView(box)
-        .setNegativeButton("取消", null)
-        .setPositiveButton(
-            "保存",
-            (d, w) -> {
-              String newContent = contentInput.getText().toString().trim();
-              if (newContent.isEmpty()) {
-                a.say("词汇不能为空");
-                return;
-              }
-              a.change(
-                  () -> {
-                    a.library.renameVocabulary(v.optString("id"), newContent);
-                    Library.put(v, "type", selectedType[0]);
-                    Library.put(v, "phonetic", phoneticInput.getText().toString().trim());
-                    Library.put(v, "updated_at", Library.now());
-                  });
-            })
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle("编辑词汇与类型")
+            .setView(box)
+            .setNegativeButton("取消", null)
+            .setPositiveButton(
+                "保存",
+                (d, w) -> {
+                  String newContent = contentInput.getText().toString().trim();
+                  if (newContent.isEmpty()) {
+                    a.say("词汇不能为空");
+                    return;
+                  }
+                  a.change(
+                      () -> {
+                        a.library.renameVocabulary(v.optString("id"), newContent);
+                        Library.put(v, "type", selectedType[0]);
+                        Library.put(v, "phonetic", phoneticInput.getText().toString().trim());
+                        Library.put(v, "updated_at", Library.now());
+                      });
+                });
+    a.showDialog(b);
   }
 
   void confirmDeleteVocabulary(JSONObject v) {
     String word = v.optString("content");
-    new AlertDialog.Builder(a)
-        .setTitle("彻底删除词汇")
-        .setMessage("确定要彻底从词库中删除「" + word + "」吗？\n所有笔记分类中的引用也将一并清除。")
-        .setNegativeButton("取消", null)
-        .setPositiveButton(
-            "彻底删除",
-            (d, w) ->
-                a.change(
-                    () -> {
-                      a.library.deleteVocabularyEverywhere(
-                          new String[] {v.optString("id")});
-                      a.activeVocabulary = null;
-                      a.screen = "tabs";
-                    }))
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle("彻底删除词汇")
+            .setMessage("确定要彻底从词库中删除「" + word + "」吗？\n所有笔记分类中的引用也将一并清除。")
+            .setNegativeButton("取消", null)
+            .setPositiveButton(
+                "彻底删除",
+                (d, w) ->
+                    a.change(
+                        () -> {
+                          a.library.deleteVocabularyEverywhere(
+                              new String[] {v.optString("id")});
+                          a.activeVocabulary = null;
+                          a.screen = "tabs";
+                        }));
+    AlertDialog d = a.showDialog(b);
+    a.styleDestructive(d);
   }
 
   void confirmDeleteMeaning(JSONObject v, JSONObject m) {
@@ -2278,53 +2302,56 @@ final class NotebookUi {
       a.say("词汇必须至少保留一条释义");
       return;
     }
-    new AlertDialog.Builder(a)
-        .setTitle("删除释义")
-        .setMessage("确定删除该条释义记录吗？")
-        .setNegativeButton("取消", null)
-        .setPositiveButton(
-            "删除",
-            (d, w) ->
-                a.change(
-                    () -> {
-                      Library.removeValue(ms, m.optString("id"));
-                      Library.put(v, "updated_at", Library.now());
-                    }))
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle("删除释义")
+            .setMessage("确定删除该条释义记录吗？")
+            .setNegativeButton("取消", null)
+            .setPositiveButton(
+                "删除",
+                (d, w) ->
+                    a.change(
+                        () -> {
+                          Library.removeValue(ms, m.optString("id"));
+                          Library.put(v, "updated_at", Library.now());
+                        }));
+    AlertDialog d = a.showDialog(b);
+    a.styleDestructive(d);
   }
 
   void addTagDialog(JSONObject v) {
     EditText tagInput = a.input("新标签名称", "", false);
-    new AlertDialog.Builder(a)
-        .setTitle("添加标签")
-        .setView(tagInput)
-        .setNegativeButton("取消", null)
-        .setPositiveButton(
-            "添加",
-            (d, w) -> {
-              String tag = tagInput.getText().toString().trim();
-              if (tag.isEmpty()) return;
-              a.change(
-                  () -> {
-                    JSONArray tags = v.optJSONArray("tags");
-                    if (tags == null) {
-                      tags = new JSONArray();
-                      Library.put(v, "tags", tags);
-                    }
-                    boolean exists = false;
-                    for (int i = 0; i < tags.length(); i++) {
-                      if (tags.optString(i).equals(tag)) {
-                        exists = true;
-                        break;
-                      }
-                    }
-                    if (!exists) {
-                      tags.put(tag);
-                      Library.put(v, "updated_at", Library.now());
-                    }
-                  });
-            })
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle("添加标签")
+            .setView(a.dialogInput(tagInput))
+            .setNegativeButton("取消", null)
+            .setPositiveButton(
+                "添加",
+                (d, w) -> {
+                  String tag = tagInput.getText().toString().trim();
+                  if (tag.isEmpty()) return;
+                  a.change(
+                      () -> {
+                        JSONArray tags = v.optJSONArray("tags");
+                        if (tags == null) {
+                          tags = new JSONArray();
+                          Library.put(v, "tags", tags);
+                        }
+                        boolean exists = false;
+                        for (int i = 0; i < tags.length(); i++) {
+                          if (tags.optString(i).equals(tag)) {
+                            exists = true;
+                            break;
+                          }
+                        }
+                        if (!exists) {
+                          tags.put(tag);
+                          Library.put(v, "updated_at", Library.now());
+                        }
+                      });
+                });
+    a.showDialog(b);
   }
 
   void renderVocabularyDetail() {
@@ -2744,10 +2771,12 @@ final class NotebookUi {
               + ms.optJSONObject(i)
                   .optString("zh_definition", ms.optJSONObject(i).optString("en_definition"));
     options[ms.length()] = "+ 添加释义";
-    new AlertDialog.Builder(a)
-        .setTitle("选择释义")
-        .setItems(options, (d, w) -> editMeaning(v, w == ms.length() ? null : ms.optJSONObject(w)))
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle("选择释义")
+            .setItems(
+                options, (d, w) -> editMeaning(v, w == ms.length() ? null : ms.optJSONObject(w)));
+    a.showDialog(b);
   }
 
   void editMeaning(JSONObject vocab, JSONObject original) {
@@ -2775,44 +2804,46 @@ final class NotebookUi {
       }
     EditText annotation = a.input("添加一条批注（绑定当前释义）", "", true);
     box.addView(annotation);
+    box.setPadding(a.dp(20), a.dp(8), a.dp(20), a.dp(8));
     ScrollView scroll = new ScrollView(a);
     scroll.addView(box);
-    new AlertDialog.Builder(a)
-        .setTitle("编辑释义")
-        .setView(scroll)
-        .setNegativeButton("取消", null)
-        .setPositiveButton(
-            "保存",
-            (d, w) ->
-                a.change(
-                    () -> {
-                      if (inputs.get(1).getText().toString().trim().isEmpty()
-                          && inputs.get(2).getText().toString().trim().isEmpty())
-                        throw new IllegalArgumentException("至少填写中文或英文释义");
-                      for (int i = 0; i < fields.length; i++)
-                        Library.put(m, fields[i], inputs.get(i).getText().toString());
-                      if (original == null) {
-                        Library.put(m, "id", Library.id());
-                        Library.put(m, "created_at", Library.now());
-                        vocab.optJSONArray("meanings").put(m);
-                      }
-                      Library.put(m, "updated_at", Library.now());
-                      if (!annotation.getText().toString().trim().isEmpty()) {
-                        JSONArray notes = m.optJSONArray("annotations");
-                        if (notes == null) {
-                          notes = new JSONArray();
-                          Library.put(m, "annotations", notes);
-                        }
-                        JSONObject note = new JSONObject();
-                        Library.put(note, "id", Library.id());
-                        Library.put(note, "meaning_id", m.optString("id"));
-                        Library.put(note, "content", annotation.getText().toString());
-                        Library.put(note, "created_at", Library.now());
-                        Library.put(note, "updated_at", Library.now());
-                        notes.put(note);
-                      }
-                    }))
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle("编辑释义")
+            .setView(scroll)
+            .setNegativeButton("取消", null)
+            .setPositiveButton(
+                "保存",
+                (d, w) ->
+                    a.change(
+                        () -> {
+                          if (inputs.get(1).getText().toString().trim().isEmpty()
+                              && inputs.get(2).getText().toString().trim().isEmpty())
+                            throw new IllegalArgumentException("至少填写中文或英文释义");
+                          for (int i = 0; i < fields.length; i++)
+                            Library.put(m, fields[i], inputs.get(i).getText().toString());
+                          if (original == null) {
+                            Library.put(m, "id", Library.id());
+                            Library.put(m, "created_at", Library.now());
+                            vocab.optJSONArray("meanings").put(m);
+                          }
+                          Library.put(m, "updated_at", Library.now());
+                          if (!annotation.getText().toString().trim().isEmpty()) {
+                            JSONArray notes = m.optJSONArray("annotations");
+                            if (notes == null) {
+                              notes = new JSONArray();
+                              Library.put(m, "annotations", notes);
+                            }
+                            JSONObject note = new JSONObject();
+                            Library.put(note, "id", Library.id());
+                            Library.put(note, "meaning_id", m.optString("id"));
+                            Library.put(note, "content", annotation.getText().toString());
+                            Library.put(note, "created_at", Library.now());
+                            Library.put(note, "updated_at", Library.now());
+                            notes.put(note);
+                          }
+                        }));
+    a.showDialog(b);
   }
 
   void annotationDialog(
@@ -2828,6 +2859,7 @@ final class NotebookUi {
     EditText target = a.input("目标字词 / 片段", targetText, false);
     EditText content = a.input("批注内容", existing == null ? "" : existing.optString("content"), true);
     LinearLayout box = a.column();
+    box.setPadding(a.dp(22), a.dp(10), a.dp(22), a.dp(6));
     box.addView(spinner);
     box.addView(target);
     box.addView(content);
@@ -2859,7 +2891,7 @@ final class NotebookUi {
     if (existing != null)
       builder.setNeutralButton(
           "删除", (d, w) -> a.change(() -> Annotations.remove(meaning, existing.optString("id"))));
-    builder.show();
+    a.showDialog(builder);
   }
 
   void membership(JSONObject v) {
@@ -2870,22 +2902,23 @@ final class NotebookUi {
       names[i] = leaves.get(i).optString("name");
       checked[i] = contains(leaves.get(i).optJSONArray("vocabulary_ids"), v.optString("id"));
     }
-    new AlertDialog.Builder(a)
-        .setTitle("笔记归属（共享实体）")
-        .setMultiChoiceItems(names, checked, (d, w, c) -> checked[w] = c)
-        .setNegativeButton("取消", null)
-        .setPositiveButton(
-            "保存",
-            (d, w) ->
-                a.change(
-                    () -> {
-                      for (int i = 0; i < names.length; i++) {
-                        JSONArray ids = leaves.get(i).optJSONArray("vocabulary_ids");
-                        Library.removeValue(ids, v.optString("id"));
-                        if (checked[i]) ids.put(v.optString("id"));
-                      }
-                    }))
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle("笔记归属（共享实体）")
+            .setMultiChoiceItems(names, checked, (d, w, c) -> checked[w] = c)
+            .setNegativeButton("取消", null)
+            .setPositiveButton(
+                "保存",
+                (d, w) ->
+                    a.change(
+                        () -> {
+                          for (int i = 0; i < names.length; i++) {
+                            JSONArray ids = leaves.get(i).optJSONArray("vocabulary_ids");
+                            Library.removeValue(ids, v.optString("id"));
+                            if (checked[i]) ids.put(v.optString("id"));
+                          }
+                        }));
+    a.showDialog(b);
   }
 
   void displayConfig(JSONObject v) {
@@ -2894,84 +2927,87 @@ final class NotebookUi {
       if (contains(n.optJSONArray("vocabulary_ids"), v.optString("id"))) refs.add(n);
     String[] names = new String[refs.size()];
     for (int i = 0; i < names.length; i++) names[i] = refs.get(i).optString("name");
-    new AlertDialog.Builder(a)
-        .setTitle("选择笔记的独立显示配置")
-        .setItems(
-            names,
-            (d, w) -> {
-              JSONObject n = refs.get(w);
-              LinearLayout box = a.column();
-              String[] fields = {
-                "zh_definition",
-                "en_definition",
-                "phonetic",
-                "example",
-                "source",
-                "source_images",
-                "annotations",
-                "remarks"
-              };
-              String[] labels = {"中文释义", "英文释义", "音标", "例句", "来源", "图片", "批注", "备注"};
-              List<CheckBox> checks = new ArrayList<>();
-              JSONObject displays = n.optJSONObject("vocabulary_display");
-              JSONObject current =
-                  displays == null ? null : displays.optJSONObject(v.optString("id"));
-              JSONObject fs = current == null ? null : current.optJSONObject("fields");
-              for (int i = 0; i < fields.length; i++) {
-                CheckBox cb = new CheckBox(a);
-                cb.setText(labels[i]);
-                cb.setTextColor(a.foreground);
-                cb.setChecked(fs == null || fs.optBoolean(fields[i], true));
-                box.addView(cb);
-                checks.add(cb);
-              }
-              List<CheckBox> meanings = new ArrayList<>();
-              JSONArray ms = v.optJSONArray("meanings");
-              for (int i = 0; i < ms.length(); i++) {
-                JSONObject m = ms.optJSONObject(i);
-                CheckBox cb = new CheckBox(a);
-                cb.setText(
-                    "释义 "
-                        + (i + 1)
-                        + " "
-                        + m.optString("zh_definition", m.optString("en_definition")));
-                cb.setTextColor(a.foreground);
-                cb.setChecked(
-                    current == null
-                        || current.optJSONArray("meaning_ids") == null
-                        || contains(current.optJSONArray("meaning_ids"), m.optString("id")));
-                box.addView(cb);
-                meanings.add(cb);
-              }
-              ScrollView scroll = new ScrollView(a);
-              scroll.addView(box);
-              new AlertDialog.Builder(a)
-                  .setTitle(n.optString("name") + " · 显示内容")
-                  .setView(scroll)
-                  .setNegativeButton("取消", null)
-                  .setPositiveButton(
-                      "保存",
-                      (dialog, which) ->
-                          a.change(
-                              () -> {
-                                JSONObject config = new JSONObject(), newFields = new JSONObject();
-                                for (int i = 0; i < fields.length; i++)
-                                  Library.put(newFields, fields[i], checks.get(i).isChecked());
-                                Library.put(config, "fields", newFields);
-                                JSONArray ids = new JSONArray();
-                                for (int i = 0; i < meanings.size(); i++)
-                                  if (meanings.get(i).isChecked())
-                                    ids.put(ms.optJSONObject(i).optString("id"));
-                                Library.put(config, "meaning_ids", ids);
-                                if (n.optJSONObject("vocabulary_display") == null)
-                                  Library.put(n, "vocabulary_display", new JSONObject());
-                                Library.put(
-                                    n.optJSONObject("vocabulary_display"),
-                                    v.optString("id"),
-                                    config);
-                              }))
-                  .show();
-            })
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle("选择笔记的独立显示配置")
+            .setItems(
+                names,
+                (d, w) -> {
+                  JSONObject n = refs.get(w);
+                  LinearLayout box = a.column();
+                  String[] fields = {
+                    "zh_definition",
+                    "en_definition",
+                    "phonetic",
+                    "example",
+                    "source",
+                    "source_images",
+                    "annotations",
+                    "remarks"
+                  };
+                  String[] labels = {"中文释义", "英文释义", "音标", "例句", "来源", "图片", "批注", "备注"};
+                  List<CheckBox> checks = new ArrayList<>();
+                  JSONObject displays = n.optJSONObject("vocabulary_display");
+                  JSONObject current =
+                      displays == null ? null : displays.optJSONObject(v.optString("id"));
+                  JSONObject fs = current == null ? null : current.optJSONObject("fields");
+                  for (int i = 0; i < fields.length; i++) {
+                    CheckBox cb = new CheckBox(a);
+                    cb.setText(labels[i]);
+                    cb.setTextColor(a.foreground);
+                    cb.setChecked(fs == null || fs.optBoolean(fields[i], true));
+                    box.addView(cb);
+                    checks.add(cb);
+                  }
+                  List<CheckBox> meanings = new ArrayList<>();
+                  JSONArray ms = v.optJSONArray("meanings");
+                  for (int i = 0; i < ms.length(); i++) {
+                    JSONObject m = ms.optJSONObject(i);
+                    CheckBox cb = new CheckBox(a);
+                    cb.setText(
+                        "释义 "
+                            + (i + 1)
+                            + " "
+                            + m.optString("zh_definition", m.optString("en_definition")));
+                    cb.setTextColor(a.foreground);
+                    cb.setChecked(
+                        current == null
+                            || current.optJSONArray("meaning_ids") == null
+                            || contains(current.optJSONArray("meaning_ids"), m.optString("id")));
+                    box.addView(cb);
+                    meanings.add(cb);
+                  }
+                  box.setPadding(a.dp(20), a.dp(8), a.dp(20), a.dp(8));
+                  ScrollView scroll = new ScrollView(a);
+                  scroll.addView(box);
+                  AlertDialog.Builder displayB =
+                      new AlertDialog.Builder(a)
+                          .setTitle(n.optString("name") + " · 显示内容")
+                          .setView(scroll)
+                          .setNegativeButton("取消", null)
+                          .setPositiveButton(
+                              "保存",
+                              (dialog, which) ->
+                                  a.change(
+                                      () -> {
+                                        JSONObject config = new JSONObject(), newFields = new JSONObject();
+                                        for (int i = 0; i < fields.length; i++)
+                                          Library.put(newFields, fields[i], checks.get(i).isChecked());
+                                        Library.put(config, "fields", newFields);
+                                        JSONArray ids = new JSONArray();
+                                        for (int i = 0; i < meanings.size(); i++)
+                                          if (meanings.get(i).isChecked())
+                                            ids.put(ms.optJSONObject(i).optString("id"));
+                                        Library.put(config, "meaning_ids", ids);
+                                        if (n.optJSONObject("vocabulary_display") == null)
+                                          Library.put(n, "vocabulary_display", new JSONObject());
+                                        Library.put(
+                                            n.optJSONObject("vocabulary_display"),
+                                            v.optString("id"),
+                                            config);
+                                      }));
+                  a.showDialog(displayB);
+                });
+    a.showDialog(b);
   }
 }

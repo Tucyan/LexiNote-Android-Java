@@ -16,6 +16,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import java.util.ArrayList;
@@ -530,22 +531,122 @@ final class AssistantUi {
       context.setTextColor(a.muted);
       column.addView(context);
     }
+    if (q.messages().length() == 0 && source == null && recognized.isEmpty()) {
+      LinearLayout welcomeCard = a.column();
+      welcomeCard.setPadding(a.dp(16), a.dp(16), a.dp(16), a.dp(16));
+      welcomeCard.setBackground(a.shape(a.card, 16, a.border));
+
+      LinearLayout titleRow = a.row();
+      titleRow.setGravity(Gravity.CENTER_VERTICAL);
+      TextView badge = a.text("✦ AI 英语助手", 12, true);
+      badge.setTextColor(a.accent);
+      titleRow.addView(badge);
+      welcomeCard.addView(titleRow);
+
+      TextView desc =
+          a.text(
+              "欢迎使用 LexiNote 英语助手！你可以向我提问任何英语学习问题，包括单词/短语用法辨析、地道表达、例句生成和语法答疑。",
+              13,
+              false);
+      desc.setTextColor(a.muted);
+      desc.setLineSpacing(a.dp(3), 1.2f);
+      LinearLayout.LayoutParams descLp = new LinearLayout.LayoutParams(-1, -2);
+      descLp.topMargin = a.dp(8);
+      descLp.bottomMargin = a.dp(14);
+      welcomeCard.addView(desc, descLp);
+
+      welcomeCard.addView(a.text("试试这样问：", 12, true));
+
+      String[] starters = {
+        "Hello 和 Hi 用法有什么区别？",
+        "如何用英语地道地表达“加油”？",
+        "Explain the difference between 'affect' and 'effect'"
+      };
+      for (String starter : starters) {
+        LinearLayout chip = a.row();
+        chip.setGravity(Gravity.CENTER_VERTICAL);
+        chip.setBackground(a.shape(a.inputBg, 10, a.border));
+        chip.setPadding(a.dp(12), a.dp(9), a.dp(10), a.dp(9));
+        chip.setClickable(true);
+        chip.setFocusable(true);
+
+        TextView chipText = a.text(starter, 13, false);
+        chipText.setTextColor(a.foreground);
+        chip.addView(chipText, new LinearLayout.LayoutParams(0, -2, 1));
+
+        TextView arrow = a.text("›", 16, true);
+        arrow.setTextColor(a.muted);
+        chip.addView(arrow);
+
+        chip.setOnClickListener(
+            v -> {
+              v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+              sendDirectly(starter);
+            });
+
+        LinearLayout.LayoutParams sLp = new LinearLayout.LayoutParams(-1, -2);
+        sLp.topMargin = a.dp(6);
+        welcomeCard.addView(chip, sLp);
+      }
+
+      LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(-1, -2);
+      cardLp.topMargin = a.dp(6);
+      cardLp.bottomMargin = a.dp(8);
+      column.addView(welcomeCard, cardLp);
+    }
     return column;
   }
 
   private void addQuestions(LinearLayout parent, JSONArray questions) {
-    if (questions == null) return;
-    for (int i = 0; i < Math.min(questions.length(), 3); i++) {
+    if (questions == null || questions.length() == 0) return;
+    int count = Math.min(questions.length(), 3);
+    if (count == 0) return;
+
+    LinearLayout box = a.column();
+    box.setPadding(0, a.dp(10), 0, a.dp(2));
+
+    LinearLayout header = a.row();
+    header.setGravity(Gravity.CENTER_VERTICAL);
+    header.setPadding(0, 0, 0, a.dp(6));
+    TextView sparkle = a.text("✦ 追问建议", 11, true);
+    sparkle.setTextColor(a.accent);
+    header.addView(sparkle);
+    box.addView(header);
+
+    for (int i = 0; i < count; i++) {
       JSONObject choice = questions.optJSONObject(i);
       String label = choice == null ? questions.optString(i) : choice.optString("label");
-      parent.addView(
-          a.outlineButton(
-              label,
-              v -> {
-                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-                sendDirectly(label);
-              }));
+      if (label == null || label.trim().isEmpty()) continue;
+      String cleanLabel = label.trim();
+
+      LinearLayout row = a.row();
+      row.setGravity(Gravity.CENTER_VERTICAL);
+      row.setBackground(a.shape(a.inputBg, 10, a.border));
+      row.setPadding(a.dp(12), a.dp(9), a.dp(10), a.dp(9));
+      row.setClickable(true);
+      row.setFocusable(true);
+
+      TextView text = a.text(cleanLabel, 13, false);
+      text.setTextColor(a.foreground);
+      text.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+      row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
+
+      TextView arrow = a.text("›", 16, true);
+      arrow.setTextColor(a.muted);
+      arrow.setPadding(a.dp(6), 0, 0, 0);
+      row.addView(arrow);
+
+      row.setOnClickListener(
+          v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+            sendDirectly(cleanLabel);
+          });
+
+      LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+      lp.bottomMargin = a.dp(6);
+      box.addView(row, lp);
     }
+    parent.addView(box);
   }
 
   private void sendDirectly(String text) {
@@ -561,26 +662,69 @@ final class AssistantUi {
     LinearLayout footer = a.fixedFooter();
     footer.setBackground(a.shape(a.card, 0, a.border));
     LinearLayout column = a.column();
+
+    if (a.image != null) {
+      LinearLayout imgPreviewBar = a.row();
+      imgPreviewBar.setGravity(Gravity.CENTER_VERTICAL);
+      imgPreviewBar.setPadding(0, 0, 0, a.dp(8));
+
+      ImageView thumb = new ImageView(a);
+      thumb.setImageURI(a.image);
+      thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
+      thumb.setBackground(a.shape(a.card, 6, a.border));
+      thumb.setClipToOutline(true);
+      imgPreviewBar.addView(thumb, new LinearLayout.LayoutParams(a.dp(36), a.dp(36)));
+
+      TextView imgLabel = a.text("已附带图片 · 点击重新裁剪", 11, false);
+      imgLabel.setTextColor(a.muted);
+      imgLabel.setPadding(a.dp(8), 0, a.dp(8), 0);
+      imgLabel.setOnClickListener(v -> a.cropImage());
+      imgPreviewBar.addView(imgLabel, new LinearLayout.LayoutParams(0, -2, 1));
+
+      TextView removeImg = a.icon("close-circle", 18, a.muted);
+      removeImg.setPadding(a.dp(4), a.dp(4), a.dp(4), a.dp(4));
+      removeImg.setOnClickListener(
+          v -> {
+            a.clearImage();
+            a.render();
+          });
+      imgPreviewBar.addView(removeImg);
+      column.addView(imgPreviewBar);
+    }
+
     if (a.session != null && a.session.has("last_error")) {
       TextView error = a.text("上次请求失败：" + a.session.optString("last_error"), 12, false);
       error.setTextColor(a.muted);
       column.addView(error);
       column.addView(a.outlineButton("重试上一条", v -> q.retryLast()));
     }
+
     LinearLayout row = a.row();
-    composer = a.input("继续提问…", q.follow, true);
-    composer.setMinHeight(a.dp(48));
-    composer.setOnLongClickListener(
+    row.setGravity(Gravity.CENTER_VERTICAL);
+
+    TextView photoBtn = a.icon("camera-outline", 22, a.muted);
+    photoBtn.setPadding(a.dp(4), a.dp(6), a.dp(8), a.dp(6));
+    photoBtn.setOnClickListener(
         v -> {
+          v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
           a.chooseImage();
-          return true;
         });
-    row.addView(composer, new LinearLayout.LayoutParams(0, a.dp(48), 1));
-    Button send =
-        a.button(
-            a.active != null ? "取消" : "发送",
-            v -> {
-              if (a.active != null) {
+    row.addView(photoBtn);
+
+    composer = a.input("继续提问…", q.follow, true);
+    composer.setMinHeight(a.dp(40));
+    composer.setMaxHeight(a.dp(100));
+    composer.setTextSize(14 * a.scale);
+    composer.setPadding(a.dp(12), a.dp(8), a.dp(12), a.dp(8));
+    composer.setBackground(a.shape(a.inputBg, 18, a.border));
+    row.addView(composer, new LinearLayout.LayoutParams(0, -2, 1));
+
+    if (a.active != null) {
+      Button cancelBtn =
+          a.button(
+              "取消",
+              v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                 a.cancel();
                 if (a.session != null) {
                   Library.put(a.session, "last_error", "请求已取消");
@@ -588,14 +732,37 @@ final class AssistantUi {
                   a.persist();
                 }
                 a.render();
-                return;
-              }
-              String text = composer.getText().toString();
-              q.follow = "";
-              q.send(text);
-              a.render();
-            });
-    row.addView(send);
+              });
+      cancelBtn.setTextColor(Color.parseColor("#EF4444"));
+      cancelBtn.setPadding(a.dp(8), 0, a.dp(4), 0);
+      row.addView(cancelBtn);
+    } else {
+      FrameLayout sendBtn = new FrameLayout(a);
+      sendBtn.setContentDescription("发送");
+      android.graphics.drawable.GradientDrawable sendBg =
+          new android.graphics.drawable.GradientDrawable();
+      sendBg.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+      sendBg.setColor(a.accent);
+      sendBtn.setBackground(sendBg);
+      sendBtn.setClickable(true);
+      sendBtn.setFocusable(true);
+
+      TextView sendIcon = a.icon("arrow-up", 18, Color.WHITE);
+      sendIcon.setGravity(Gravity.CENTER);
+      sendBtn.addView(sendIcon, new FrameLayout.LayoutParams(-1, -1));
+
+      sendBtn.setOnClickListener(
+          v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+            String text = composer.getText().toString();
+            q.follow = "";
+            q.send(text);
+            a.render();
+          });
+      LinearLayout.LayoutParams sendLp = new LinearLayout.LayoutParams(a.dp(36), a.dp(36));
+      sendLp.leftMargin = a.dp(8);
+      row.addView(sendBtn, sendLp);
+    }
     column.addView(row);
     q.track(composer, value -> q.follow = value);
     footer.addView(column);
@@ -608,7 +775,8 @@ final class AssistantUi {
 
     @Override
     public int getCount() {
-      return AssistantTimeline.count(messages()) + (partial.isEmpty() ? 0 : 1);
+      boolean hasThinkingOrPartial = !partial.isEmpty() || a.active != null;
+      return AssistantTimeline.count(messages()) + (hasThinkingOrPartial ? 1 : 0);
     }
 
     @Override
@@ -634,21 +802,74 @@ final class AssistantUi {
       LinearLayout line =
           convertView instanceof LinearLayout ? (LinearLayout) convertView : a.row();
       line.removeAllViews();
-      line.setPadding(a.dp(14), a.dp(5), a.dp(14), a.dp(5));
+      line.setPadding(a.dp(14), a.dp(6), a.dp(14), a.dp(6));
       JSONObject message =
           position < AssistantTimeline.count(messages()) ? getItem(position) : null;
       boolean mine = message != null && "user".equals(message.optString("role"));
       String content = message == null ? partial : message.optString("content");
+
       LinearLayout bubble = a.column();
-      bubble.setPadding(a.dp(13), a.dp(11), a.dp(13), a.dp(11));
-      bubble.setBackground(a.shape(mine ? a.accent : a.inputBg, 15, mine ? 0 : a.border));
-      MarkdownView body = new MarkdownView(a, mine ? -1 : a.foreground, a.border);
-      body.setMarkdown(content);
-      bubble.addView(body);
+      if (mine) {
+        bubble.setPadding(a.dp(14), a.dp(10), a.dp(14), a.dp(10));
+        bubble.setBackground(a.shape(a.accent, 16, 0));
+      } else {
+        bubble.setPadding(a.dp(14), a.dp(12), a.dp(14), a.dp(12));
+        bubble.setBackground(a.shape(a.card, 16, a.border));
+
+        LinearLayout assistantHdr = a.row();
+        assistantHdr.setGravity(Gravity.CENTER_VERTICAL);
+        assistantHdr.setPadding(0, 0, 0, a.dp(6));
+        TextView aiTag = a.text("✦ AI 助手", 11, true);
+        aiTag.setTextColor(a.accent);
+        assistantHdr.addView(aiTag, new LinearLayout.LayoutParams(0, -2, 1));
+
+        if (!content.isEmpty()) {
+          TextView copyBtn = a.icon("document-text-outline", 14, a.subtle);
+          copyBtn.setPadding(a.dp(6), a.dp(2), a.dp(2), a.dp(2));
+          copyBtn.setOnClickListener(
+              v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                android.content.ClipboardManager cb =
+                    (android.content.ClipboardManager)
+                        a.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+                if (cb != null) {
+                  cb.setPrimaryClip(android.content.ClipData.newPlainText("ai_reply", content));
+                  a.say("已复制内容");
+                }
+              });
+          assistantHdr.addView(copyBtn);
+        }
+        bubble.addView(assistantHdr);
+      }
+
+      if (message == null && content.isEmpty()) {
+        LinearLayout thinkingRow = a.row();
+        thinkingRow.setGravity(Gravity.CENTER_VERTICAL);
+        ProgressBar spinner = new ProgressBar(a, null, android.R.attr.progressBarStyleSmall);
+        spinner.setIndeterminate(true);
+        thinkingRow.addView(spinner, new LinearLayout.LayoutParams(a.dp(18), a.dp(18)));
+
+        TextView thinkingText = a.text("  ✦ AI 正在思考中…", 13, false);
+        thinkingText.setTextColor(a.muted);
+        thinkingRow.addView(thinkingText);
+        bubble.addView(thinkingRow);
+      } else {
+        MarkdownView body = new MarkdownView(a, mine ? -1 : a.foreground, a.border);
+        body.setMarkdown(content);
+        bubble.addView(body);
+      }
+
       if (message != null && isLatestAssistantMessage(position)) suggestions(bubble, message);
       if (message != null) confirmation(bubble, message);
+
       line.setGravity(mine ? Gravity.RIGHT : Gravity.LEFT);
-      line.addView(bubble, new LinearLayout.LayoutParams(mine ? -2 : -1, -2));
+      LinearLayout.LayoutParams bubbleLp = new LinearLayout.LayoutParams(mine ? -2 : -1, -2);
+      if (mine) {
+        bubbleLp.leftMargin = a.dp(44);
+      } else {
+        bubbleLp.rightMargin = a.dp(20);
+      }
+      line.addView(bubble, bubbleLp);
       return line;
     }
 
@@ -723,11 +944,11 @@ final class AssistantUi {
                 "修改目标",
                 v -> {
                   v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-                  q.draft = targetWord;
-                  Library.put(a.session, "pending_lookup", JSONObject.NULL);
-                  a.screen = "tabs";
-                  a.page = 0;
-                  a.render();
+                  if (composer != null) {
+                    composer.setText("我想修改查询目标为：" + targetWord);
+                    composer.requestFocus();
+                    composer.setSelection(composer.getText().length());
+                  }
                 });
         LinearLayout.LayoutParams editLp = new LinearLayout.LayoutParams(0, -2, 1);
         editLp.leftMargin = a.dp(8);

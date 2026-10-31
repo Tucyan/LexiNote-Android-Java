@@ -1,6 +1,8 @@
 package com.lexinote.nativeapp;
 
 import android.app.*;
+import android.content.DialogInterface;
+import android.graphics.Color;
 import android.net.Uri;
 import android.text.*;
 import android.view.*;
@@ -682,43 +684,46 @@ final class QueryUi {
     }
     options.add("删除会话");
 
-    new AlertDialog.Builder(a)
-        .setTitle(name)
-        .setItems(
-            options.toArray(new String[0]),
-            (d, which) -> {
-              String opt = options.get(which);
-              if ("重命名会话".equals(opt) || "转为永久保存".equals(opt)) {
-                saveConversation(item);
-              } else if ("复制会话标题".equals(opt)) {
-                android.content.ClipboardManager cb =
-                    (android.content.ClipboardManager)
-                        a.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
-                if (cb != null) {
-                  cb.setPrimaryClip(android.content.ClipData.newPlainText("title", name));
-                  a.say("已复制会话标题");
-                }
-              } else if ("删除会话".equals(opt)) {
-                confirmDeleteConversation(item, null);
-              }
-            })
-        .setNegativeButton("取消", null)
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle(name)
+            .setItems(
+                options.toArray(new String[0]),
+                (d, which) -> {
+                  String opt = options.get(which);
+                  if ("重命名会话".equals(opt) || "转为永久保存".equals(opt)) {
+                    saveConversation(item);
+                  } else if ("复制会话标题".equals(opt)) {
+                    android.content.ClipboardManager cb =
+                        (android.content.ClipboardManager)
+                            a.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+                    if (cb != null) {
+                      cb.setPrimaryClip(android.content.ClipData.newPlainText("title", name));
+                      a.say("已复制会话标题");
+                    }
+                  } else if ("删除会话".equals(opt)) {
+                    confirmDeleteConversation(item, null);
+                  }
+                })
+            .setNegativeButton("取消", null);
+    a.showDialog(b);
   }
 
   void confirmDeleteConversation(JSONObject s, Runnable onDeleted) {
     String name = title(s);
-    new AlertDialog.Builder(a)
-        .setTitle("删除会话")
-        .setMessage("确定删除「" + name + "」吗？已保存的词汇笔记不受影响。")
-        .setNegativeButton("取消", null)
-        .setPositiveButton(
-            "删除",
-            (d, w) -> {
-              a.change(() -> deleteConversation(s));
-              if (onDeleted != null) onDeleted.run();
-            })
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle("删除会话")
+            .setMessage("确定删除「" + name + "」吗？已保存的词汇笔记不受影响。")
+            .setNegativeButton("取消", null)
+            .setPositiveButton(
+                "删除",
+                (d, w) -> {
+                  a.change(() -> deleteConversation(s));
+                  if (onDeleted != null) onDeleted.run();
+                });
+    AlertDialog d = a.showDialog(b);
+    a.styleDestructive(d);
   }
 
   void addConversationRow(LinearLayout parent, JSONObject item) {
@@ -830,36 +835,40 @@ final class QueryUi {
     EditText end = a.input("结束日期 YYYY-MM-DD（含当天）", endDate, false);
     box.addView(start);
     box.addView(end);
-    new AlertDialog.Builder(a)
-        .setTitle("日期筛选")
-        .setView(box)
-        .setNeutralButton(
-            "清除",
-            (d, w) -> {
-              startDate = "";
-              endDate = "";
-              showDateFields = false;
-              a.render();
-            })
-        .setNegativeButton("取消", null)
-        .setPositiveButton(
-            "应用",
-            (d, w) -> {
-              String from = start.getText().toString().trim(), to = end.getText().toString().trim();
-              if ((!from.isEmpty() && !validDate(from))
-                  || (!to.isEmpty() && !validDate(to))
-                  || (!from.isEmpty() && !to.isEmpty() && from.compareTo(to) > 0)) {
-                a.say("请输入有效日期范围（YYYY-MM-DD）");
-                return;
-              }
-              dateField = group.getCheckedRadioButtonId() == usedId ? "last_used_at" : "created_at";
-              startDate = from;
-              endDate = to;
-              showDateFields = !from.isEmpty() || !to.isEmpty();
-              savedLimit = 10;
-              a.render();
-            })
-        .show();
+    box.setPadding(a.dp(22), a.dp(10), a.dp(22), a.dp(6));
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle("日期筛选")
+            .setView(box)
+            .setNeutralButton(
+                "清除",
+                (d, w) -> {
+                  startDate = "";
+                  endDate = "";
+                  showDateFields = false;
+                  a.render();
+                })
+            .setNegativeButton("取消", null)
+            .setPositiveButton(
+                "应用",
+                (d, w) -> {
+                  String from = start.getText().toString().trim(),
+                      to = end.getText().toString().trim();
+                  if ((!from.isEmpty() && !validDate(from))
+                      || (!to.isEmpty() && !validDate(to))
+                      || (!from.isEmpty() && !to.isEmpty() && from.compareTo(to) > 0)) {
+                    a.say("请输入有效日期范围（YYYY-MM-DD）");
+                    return;
+                  }
+                  dateField =
+                      group.getCheckedRadioButtonId() == usedId ? "last_used_at" : "created_at";
+                  startDate = from;
+                  endDate = to;
+                  showDateFields = !from.isEmpty() || !to.isEmpty();
+                  savedLimit = 10;
+                  a.render();
+                });
+    a.showDialog(b);
   }
 
   boolean validDate(String value) {
@@ -888,14 +897,14 @@ final class QueryUi {
   }
 
   void showRecent() {
-    AlertDialog dialog =
-        new AlertDialog.Builder(a).setTitle("最近查询").setPositiveButton("完成", null).create();
     LinearLayout box = a.column();
-    fillRecent(box, dialog);
+    box.setPadding(a.dp(20), a.dp(10), a.dp(20), a.dp(16));
     ScrollView scroll = new ScrollView(a);
     scroll.addView(box);
-    dialog.setView(scroll);
-    dialog.show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a).setTitle("最近查询").setView(scroll).setPositiveButton("完成", null);
+    AlertDialog dialog = a.showDialog(b);
+    fillRecent(box, dialog);
   }
 
   void fillRecent(LinearLayout box, AlertDialog dialog) {
@@ -903,33 +912,81 @@ final class QueryUi {
     JSONArray history = Library.sortedHistory(a.library.array("recent_queries"), true);
     for (int i = 0; i < history.length(); i++) {
       JSONObject s = history.optJSONObject(i);
+      String word =
+          s.optJSONObject("query_results") == null
+              ? title(s)
+              : s.optJSONObject("query_results").optString("word", title(s));
+
       LinearLayout row = a.row();
-      row.addView(
-          a.button(
-              s.optJSONObject("query_results") == null
-                  ? title(s)
-                  : s.optJSONObject("query_results").optString("word", title(s)),
-              v -> { dialog.dismiss(); open(s); }),
-          new LinearLayout.LayoutParams(0, -2, 1));
-      row.addView(a.button("删除", v -> {
-        a.change(() -> a.library.delete("recent_queries", s.optString("id")));
-        fillRecent(box, dialog);
-      }));
-      box.addView(row);
+      row.setGravity(Gravity.CENTER_VERTICAL);
+      row.setBackground(a.shape(a.inputBg, 10, a.border));
+      row.setPadding(a.dp(12), a.dp(10), a.dp(10), a.dp(10));
+      row.setClickable(true);
+      row.setFocusable(true);
+
+      TextView icon = a.icon("time-outline", 16, a.muted);
+      row.addView(icon);
+
+      TextView text = a.text(" " + word, 14, false);
+      text.setTextColor(a.foreground);
+      text.setSingleLine(true);
+      row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
+
+      TextView del = a.icon("trash-outline", 16, a.muted);
+      del.setPadding(a.dp(6), a.dp(4), a.dp(4), a.dp(4));
+      del.setContentDescription("删除" + word);
+      del.setOnClickListener(
+          v -> {
+            a.change(() -> a.library.delete("recent_queries", s.optString("id")));
+            fillRecent(box, dialog);
+          });
+      row.addView(del);
+
+      row.setOnClickListener(
+          v -> {
+            dialog.dismiss();
+            open(s);
+          });
+
+      LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+      lp.bottomMargin = a.dp(8);
+      box.addView(row, lp);
     }
-    if (history.length() == 0) box.addView(a.text("暂无最近查询", 14, false));
-    else box.addView(a.button("清空最近查询", v ->
-        new AlertDialog.Builder(a)
-            .setMessage("清空最近查询？保存的会话和词汇保留。")
-            .setNegativeButton("取消", null)
-            .setPositiveButton("清空", (d, w) -> {
-              a.change(() -> {
-                JSONArray current = a.library.array("recent_queries");
-                while (current.length() > 0)
-                  a.library.delete("recent_queries", current.optJSONObject(0).optString("id"));
+    if (history.length() == 0) {
+      TextView empty = a.text("暂无最近查询", 14, false);
+      empty.setTextColor(a.muted);
+      empty.setGravity(Gravity.CENTER);
+      empty.setPadding(0, a.dp(24), 0, a.dp(24));
+      box.addView(empty);
+    } else {
+      Button clearBtn =
+          a.outlineButton(
+              "清空最近查询",
+              v -> {
+                AlertDialog.Builder clearB =
+                    new AlertDialog.Builder(a)
+                        .setTitle("清空最近查询")
+                        .setMessage("确定清空全部最近查询记录吗？已保存的会话和词汇笔记将完整保留。")
+                        .setNegativeButton("取消", null)
+                        .setPositiveButton(
+                            "清空",
+                            (d, w) -> {
+                              a.change(
+                                  () -> {
+                                    JSONArray current = a.library.array("recent_queries");
+                                    while (current.length() > 0)
+                                      a.library.delete(
+                                          "recent_queries", current.optJSONObject(0).optString("id"));
+                                  });
+                              fillRecent(box, dialog);
+                            });
+                AlertDialog clearD = a.showDialog(clearB);
+                a.styleDestructive(clearD);
               });
-              fillRecent(box, dialog);
-            }).show()));
+      LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(-1, a.dp(38));
+      cLp.topMargin = a.dp(6);
+      box.addView(clearBtn, cLp);
+    }
   }
 
   String title(JSONObject s) {
@@ -1431,32 +1488,33 @@ final class QueryUi {
   void saveConversation(JSONObject targetSession) {
     if (targetSession == null) return;
     EditText title = a.input("会话名称（最多40字）", title(targetSession), false);
-    new AlertDialog.Builder(a)
-        .setTitle("保存 / 重命名")
-        .setView(title)
-        .setNegativeButton("取消", null)
-        .setPositiveButton(
-            "保存",
-            (d, w) -> {
-              String t = title.getText().toString().trim();
-              if (t.isEmpty()) {
-                a.say("名称不能为空");
-                return;
-              }
-              String finalTitle = t.substring(0, Math.min(40, t.length()));
-              Library.put(targetSession, "title", finalTitle);
-              Library.put(targetSession, "saved", true);
-              JSONObject meta = targetSession.optJSONObject("metadata");
-              if (meta != null) {
-                Library.put(meta, "title", finalTitle);
-                Library.put(meta, "retention", "saved");
-              }
-              a.titles.manual(targetSession);
-              a.library.touchSession(targetSession, false);
-              a.persist();
-              a.render();
-            })
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle("保存 / 重命名")
+            .setView(a.dialogInput(title))
+            .setNegativeButton("取消", null)
+            .setPositiveButton(
+                "保存",
+                (d, w) -> {
+                  String t = title.getText().toString().trim();
+                  if (t.isEmpty()) {
+                    a.say("名称不能为空");
+                    return;
+                  }
+                  String finalTitle = t.substring(0, Math.min(40, t.length()));
+                  Library.put(targetSession, "title", finalTitle);
+                  Library.put(targetSession, "saved", true);
+                  JSONObject meta = targetSession.optJSONObject("metadata");
+                  if (meta != null) {
+                    Library.put(meta, "title", finalTitle);
+                    Library.put(meta, "retention", "saved");
+                  }
+                  a.titles.manual(targetSession);
+                  a.library.touchSession(targetSession, false);
+                  a.persist();
+                  a.render();
+                });
+    a.showDialog(b);
   }
 
   void result() {

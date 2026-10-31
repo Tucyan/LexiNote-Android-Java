@@ -89,7 +89,11 @@ public final class ImageEditorDialog {
                   })
               .create();
       dialog.setOnDismissListener(ignored -> editor.release());
-      dialog.show();
+      if (activity instanceof MainActivity) {
+        ((MainActivity) activity).showDialog(dialog);
+      } else {
+        dialog.show();
+      }
     } catch (Exception e) {
       if (owned[0] != null) owned[0].release();
       callback.onError(activity, e);

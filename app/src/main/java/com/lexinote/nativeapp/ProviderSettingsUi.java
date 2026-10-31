@@ -361,24 +361,27 @@ final class ProviderSettingsUi {
       Button clearKeyBtn =
           a.button(
               "清除当前供应商密钥",
-              v ->
-                  new AlertDialog.Builder(a)
-                      .setMessage("清除该供应商在本机保存的 API Key？")
-                      .setNegativeButton("取消", null)
-                      .setPositiveButton(
-                          "清除",
-                          (dialog, which) -> {
-                            try {
-                              cancel();
-                              a.secure.saveProvider(a.secure.getProvider(), "");
-                              draft.setKey("");
-                              status = "当前供应商密钥已清除";
-                              a.render();
-                            } catch (Exception e) {
-                              a.error(e);
-                            }
-                          })
-                      .show());
+              v -> {
+                AlertDialog.Builder b =
+                    new AlertDialog.Builder(a)
+                        .setMessage("清除该供应商在本机保存的 API Key？")
+                        .setNegativeButton("取消", null)
+                        .setPositiveButton(
+                            "清除",
+                            (dialog, which) -> {
+                              try {
+                                cancel();
+                                a.secure.saveProvider(a.secure.getProvider(), "");
+                                draft.setKey("");
+                                status = "当前供应商密钥已清除";
+                                a.render();
+                              } catch (Exception e) {
+                                a.error(e);
+                              }
+                            });
+                AlertDialog d = a.showDialog(b);
+                a.styleDestructive(d);
+              });
       LinearLayout.LayoutParams clearKeyLp = new LinearLayout.LayoutParams(-1, a.dp(40));
       clearKeyLp.bottomMargin = a.dp(8);
       panel.addView(clearKeyBtn, clearKeyLp);
@@ -400,24 +403,27 @@ final class ProviderSettingsUi {
         panel.addView(
             a.button(
                 "删除当前兼容服务",
-                v ->
-                    new AlertDialog.Builder(a)
-                        .setMessage("删除该服务配置及其本机密钥？")
-                        .setNegativeButton("取消", null)
-                        .setPositiveButton(
-                            "删除",
-                            (dialog, which) -> {
-                              try {
-                                cancel();
-                                a.titles.reset();
-                                a.secure.deleteProvider(saved.optString("id"));
-                                clearDraft();
-                                a.render();
-                              } catch (Exception e) {
-                                a.error(e);
-                              }
-                            })
-                        .show()));
+                v -> {
+                  AlertDialog.Builder b =
+                      new AlertDialog.Builder(a)
+                          .setMessage("删除该服务配置及其本机密钥？")
+                          .setNegativeButton("取消", null)
+                          .setPositiveButton(
+                              "删除",
+                              (dialog, which) -> {
+                                try {
+                                  cancel();
+                                  a.titles.reset();
+                                  a.secure.deleteProvider(saved.optString("id"));
+                                  clearDraft();
+                                  a.render();
+                                } catch (Exception e) {
+                                  a.error(e);
+                                }
+                              });
+                  AlertDialog d = a.showDialog(b);
+                  a.styleDestructive(d);
+                }));
     }
   }
 
@@ -475,52 +481,55 @@ final class ProviderSettingsUi {
     boolean dirty = draft != null && (!draft.enteredKey().isEmpty()
         || !draft.config().toString().equals(a.secure.getProvider().toString()));
     if (dirty) {
-      new AlertDialog.Builder(a).setMessage("此操作将放弃当前未保存的配置，继续吗？")
-          .setNegativeButton("取消", null).setPositiveButton("继续", (dialog, which) -> action.run()).show();
+      AlertDialog.Builder b =
+          new AlertDialog.Builder(a)
+              .setMessage("此操作将放弃当前未保存的配置，继续吗？")
+              .setNegativeButton("取消", null)
+              .setPositiveButton("继续", (dialog, which) -> action.run());
+      a.showDialog(b);
     } else action.run();
   }
 
   void addProvider() {
     LinearLayout box = a.column();
+    box.setPadding(a.dp(22), a.dp(10), a.dp(22), a.dp(6));
     EditText name = a.input("服务名称", "", false),
         base = a.input("HTTPS Base URL", "", false),
         model = a.input("模型 ID", "", false);
     box.addView(name);
     box.addView(base);
     box.addView(model);
-    AlertDialog dialog =
+    AlertDialog.Builder b =
         new AlertDialog.Builder(a)
             .setTitle("新增兼容服务")
             .setView(box)
             .setNegativeButton("取消", null)
-            .setPositiveButton("创建", null)
-            .create();
-    dialog.setOnShowListener(
-        ignored ->
-            dialog
-                .getButton(AlertDialog.BUTTON_POSITIVE)
-                .setOnClickListener(
-                    v -> {
-                      try {
-                        JSONObject config =
-                            new JSONObject()
-                                .put("name", name.getText().toString())
-                                .put("base_url", base.getText().toString())
-                                .put("model_id", model.getText().toString())
-                                .put("supports_vision", false)
-                                .put("reasoning_effort", "off");
-                        cancel();
-                        String id = a.secure.addProvider(config, null);
-                        a.titles.reset();
-                        a.secure.selectProvider(id);
-                        clearDraft();
-                        dialog.dismiss();
-                        a.render();
-                      } catch (Exception e) {
-                        a.error(e);
-                      }
-                    }));
-    dialog.show();
+            .setPositiveButton("创建", null);
+    AlertDialog dialog = a.showDialog(b);
+    Button createBtn = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+    if (createBtn != null) {
+      createBtn.setOnClickListener(
+          v -> {
+            try {
+              JSONObject config =
+                  new JSONObject()
+                      .put("name", name.getText().toString())
+                      .put("base_url", base.getText().toString())
+                      .put("model_id", model.getText().toString())
+                      .put("supports_vision", false)
+                      .put("reasoning_effort", "off");
+              cancel();
+              String id = a.secure.addProvider(config, null);
+              a.titles.reset();
+              a.secure.selectProvider(id);
+              clearDraft();
+              dialog.dismiss();
+              a.render();
+            } catch (Exception e) {
+              a.error(e);
+            }
+          });
+    }
   }
 
   void save() {
@@ -662,7 +671,7 @@ final class ProviderSettingsUi {
           dialog.dismiss();
           a.render();
         });
-    dialog.show();
+    a.showDialog(dialog);
   }
 
   static boolean contains(JSONArray values, String value) {
@@ -774,10 +783,11 @@ final class ProviderSettingsUi {
       content.addView(item);
     }
 
-    new AlertDialog.Builder(a)
-        .setView(scroll)
-        .setPositiveButton("我知道了", null)
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setView(scroll)
+            .setPositiveButton("我知道了", null);
+    a.showDialog(b);
   }
 
   static final class Gear {

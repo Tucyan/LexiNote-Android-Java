@@ -292,17 +292,6 @@ public final class MainActivity extends Activity {
             render();
           });
       bar.addView(back, new LinearLayout.LayoutParams(dp(40), dp(48)));
-      if (screen.equals("assistant")) {
-        TextView menu = icon("chatbubble-ellipses-outline", 22, foreground);
-        menu.setContentDescription("会话列表");
-        menu.setOnClickListener(
-            v -> {
-              if (query != null && query.assistantView != null) {
-                query.assistantView.toggleDrawer();
-              }
-            });
-        bar.addView(menu, new LinearLayout.LayoutParams(dp(36), dp(48)));
-      }
       JSONObject result = session == null ? null : session.optJSONObject("query_results");
       title =
           screen.equals("assistant")
@@ -331,6 +320,15 @@ public final class MainActivity extends Activity {
               && session.optJSONArray("ai_messages") != null
               && session.optJSONArray("ai_messages").length() > 0);
       bar.addView(save);
+
+      TextView drawerBtn = icon("chatbubble-ellipses-outline", 22, foreground);
+      drawerBtn.setPadding(dp(10), dp(4), dp(4), dp(4));
+      drawerBtn.setContentDescription("会话列表");
+      drawerBtn.setOnClickListener(
+          v -> {
+            if (query.assistantView != null) query.assistantView.toggleDrawer();
+          });
+      bar.addView(drawerBtn);
     }
     if (screen.equals("tabs") && page == 0) {
       TextView version = text("v1.3", 11, true);
@@ -593,21 +591,114 @@ public final class MainActivity extends Activity {
     Toast.makeText(this, s, Toast.LENGTH_LONG).show();
   }
 
+  void styleDialog(AlertDialog dialog) {
+    if (dialog == null) return;
+    android.view.Window w = dialog.getWindow();
+    if (w != null) {
+      android.graphics.drawable.GradientDrawable gd =
+          new android.graphics.drawable.GradientDrawable();
+      gd.setColor(card);
+      gd.setCornerRadius(dp(18));
+      gd.setStroke(dp(1), border);
+      w.setBackgroundDrawable(
+          new android.graphics.drawable.InsetDrawable(gd, dp(20), dp(20), dp(20), dp(20)));
+      w.setElevation(dp(16));
+    }
+    Button pos = dialog.getButton(DialogInterface.BUTTON_POSITIVE);
+    if (pos != null) {
+      pos.setTextColor(accent);
+      pos.setTypeface(null, android.graphics.Typeface.BOLD);
+    }
+    Button neg = dialog.getButton(DialogInterface.BUTTON_NEGATIVE);
+    if (neg != null) {
+      neg.setTextColor(muted);
+    }
+    Button neu = dialog.getButton(DialogInterface.BUTTON_NEUTRAL);
+    if (neu != null) {
+      neu.setTextColor(muted);
+    }
+    TextView titleView = dialog.findViewById(android.R.id.title);
+    if (titleView == null) {
+      int alertTitleId = getResources().getIdentifier("alertTitle", "id", "android");
+      if (alertTitleId > 0) titleView = dialog.findViewById(alertTitleId);
+    }
+    if (titleView != null) {
+      titleView.setTextColor(foreground);
+      titleView.setTypeface(null, android.graphics.Typeface.BOLD);
+    }
+    TextView messageView = dialog.findViewById(android.R.id.message);
+    if (messageView != null) {
+      messageView.setTextColor(foreground);
+      messageView.setLineSpacing(dp(2), 1.15f);
+    }
+    ListView lv = dialog.getListView();
+    if (lv != null) {
+      lv.setDivider(new android.graphics.drawable.ColorDrawable(border));
+      lv.setDividerHeight(dp(1));
+    }
+  }
+
+  AlertDialog showDialog(AlertDialog.Builder builder) {
+    AlertDialog dialog = builder.create();
+    dialog.setOnShowListener(d -> styleDialog(dialog));
+    dialog.show();
+    styleDialog(dialog);
+    return dialog;
+  }
+
+  AlertDialog showDialog(AlertDialog dialog) {
+    dialog.setOnShowListener(d -> styleDialog(dialog));
+    dialog.show();
+    styleDialog(dialog);
+    return dialog;
+  }
+
+  void styleDestructive(AlertDialog dialog) {
+    if (dialog == null) return;
+    Button pos = dialog.getButton(DialogInterface.BUTTON_POSITIVE);
+    if (pos != null) {
+      pos.setTextColor(Color.parseColor("#EF4444"));
+    }
+  }
+
+  LinearLayout dialogInput(View content) {
+    LinearLayout box = column();
+    box.setPadding(dp(22), dp(10), dp(22), dp(6));
+    box.addView(content, new LinearLayout.LayoutParams(-1, -2));
+    return box;
+  }
+
   void error(Exception e) {
     if (!alive()) return;
     TokenDanceRecovery recovery = TokenDanceRecovery.find(e);
     if (recovery != null) {
-      new AlertDialog.Builder(this).setTitle("TokenDance 服务")
-          .setMessage(recovery.getMessage()).setNegativeButton(recovery.action == TokenDanceProtocol.RecoveryAction.API_KEY_QUOTA ? "等待刷新" : "稍后", null)
-          .setPositiveButton(recovery.action == TokenDanceProtocol.RecoveryAction.TOP_UP_BALANCE ? "去充值" : "重新连接",
-              (dialog, which) -> settingsUi.models.openTokenDance(recovery.action == TokenDanceProtocol.RecoveryAction.TOP_UP_BALANCE ? "recharge" : "authorize")).show();
+      AlertDialog.Builder b =
+          new AlertDialog.Builder(this)
+              .setTitle("TokenDance 服务")
+              .setMessage(recovery.getMessage())
+              .setNegativeButton(
+                  recovery.action == TokenDanceProtocol.RecoveryAction.API_KEY_QUOTA
+                      ? "等待刷新"
+                      : "稍后",
+                  null)
+              .setPositiveButton(
+                  recovery.action == TokenDanceProtocol.RecoveryAction.TOP_UP_BALANCE
+                      ? "去充值"
+                      : "重新连接",
+                  (dialog, which) ->
+                      settingsUi.models.openTokenDance(
+                          recovery.action == TokenDanceProtocol.RecoveryAction.TOP_UP_BALANCE
+                              ? "recharge"
+                              : "authorize"));
+      showDialog(b);
       return;
     }
-    new AlertDialog.Builder(this)
-        .setTitle("操作未完成")
-        .setMessage(e.getMessage() == null ? e.toString() : e.getMessage())
-        .setPositiveButton("知道了", null)
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(this)
+            .setTitle("操作未完成")
+            .setMessage(e.getMessage() == null ? e.toString() : e.getMessage())
+            .setPositiveButton("知道了", null);
+    showDialog(b);
   }
 
   boolean persist() {
@@ -747,19 +838,22 @@ public final class MainActivity extends Activity {
   }
 
   void chooseImage() {
-    new AlertDialog.Builder(this)
-        .setItems(
-            new String[] {"选择图片", "拍照（完整照片）", "编辑当前图片", "移除图片"},
-            (dialog, which) -> {
-              if (which == 0) chooseImage(false);
-              else if (which == 1) chooseImage(true);
-              else if (which == 2) cropImage();
-              else {
-                clearImage();
-                render();
-              }
-            })
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(this)
+            .setTitle("图片选项")
+            .setItems(
+                new String[] {"选择图片", "拍照（完整照片）", "编辑当前图片", "移除图片"},
+                (dialog, which) -> {
+                  if (which == 0) chooseImage(false);
+                  else if (which == 1) chooseImage(true);
+                  else if (which == 2) cropImage();
+                  else {
+                    clearImage();
+                    render();
+                  }
+                })
+            .setNegativeButton("取消", null);
+    showDialog(b);
   }
 
   void chooseImage(boolean camera) {
@@ -1060,19 +1154,20 @@ public final class MainActivity extends Activity {
                   p.dismiss();
                   if (!alive()) return;
                   JSONObject b = prepared.backup;
-                  new AlertDialog.Builder(this)
-                      .setTitle("确认覆盖恢复")
-                      .setMessage(
-                          "词汇 "
-                              + b.optJSONArray("vocabularies").length()
-                              + " · 笔记 "
-                              + b.optJSONArray("notebooks").length()
-                              + " · 图片 "
-                              + prepared.assets.size()
-                              + "\n将覆盖本机数据；供应商及密钥保留。旧 JSON 图片可能无法跨设备读取。")
-                      .setNegativeButton("取消", null)
-                      .setPositiveButton("恢复", (d, w) -> applyRestore(prepared))
-                      .show();
+                  AlertDialog.Builder builder =
+                      new AlertDialog.Builder(this)
+                          .setTitle("确认覆盖恢复")
+                          .setMessage(
+                              "词汇 "
+                                  + b.optJSONArray("vocabularies").length()
+                                  + " · 笔记 "
+                                  + b.optJSONArray("notebooks").length()
+                                  + " · 图片 "
+                                  + prepared.assets.size()
+                                  + "\n将覆盖本机数据；供应商及密钥保留。旧 JSON 图片可能无法跨设备读取。")
+                          .setNegativeButton("取消", null)
+                          .setPositiveButton("恢复", (d, w) -> applyRestore(prepared));
+                  showDialog(builder);
                 });
           } catch (Exception e) {
             handler.post(

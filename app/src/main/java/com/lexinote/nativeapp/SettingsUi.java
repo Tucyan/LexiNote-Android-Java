@@ -151,26 +151,29 @@ final class SettingsUi {
     backup.addView(restoreBtn, rLp);
     Button rollbackBtn = a.button(
         "回到上次恢复前",
-        v ->
-            new AlertDialog.Builder(a)
-                .setMessage("覆盖当前数据，恢复到上次导入前？")
-                .setNegativeButton("取消", null)
-                .setPositiveButton(
-                    "恢复",
-                    (d, w) -> {
-                      try {
-                        a.cancel();
-                        a.library = a.repository.rollback();
-                        a.titles.reset();
-                        a.committed = a.library.snapshot();
-                        a.session = null;
-                        a.render();
-                        a.say("已回退");
-                      } catch (Exception e) {
-                        a.error(e);
-                      }
-                    })
-                .show());
+        v -> {
+          AlertDialog.Builder b =
+              new AlertDialog.Builder(a)
+                  .setMessage("覆盖当前数据，恢复到上次导入前？")
+                  .setNegativeButton("取消", null)
+                  .setPositiveButton(
+                      "恢复",
+                      (d, w) -> {
+                        try {
+                          a.cancel();
+                          a.library = a.repository.rollback();
+                          a.titles.reset();
+                          a.committed = a.library.snapshot();
+                          a.session = null;
+                          a.render();
+                          a.say("已回退");
+                        } catch (Exception e) {
+                          a.error(e);
+                        }
+                      });
+          AlertDialog d = a.showDialog(b);
+          a.styleDestructive(d);
+        });
     LinearLayout.LayoutParams rbLp = new LinearLayout.LayoutParams(-1, a.dp(40));
     rbLp.bottomMargin = a.dp(4);
     backup.addView(rollbackBtn, rbLp);
@@ -187,18 +190,19 @@ final class SettingsUi {
     java.util.List<JSONObject> leaves = a.notebooks.leaves();
     String[] names = new String[leaves.size()];
     for (int i = 0; i < names.length; i++) names[i] = leaves.get(i).optString("name");
-    new AlertDialog.Builder(a)
-        .setTitle("默认保存分类")
-        .setItems(
-            names,
-            (d, w) ->
-                a.change(
-                    () ->
-                        Library.put(
-                            a.library.settings(),
-                            "default_notebook_id",
-                            leaves.get(w).optString("id"))))
-        .show();
+    AlertDialog.Builder b =
+        new AlertDialog.Builder(a)
+            .setTitle("默认保存分类")
+            .setItems(
+                names,
+                (d, w) ->
+                    a.change(
+                        () ->
+                            Library.put(
+                                a.library.settings(),
+                                "default_notebook_id",
+                                leaves.get(w).optString("id"))));
+    a.showDialog(b);
   }
 
   void defaultFields() {
@@ -208,21 +212,23 @@ final class SettingsUi {
       boolean[] values = new boolean[labels.length];
       for (int i = 0; i < values.length; i++)
         values[i] = chosen.optBoolean(QueryWorkflow.FIELDS[i]);
-      new AlertDialog.Builder(a)
-          .setTitle("默认笔记显示字段（完整数据仍保留）")
-          .setMultiChoiceItems(labels, values, (dialog, index, checked) -> values[index] = checked)
-          .setNegativeButton("取消", null)
-          .setPositiveButton(
-              "保存",
-              (dialog, which) ->
-                  a.change(
-                      () -> {
-                        JSONObject fields = new JSONObject();
-                        for (int i = 0; i < values.length; i++)
-                          Library.put(fields, QueryWorkflow.FIELDS[i], values[i]);
-                        Library.put(a.library.settings(), "default_fields_to_save", fields);
-                      }))
-          .show();
+      AlertDialog.Builder b =
+          new AlertDialog.Builder(a)
+              .setTitle("默认笔记显示字段（完整数据仍保留）")
+              .setMultiChoiceItems(
+                  labels, values, (dialog, index, checked) -> values[index] = checked)
+              .setNegativeButton("取消", null)
+              .setPositiveButton(
+                  "保存",
+                  (dialog, which) ->
+                      a.change(
+                          () -> {
+                            JSONObject fields = new JSONObject();
+                            for (int i = 0; i < values.length; i++)
+                              Library.put(fields, QueryWorkflow.FIELDS[i], values[i]);
+                            Library.put(a.library.settings(), "default_fields_to_save", fields);
+                          }));
+      a.showDialog(b);
     } catch (Exception error) {
       a.error(error);
     }
