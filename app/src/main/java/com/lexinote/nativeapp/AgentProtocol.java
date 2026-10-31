@@ -19,12 +19,20 @@ public final class AgentProtocol {
         .toLowerCase(Locale.ROOT);
   }
 
+  public static boolean isEnglishWordOrPhrase(String text) {
+    if (text == null) return false;
+    String t = text.trim();
+    if (t.isEmpty()) return false;
+    return t.matches("[a-zA-Z][a-zA-Z0-9'’\\-\\.]*(?:\\s+[a-zA-Z0-9'’\\-\\.]+){0,7}")
+        && !t.matches(".*[\\u4e00-\\u9fa5].*");
+  }
+
   public static boolean canApplyDirectResult(
       String input, JSONObject result, boolean fromQueryHub, boolean hasImage) {
     return fromQueryHub
         && !hasImage
         && normalize(input).equals(normalize(result.optString("word")))
-        && input.trim().matches("[a-zA-Z][a-zA-Z'’\\-]*(?:\\s+[a-zA-Z][a-zA-Z'’\\-]*){0,7}");
+        && isEnglishWordOrPhrase(input);
   }
 
   public static String endpoint(String base) {
@@ -64,8 +72,9 @@ public final class AgentProtocol {
       String target = text(lookup, "target", 200, true);
       if (target.contains("\n")
           || target.contains("\r")
-          || !java.util.Arrays.asList("word", "phrase").contains(lookup.optString("type")))
-        throw invalid("查询目标须为单词或短语");
+          || !java.util.Arrays.asList("word", "phrase").contains(lookup.optString("type"))
+          || !isEnglishWordOrPhrase(target))
+        throw invalid("查询目标须为英语单词或短语");
       lookup.put("target", target);
     }
     JSONArray choices = reply.optJSONArray("choices");

@@ -966,6 +966,10 @@ final class QueryUi {
       a.say("请输入内容或选择图片");
       return;
     }
+    if (homeMode.equals("text") && !AgentProtocol.isEnglishWordOrPhrase(queryText)) {
+      a.say("目前仅允许查询英语单词和短语（如 serendipity, break a leg）");
+      return;
+    }
     a.session = a.library.newSession(queryText.trim());
     a.image = queryImage;
     Library.put(a.session, "source_context", queryContext);
@@ -1139,13 +1143,17 @@ final class QueryUi {
   }
 
   void lookup(JSONObject intent) {
-    if (a.session == null || pending() != intent || !a.screen.equals("tabs") || a.page != 0) {
-      a.say("源输入已修改，请重新提交以确认目标");
+    if (a.session == null || pending() != intent) {
+      a.say("查询目标已失效，请重新提交");
       a.render();
       return;
     }
     final JSONObject target = a.session;
     String word = intent.optString("target");
+    if (!AgentProtocol.isEnglishWordOrPhrase(word)) {
+      a.say("查询目标须为英语单词或短语");
+      return;
+    }
     JSONObject local = a.library.local(word);
     if (local != null) {
       JSONObject r = Library.copy(local);

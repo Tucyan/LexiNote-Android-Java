@@ -109,4 +109,19 @@ public class AgentProtocolTest {
       assertTrue(expected instanceof IllegalArgumentException);
     }
   }
+
+  @Test
+  public void validatesEnglishWordOrPhrase() {
+    assertTrue(AgentProtocol.isEnglishWordOrPhrase("serendipity"));
+    assertTrue(AgentProtocol.isEnglishWordOrPhrase("break a leg"));
+    assertTrue(AgentProtocol.isEnglishWordOrPhrase("state-of-the-art"));
+    assertTrue(AgentProtocol.isEnglishWordOrPhrase("rock 'n' roll"));
+    assertTrue(AgentProtocol.isEnglishWordOrPhrase("e.g."));
+    assertFalse(AgentProtocol.isEnglishWordOrPhrase(""));
+    assertFalse(AgentProtocol.isEnglishWordOrPhrase("   "));
+    assertFalse(AgentProtocol.isEnglishWordOrPhrase("你好"));
+    assertFalse(AgentProtocol.isEnglishWordOrPhrase("你好用英语怎么表达"));
+    assertFalse(AgentProtocol.isEnglishWordOrPhrase("hello 你好"));
+    assertFalse(AgentProtocol.isEnglishWordOrPhrase("12345"));
+  }
 }

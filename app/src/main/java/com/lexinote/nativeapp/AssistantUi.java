@@ -4,6 +4,7 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.text.TextUtils;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -32,7 +33,7 @@ final class AssistantUi {
   private final String sessionId;
   private final ListView list;
   private final Adapter adapter;
-  private final Button latest;
+  private final View latest;
   private EditText composer;
   private String partial = "";
   private FrameLayout drawerOverlay;
@@ -120,7 +121,58 @@ final class AssistantUi {
     list.addHeaderView(makeHeader(), null, false);
     adapter = new Adapter();
     list.setAdapter(adapter);
-    latest = a.button("回到最新消息", v -> scrollToLatest());
+
+    FrameLayout latestBtn = new FrameLayout(a);
+    latestBtn.setContentDescription("回到最新消息");
+    android.graphics.drawable.GradientDrawable latestBg =
+        new android.graphics.drawable.GradientDrawable();
+    latestBg.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+    latestBg.setColor(a.card);
+    latestBg.setStroke(a.dp(1), a.border);
+    latestBtn.setBackground(latestBg);
+    latestBtn.setElevation(a.dp(6));
+    latestBtn.setClickable(true);
+    latestBtn.setFocusable(true);
+
+    View arrow =
+        new View(a) {
+          final android.graphics.Paint p =
+              new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+          final android.graphics.Path path = new android.graphics.Path();
+
+          @Override
+          protected void onDraw(android.graphics.Canvas canvas) {
+            super.onDraw(canvas);
+            p.setColor(a.foreground);
+            p.setStyle(android.graphics.Paint.Style.STROKE);
+            p.setStrokeWidth(a.dp(2f));
+            p.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+            p.setStrokeJoin(android.graphics.Paint.Join.ROUND);
+
+            float w = getWidth();
+            float h = getHeight();
+            float cx = w / 2f;
+            float top = h * 0.32f;
+            float bottom = h * 0.68f;
+            float arm = w * 0.18f;
+
+            path.reset();
+            path.moveTo(cx, top);
+            path.lineTo(cx, bottom);
+            path.moveTo(cx - arm, bottom - arm);
+            path.lineTo(cx, bottom);
+            path.lineTo(cx + arm, bottom - arm);
+
+            canvas.drawPath(path, p);
+          }
+        };
+    latestBtn.addView(arrow, new FrameLayout.LayoutParams(-1, -1));
+    latestBtn.setOnClickListener(
+        v -> {
+          v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+          scrollToLatest();
+        });
+    latest = latestBtn;
     latest.setVisibility(View.GONE);
     list.setOnScrollListener(
         new android.widget.AbsListView.OnScrollListener() {
@@ -143,8 +195,8 @@ final class AssistantUi {
     DrawerSwipeLayout timeline = ui.new DrawerSwipeLayout(a);
     timeline.addView(ui.list, new FrameLayout.LayoutParams(-1, -1));
     FrameLayout.LayoutParams latestLp =
-        new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.RIGHT);
-    latestLp.setMargins(0, 0, a.dp(16), a.dp(12));
+        new FrameLayout.LayoutParams(a.dp(40), a.dp(40), Gravity.BOTTOM | Gravity.RIGHT);
+    latestLp.setMargins(0, 0, a.dp(16), a.dp(16));
     timeline.addView(ui.latest, latestLp);
     ui.buildDrawer(timeline);
     a.root.addView(timeline, index, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -486,13 +538,23 @@ final class AssistantUi {
     for (int i = 0; i < Math.min(questions.length(), 3); i++) {
       JSONObject choice = questions.optJSONObject(i);
       String label = choice == null ? questions.optString(i) : choice.optString("label");
-      parent.addView(a.outlineButton(label, v -> fillComposer(label)));
+      parent.addView(
+          a.outlineButton(
+              label,
+              v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                sendDirectly(label);
+              }));
     }
   }
 
-  private void fillComposer(String text) {
-    q.follow = text;
-    if (composer != null) composer.setText(text);
+  private void sendDirectly(String text) {
+    if (text == null || text.trim().isEmpty()) return;
+    if (a.active != null) return;
+    q.follow = "";
+    if (composer != null) composer.setText("");
+    q.send(text.trim());
+    a.render();
   }
 
   private void composer() {
@@ -583,11 +645,20 @@ final class AssistantUi {
       MarkdownView body = new MarkdownView(a, mine ? -1 : a.foreground, a.border);
       body.setMarkdown(content);
       bubble.addView(body);
-      if (message != null) suggestions(bubble, message);
+      if (message != null && isLatestAssistantMessage(position)) suggestions(bubble, message);
       if (message != null) confirmation(bubble, message);
       line.setGravity(mine ? Gravity.RIGHT : Gravity.LEFT);
       line.addView(bubble, new LinearLayout.LayoutParams(mine ? -2 : -1, -2));
       return line;
+    }
+
+    private boolean isLatestAssistantMessage(int position) {
+      if (!partial.isEmpty()) return false;
+      JSONArray msgs = messages();
+      int count = AssistantTimeline.count(msgs);
+      if (count == 0 || position != count - 1) return false;
+      JSONObject m = AssistantTimeline.at(msgs, position);
+      return m != null && !"user".equals(m.optString("role"));
     }
 
     private void suggestions(LinearLayout bubble, JSONObject message) {
@@ -612,8 +683,11 @@ final class AssistantUi {
       card.setPadding(a.dp(10), a.dp(8), a.dp(10), a.dp(8));
       card.setBackground(a.shape(a.card, 10, a.border));
       JSONObject lookup = action.optJSONObject("lookup");
-      card.addView(
-          a.text("确认查询 · " + (lookup == null ? "" : lookup.optString("target")), 13, true));
+      String targetWord =
+          lookup == null
+              ? (proposal == null ? "" : proposal.optString("target"))
+              : lookup.optString("target", proposal == null ? "" : proposal.optString("target"));
+      card.addView(a.text("确认查询 · " + targetWord, 13, true));
       boolean matchesProposal =
           proposal != null && message.optString("id").equals(proposal.optString("message_id"));
       boolean valid =
@@ -621,14 +695,44 @@ final class AssistantUi {
               && q.pending() != null
               && proposal.optInt("revision", -1) == a.session.optInt("revision");
       if (valid) {
-        card.addView(
-            a.button(
-                "返回首页确认",
+        String contextQuote = proposal.optString("context_quote", "");
+        String userReq = proposal.optString("user_requirement", "");
+        if (!contextQuote.isEmpty() || !userReq.isEmpty()) {
+          String detail =
+              (contextQuote.isEmpty() ? "" : "原句：" + contextQuote + "\n")
+                  + (userReq.isEmpty() ? "" : "要求：" + userReq);
+          TextView detailView = a.text(detail.trim(), 12, false);
+          detailView.setTextColor(a.muted);
+          detailView.setPadding(0, a.dp(4), 0, a.dp(6));
+          card.addView(detailView);
+        }
+
+        LinearLayout btnRow = a.row();
+        btnRow.setGravity(Gravity.CENTER_VERTICAL);
+        Button confirmBtn =
+            a.primaryButton(
+                "确认查询",
                 v -> {
+                  v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                  q.lookup(proposal);
+                });
+        btnRow.addView(confirmBtn, new LinearLayout.LayoutParams(0, -2, 1));
+
+        Button editBtn =
+            a.button(
+                "修改目标",
+                v -> {
+                  v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                  q.draft = targetWord;
+                  Library.put(a.session, "pending_lookup", JSONObject.NULL);
                   a.screen = "tabs";
                   a.page = 0;
                   a.render();
-                }));
+                });
+        LinearLayout.LayoutParams editLp = new LinearLayout.LayoutParams(0, -2, 1);
+        editLp.leftMargin = a.dp(8);
+        btnRow.addView(editBtn, editLp);
+        card.addView(btnRow);
       } else {
         TextView stale = a.text("此确认已失效，请重新提交问题。", 12, false);
         stale.setTextColor(a.muted);
