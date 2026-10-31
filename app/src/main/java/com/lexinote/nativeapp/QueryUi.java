@@ -48,8 +48,9 @@ final class QueryUi {
     LinearLayout queryCard = a.card(null);
     queryCard.setTag("query-input-card");
     queryCard.setPadding(a.dp(12), a.dp(12), a.dp(12), a.dp(12));
-    LinearLayout.LayoutParams queryLp = new LinearLayout.LayoutParams(-1, a.dp(312));
-    queryLp.bottomMargin = a.dp(30);
+    int cardHeight = a.dp(Math.round(316 * Math.max(1f, a.scale)));
+    LinearLayout.LayoutParams queryLp = new LinearLayout.LayoutParams(-1, cardHeight);
+    queryLp.bottomMargin = a.dp(16);
     queryCard.setLayoutParams(queryLp);
 
     LinearLayout modes = a.row();
@@ -67,6 +68,7 @@ final class QueryUi {
           a.button(
               modeLabels[i],
               v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                 homeMode = mode;
                 a.render();
               });
@@ -101,22 +103,97 @@ final class QueryUi {
     if (!homeMode.equals("image")) {
       String hint =
           homeMode.equals("both") ? "可输入目标词汇或问题" : "输入英文单词或短语，如 serendipity, break a leg...";
+      LinearLayout targetBox = a.row();
+      targetBox.setGravity(Gravity.CENTER_VERTICAL);
+      targetBox.setBackground(a.shape(a.inputBg, 12, a.border));
+      targetBox.setPadding(a.dp(10), 0, a.dp(8), 0);
+
       EditText target = a.input(hint, draft, false);
+      target.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+      target.setPadding(0, 0, 0, 0);
+      target.setMinHeight(a.dp(42));
       target.setCompoundDrawables(
-          a
-          .new GlyphDrawable(
+          a.new GlyphDrawable(
               homeMode.equals("both") ? "color-wand-outline" : "search-outline", 17, a.accent),
           null,
           null,
           null);
       target.setCompoundDrawablePadding(a.dp(8));
+      target.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+      target.setOnEditorActionListener(
+          (v, actionId, event) -> {
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+                || (event != null
+                    && event.getKeyCode() == KeyEvent.KEYCODE_ENTER
+                    && event.getAction() == KeyEvent.ACTION_DOWN)) {
+              v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+              submit();
+              return true;
+            }
+            return false;
+          });
+
+      LinearLayout actionBox = a.row();
+      actionBox.setGravity(Gravity.CENTER_VERTICAL);
+
+      Runnable updateTargetActions =
+          () -> {
+            actionBox.removeAllViews();
+            String currentText = target.getText() != null ? target.getText().toString().trim() : "";
+            if (!currentText.isEmpty()) {
+              TextView clearBtn = a.icon("close-circle", 18, a.muted);
+              clearBtn.setPadding(a.dp(4), a.dp(4), a.dp(4), a.dp(4));
+              clearBtn.setOnClickListener(
+                  v -> {
+                    v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                    target.setText("");
+                    draft = "";
+                    a.invalidateDraft();
+                  });
+              actionBox.addView(clearBtn);
+            } else {
+              android.content.ClipboardManager clipboard =
+                  (android.content.ClipboardManager)
+                      a.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+              if (clipboard != null && clipboard.hasPrimaryClip()) {
+                android.content.ClipData clip = clipboard.getPrimaryClip();
+                if (clip != null && clip.getItemCount() > 0) {
+                  CharSequence cs = clip.getItemAt(0).getText();
+                  if (cs != null) {
+                    String clipStr = cs.toString().trim();
+                    if (!clipStr.isEmpty() && clipStr.length() <= 120) {
+                      TextView pasteBtn = a.text("粘贴", 11, false);
+                      pasteBtn.setTextColor(a.accent);
+                      pasteBtn.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 8, 0));
+                      pasteBtn.setPadding(a.dp(7), a.dp(3), a.dp(7), a.dp(3));
+                      pasteBtn.setOnClickListener(
+                          v -> {
+                            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                            target.setText(clipStr);
+                            target.setSelection(clipStr.length());
+                            draft = clipStr;
+                            a.invalidateDraft();
+                          });
+                      actionBox.addView(pasteBtn);
+                    }
+                  }
+                }
+              }
+            }
+          };
+
       track(
           target,
           value -> {
             if (!draft.equals(value)) a.invalidateDraft();
             draft = value;
+            updateTargetActions.run();
           });
-      queryCard.addView(target, new LinearLayout.LayoutParams(-1, a.dp(42)));
+
+      targetBox.addView(target, new LinearLayout.LayoutParams(0, a.dp(42), 1));
+      targetBox.addView(actionBox, new LinearLayout.LayoutParams(-2, -2));
+      updateTargetActions.run();
+      queryCard.addView(targetBox, new LinearLayout.LayoutParams(-1, a.dp(44)));
     }
 
     if (homeMode.equals("text")) {
@@ -128,18 +205,40 @@ final class QueryUi {
       contextBg.setCornerRadius(a.dp(12));
       contextBg.setStroke(a.dp(1), a.border);
       contextBox.setBackground(contextBg);
+
+      LinearLayout labelRow = a.row();
+      labelRow.setGravity(Gravity.CENTER_VERTICAL);
       TextView contextLabel = a.text("上下文例句 / 提问说明（选填）", 12, false);
       contextLabel.setTextColor(a.muted);
-      contextBox.addView(contextLabel);
+      labelRow.addView(contextLabel, new LinearLayout.LayoutParams(0, -2, 1));
+
+      TextView clearCtx = a.text("清空", 11, false);
+      clearCtx.setTextColor(a.muted);
+      clearCtx.setPadding(a.dp(6), 0, a.dp(2), 0);
+      clearCtx.setVisibility(context.isEmpty() ? View.GONE : View.VISIBLE);
+      labelRow.addView(clearCtx);
+      contextBox.addView(labelRow);
+
       EditText ctx = a.input("粘贴包含该词的原句段落或特定要求，帮助 AI 精准契合语境解析…", context, true);
       ctx.setTextSize(13 * a.scale);
       ctx.setBackgroundColor(android.graphics.Color.TRANSPARENT);
       ctx.setPadding(0, a.dp(4), 0, 0);
+
+      clearCtx.setOnClickListener(
+          v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+            ctx.setText("");
+            context = "";
+            a.invalidateDraft();
+            clearCtx.setVisibility(View.GONE);
+          });
+
       track(
           ctx,
           value -> {
             if (!context.equals(value)) a.invalidateDraft();
             context = value;
+            clearCtx.setVisibility(value.isEmpty() ? View.GONE : View.VISIBLE);
           });
       LinearLayout.LayoutParams contextLp = new LinearLayout.LayoutParams(-1, 0, 1);
       contextLp.topMargin = a.dp(8);
@@ -165,7 +264,31 @@ final class QueryUi {
         preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
         LinearLayout.LayoutParams previewLp = new LinearLayout.LayoutParams(-1, 0, 1);
         queryCard.addView(preview, previewLp);
-        queryCard.addView(a.button("更换图片", v -> a.chooseImage(false)));
+
+        LinearLayout imgActions = a.row();
+        imgActions.setGravity(Gravity.CENTER_VERTICAL);
+        Button cropBtn =
+            a.button(
+                "裁剪 / 选区",
+                v -> {
+                  v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                  a.cropImage();
+                });
+        cropBtn.setTextColor(a.accent);
+        imgActions.addView(cropBtn, new LinearLayout.LayoutParams(0, -2, 1));
+        imgActions.addView(
+            a.button("更换图片", v -> a.chooseImage(false)), new LinearLayout.LayoutParams(0, -2, 1));
+        Button removeBtn =
+            a.button(
+                "移除",
+                v -> {
+                  v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                  a.clearImage();
+                  a.render();
+                });
+        removeBtn.setTextColor(android.graphics.Color.parseColor("#EF4444"));
+        imgActions.addView(removeBtn, new LinearLayout.LayoutParams(0, -2, 1));
+        queryCard.addView(imgActions);
       }
     } else {
       LinearLayout both = a.row();
@@ -182,13 +305,29 @@ final class QueryUi {
         preview.setImageURI(a.image);
         preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
         both.addView(preview, new LinearLayout.LayoutParams(0, a.dp(74), 1));
-        both.addView(
+
+        LinearLayout bothBtns = a.column();
+        bothBtns.setGravity(Gravity.CENTER_VERTICAL);
+        Button cropBtn =
+            a.button(
+                "裁剪 / 选区",
+                v -> {
+                  v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                  a.cropImage();
+                });
+        cropBtn.setTextColor(a.accent);
+        bothBtns.addView(cropBtn);
+        Button removeBtn =
             a.button(
                 "移除",
                 v -> {
+                  v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                   a.clearImage();
                   a.render();
-                }));
+                });
+        removeBtn.setTextColor(android.graphics.Color.parseColor("#EF4444"));
+        bothBtns.addView(removeBtn);
+        both.addView(bothBtns);
       }
       LinearLayout.LayoutParams bothLp = new LinearLayout.LayoutParams(-1, 0, 1);
       bothLp.topMargin = a.dp(8);
@@ -216,7 +355,65 @@ final class QueryUi {
                 a.render();
               }));
     }
+    addRecentQueryChips();
     renderSessionLists();
+  }
+
+  void addRecentQueryChips() {
+    JSONArray recentArray = a.library.array("recent_queries");
+    if (recentArray == null || recentArray.length() == 0) return;
+    JSONArray sortedHistory = Library.sortedHistory(recentArray, true);
+    if (sortedHistory.length() == 0) return;
+
+    HorizontalScrollView recentScroll = new HorizontalScrollView(a);
+    recentScroll.setHorizontalScrollBarEnabled(false);
+    recentScroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
+    LinearLayout chipRow = a.row();
+    chipRow.setGravity(Gravity.CENTER_VERTICAL);
+    chipRow.setPadding(0, 0, 0, a.dp(16));
+
+    TextView recentTag = a.text("最近 ", 11, true);
+    recentTag.setTextColor(a.muted);
+    recentTag.setPadding(0, 0, a.dp(4), 0);
+    chipRow.addView(recentTag);
+
+    int count = Math.min(sortedHistory.length(), 6);
+    for (int i = 0; i < count; i++) {
+      JSONObject s = sortedHistory.optJSONObject(i);
+      if (s == null) continue;
+      String word =
+          s.optJSONObject("query_results") == null
+              ? title(s)
+              : s.optJSONObject("query_results").optString("word", title(s));
+      if (word == null || word.trim().isEmpty()) continue;
+
+      TextView chip = a.text(word.trim(), 12, false);
+      chip.setTextColor(a.foreground);
+      chip.setBackground(a.shape(a.inputBg, 12, a.border));
+      chip.setPadding(a.dp(10), a.dp(5), a.dp(10), a.dp(5));
+      chip.setOnClickListener(
+          v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+            open(s);
+          });
+      LinearLayout.LayoutParams chipLp = new LinearLayout.LayoutParams(-2, -2);
+      chipLp.rightMargin = a.dp(6);
+      chipRow.addView(chip, chipLp);
+    }
+
+    TextView moreChip = a.text("更多 (" + sortedHistory.length() + ") ›", 11, false);
+    moreChip.setTextColor(a.accent);
+    moreChip.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x14000000, 12, 0));
+    moreChip.setPadding(a.dp(8), a.dp(5), a.dp(8), a.dp(5));
+    moreChip.setOnClickListener(
+        v -> {
+          v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+          showRecent();
+        });
+    chipRow.addView(moreChip);
+
+    recentScroll.addView(chipRow);
+    a.body.addView(recentScroll, new LinearLayout.LayoutParams(-1, -2));
   }
 
   View imageTile(String title, String subtitle, String iconName, Runnable action) {
@@ -286,6 +483,7 @@ final class QueryUi {
           a.button(
               tabLabels[i],
               v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                 sessionTab = key;
                 a.render();
               });
@@ -314,6 +512,7 @@ final class QueryUi {
         a.button(
             "＋ 新建",
             v -> {
+              v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
               a.cancel();
               a.clearImage();
               a.session = a.library.newSession("");
@@ -329,37 +528,44 @@ final class QueryUi {
     sessionCard.addView(headerRow);
 
     if ("saved".equals(sessionTab)) {
-      LinearLayout searchRow = a.row();
-      searchRow.setGravity(Gravity.CENTER_VERTICAL);
-      LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(-1, -2);
-      searchLp.bottomMargin = a.dp(8);
-      searchRow.setLayoutParams(searchLp);
-      EditText filter = a.input("搜索会话名称", sessionFilter, false);
-      filter.setBackground(a.shape(a.card, 10, a.border));
-      searchRow.addView(filter, new LinearLayout.LayoutParams(0, a.dp(44), 1));
-      TextView dateFilter = a.text("日期筛选", 14, false);
-      dateFilter.setTextIsSelectable(false);
-      dateFilter.setFocusable(false);
-      dateFilter.setTextColor(a.accent);
-      dateFilter.setTypeface(null, android.graphics.Typeface.NORMAL);
-      dateFilter.setPadding(a.dp(8), 0, 0, 0);
-      dateFilter.setOnClickListener(v -> showDateFilter());
-      searchRow.addView(dateFilter);
-      sessionCard.addView(searchRow);
-      track(
-          filter,
-          value -> {
-            sessionFilter = value;
-            savedLimit = 10;
-          });
-      filter.setOnEditorActionListener(
-          (v, action, event) -> {
-            sessionFilter = filter.getText().toString();
-            savedLimit = 10;
-            a.render();
-            return true;
-          });
-      if (showDateFields) addDateFields(sessionCard);
+      if (savedItems.size() >= 3
+          || !sessionFilter.isEmpty()
+          || !startDate.isEmpty()
+          || !endDate.isEmpty()) {
+        LinearLayout searchRow = a.row();
+        searchRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(-1, -2);
+        searchLp.bottomMargin = a.dp(8);
+        searchRow.setLayoutParams(searchLp);
+        EditText filter = a.input("搜索会话名称", sessionFilter, false);
+        filter.setMinHeight(a.dp(38));
+        filter.setPadding(a.dp(10), 0, a.dp(10), 0);
+        filter.setBackground(a.shape(a.card, 10, a.border));
+        searchRow.addView(filter, new LinearLayout.LayoutParams(0, a.dp(38), 1));
+        TextView dateFilter = a.text("日期筛选", 13, false);
+        dateFilter.setTextIsSelectable(false);
+        dateFilter.setFocusable(false);
+        dateFilter.setTextColor(a.accent);
+        dateFilter.setTypeface(null, android.graphics.Typeface.NORMAL);
+        dateFilter.setPadding(a.dp(10), 0, 0, 0);
+        dateFilter.setOnClickListener(v -> showDateFilter());
+        searchRow.addView(dateFilter);
+        sessionCard.addView(searchRow);
+        track(
+            filter,
+            value -> {
+              sessionFilter = value;
+              savedLimit = 10;
+            });
+        filter.setOnEditorActionListener(
+            (v, action, event) -> {
+              sessionFilter = filter.getText().toString();
+              savedLimit = 10;
+              a.render();
+              return true;
+            });
+        if (showDateFields) addDateFields(sessionCard);
+      }
 
       int shown = 0, matched = 0;
       for (JSONObject item : savedItems) {
@@ -369,15 +575,23 @@ final class QueryUi {
         if (shown++ < savedLimit) addConversationRow(sessionCard, item);
       }
       if (matched == 0) {
-        TextView empty =
-            a.text(
+        sessionCard.addView(
+            emptyStateView(
+                "bookmark-outline",
                 sessionFilter.isEmpty() && startDate.isEmpty() && endDate.isEmpty()
-                    ? "在 AI 助手中点击“保存会话”，即可在这里继续交流。"
-                    : "没有符合条件的会话。",
-                13,
-                false);
-        empty.setPadding(0, a.dp(16), 0, a.dp(16));
-        sessionCard.addView(empty);
+                    ? "暂无已保存会话"
+                    : "没有符合条件的会话",
+                sessionFilter.isEmpty() && startDate.isEmpty() && endDate.isEmpty()
+                    ? "在与 AI 助手交流时点击“保存会话”，重要语境即可沉淀在此。"
+                    : "请尝试缩减搜索关键词或重置日期筛选条件。",
+                "＋ 开始新对话",
+                () -> {
+                  a.cancel();
+                  a.clearImage();
+                  a.session = a.library.newSession("");
+                  a.screen = "assistant";
+                  a.render();
+                }));
       }
       if (matched > savedLimit)
         sessionCard.addView(
@@ -394,14 +608,102 @@ final class QueryUi {
       temporaryNoteLp.bottomMargin = a.dp(8);
       sessionCard.addView(temporaryNote, temporaryNoteLp);
       if (temporaryItems.isEmpty()) {
-        TextView empty = a.text("直接开始对话，无需先查词。", 13, false);
-        empty.setTextColor(a.subtle);
-        empty.setPadding(0, a.dp(10), 0, a.dp(10));
-        sessionCard.addView(empty);
+        sessionCard.addView(
+            emptyStateView(
+                "chatbubbles-outline",
+                "暂无临时会话",
+                "临时会话自动命名，最多保留 5 个。随时发起对话，无需先查词。",
+                "＋ 发起对话",
+                () -> {
+                  a.cancel();
+                  a.clearImage();
+                  a.session = a.library.newSession("");
+                  a.screen = "assistant";
+                  a.render();
+                }));
       } else {
         for (JSONObject item : temporaryItems) addConversationRow(sessionCard, item);
       }
     }
+  }
+
+  View emptyStateView(
+      String iconName, String title, String subtitle, String actionText, Runnable action) {
+    LinearLayout box = a.column();
+    box.setGravity(Gravity.CENTER);
+    box.setPadding(a.dp(20), a.dp(22), a.dp(20), a.dp(22));
+    android.graphics.drawable.GradientDrawable bg =
+        new android.graphics.drawable.GradientDrawable();
+    bg.setColor(a.inputBg);
+    bg.setCornerRadius(a.dp(14));
+    bg.setStroke(a.dp(1), a.border);
+    box.setBackground(bg);
+
+    TextView icon = a.icon(iconName, 30, a.muted);
+    box.addView(icon);
+    box.addView(a.gap(8));
+
+    TextView titleView = a.text(title, 14, true);
+    titleView.setGravity(Gravity.CENTER);
+    box.addView(titleView);
+    box.addView(a.gap(4));
+
+    TextView subView = a.text(subtitle, 12, false);
+    subView.setTextColor(a.muted);
+    subView.setGravity(Gravity.CENTER);
+    box.addView(subView);
+
+    if (actionText != null && action != null) {
+      box.addView(a.gap(12));
+      Button btn =
+          a.button(
+              actionText,
+              v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                action.run();
+              });
+      btn.setTextColor(a.accent);
+      btn.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 10, 0));
+      btn.setPadding(a.dp(16), a.dp(6), a.dp(16), a.dp(6));
+      btn.setMinHeight(a.dp(34));
+      btn.setMinimumHeight(a.dp(34));
+      box.addView(btn);
+    }
+    return box;
+  }
+
+  void showConversationMenu(JSONObject item) {
+    String name = title(item);
+    List<String> options = new ArrayList<>();
+    options.add("重命名会话");
+    options.add("复制会话标题");
+    if (Library.isTemporary(item)) {
+      options.add("转为永久保存");
+    }
+    options.add("删除会话");
+
+    new AlertDialog.Builder(a)
+        .setTitle(name)
+        .setItems(
+            options.toArray(new String[0]),
+            (d, which) -> {
+              String opt = options.get(which);
+              if ("重命名会话".equals(opt) || "转为永久保存".equals(opt)) {
+                saveConversation(item);
+              } else if ("复制会话标题".equals(opt)) {
+                android.content.ClipboardManager cb =
+                    (android.content.ClipboardManager)
+                        a.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+                if (cb != null) {
+                  cb.setPrimaryClip(android.content.ClipData.newPlainText("title", name));
+                  a.say("已复制会话标题");
+                }
+              } else if ("删除会话".equals(opt)) {
+                confirmDeleteConversation(item, null);
+              }
+            })
+        .setNegativeButton("取消", null)
+        .show();
   }
 
   void confirmDeleteConversation(JSONObject s, Runnable onDeleted) {
@@ -422,25 +724,76 @@ final class QueryUi {
   void addConversationRow(LinearLayout parent, JSONObject item) {
     LinearLayout row = a.row();
     row.setGravity(Gravity.CENTER_VERTICAL);
-    row.setPadding(0, a.dp(4), 0, a.dp(4));
+    row.setPadding(a.dp(6), a.dp(6), a.dp(6), a.dp(6));
+    android.util.TypedValue outValue = new android.util.TypedValue();
+    if (a.getTheme().resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)) {
+      row.setBackgroundResource(outValue.resourceId);
+    }
+    row.setClickable(true);
+    row.setFocusable(true);
+
+    View.OnLongClickListener onLongClick =
+        v -> {
+          v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+          showConversationMenu(item);
+          return true;
+        };
+
+    row.setOnClickListener(
+        v -> {
+          v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+          open(item);
+          a.screen = "assistant";
+          a.render();
+        });
+    row.setOnLongClickListener(onLongClick);
+
     LinearLayout info = a.column();
     info.setPadding(0, a.dp(2), a.dp(8), a.dp(2));
     Button titleBtn =
         a.button(
             title(item),
             v -> {
+              v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
               open(item);
               a.screen = "assistant";
               a.render();
             });
     titleBtn.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+    titleBtn.setOnLongClickListener(onLongClick);
     info.addView(titleBtn);
-    info.addView(a.text("最近使用 " + sessionDate(item, "last_used_at"), 11, false));
-    info.addView(a.text("创建于 " + sessionDate(item, "created_at"), 10, false));
+    TextView lastUsed = a.text("最近使用 " + sessionDate(item, "last_used_at"), 11, false);
+    lastUsed.setTextColor(a.muted);
+    info.addView(lastUsed);
+    TextView created = a.text("创建于 " + sessionDate(item, "created_at"), 10, false);
+    created.setTextColor(a.subtle);
+    info.addView(created);
     row.addView(info, new LinearLayout.LayoutParams(0, -2, 1));
-    Button delBtn = a.button("删除", v -> confirmDeleteConversation(item, null));
+
+    if (Library.isTemporary(item)) {
+      Button saveBtn =
+          a.button(
+              "保存",
+              v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                saveConversation(item);
+              });
+      saveBtn.setTextColor(a.accent);
+      saveBtn.setPadding(a.dp(6), 0, a.dp(6), 0);
+      row.addView(saveBtn);
+    }
+
+    Button delBtn =
+        a.button(
+            "删除",
+            v -> {
+              v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+              confirmDeleteConversation(item, null);
+            });
     delBtn.setTextColor(android.graphics.Color.parseColor("#EF4444"));
+    delBtn.setPadding(a.dp(6), 0, a.dp(6), 0);
     row.addView(delBtn);
+
     parent.addView(row);
     View divider = new View(a);
     divider.setBackgroundColor(a.border);
@@ -1064,7 +1417,12 @@ final class QueryUi {
   }
 
   void saveConversation() {
-    EditText title = a.input("会话名称（最多40字）", title(a.session), false);
+    saveConversation(a.session);
+  }
+
+  void saveConversation(JSONObject targetSession) {
+    if (targetSession == null) return;
+    EditText title = a.input("会话名称（最多40字）", title(targetSession), false);
     new AlertDialog.Builder(a)
         .setTitle("保存 / 重命名")
         .setView(title)
@@ -1077,15 +1435,16 @@ final class QueryUi {
                 a.say("名称不能为空");
                 return;
               }
-              Library.put(a.session, "title", t.substring(0, Math.min(40, t.length())));
-              Library.put(a.session, "saved", true);
-              JSONObject meta = a.session.optJSONObject("metadata");
+              String finalTitle = t.substring(0, Math.min(40, t.length()));
+              Library.put(targetSession, "title", finalTitle);
+              Library.put(targetSession, "saved", true);
+              JSONObject meta = targetSession.optJSONObject("metadata");
               if (meta != null) {
-                Library.put(meta, "title", t);
+                Library.put(meta, "title", finalTitle);
                 Library.put(meta, "retention", "saved");
               }
-              a.titles.manual(a.session);
-              a.library.touchSession(a.session, false);
+              a.titles.manual(targetSession);
+              a.library.touchSession(targetSession, false);
               a.persist();
               a.render();
             })
