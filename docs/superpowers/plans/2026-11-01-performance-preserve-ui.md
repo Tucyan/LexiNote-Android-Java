@@ -8,13 +8,13 @@
 
 **Tech Stack:** Java 17、Android framework View、ExecutorService、SQLiteOpenHelper、org.json、流式 JSON/ZIP、ADB、Perfetto；仅在实测需要列表回收时增加 AndroidX RecyclerView。
 
-**状态：** 2026-11-01 编制，仅计划，所有实现任务尚未执行。工作目录为 `C:\Users\ALmerb\Desktop\MyProgram\LexiNote-Android-Java`，分支 `codex/android-native-java`。基线 HEAD 为 `f3bc5c2`，必须同时保留当前未提交的规模优化及用户页面修改，不能仅从 HEAD 重建基线。
+**状态：** 2026-11-01 编制并修订，仅更新计划，优化实现任务均尚未执行。工作目录为 `C:\Users\ALmerb\Desktop\MyProgram\LexiNote-Android-Java`，分支 `codex/android-native-java`。实现基线为已完成准备的提交 `6026d85`，包含规模优化、原有复习页面修改和归档计划管理入口修复；开始执行时另记录实际 HEAD 与干净状态。旧 `f3bc5c2` 仅作为历史来源，不作为本计划执行起点。
 
 ---
 
 ## 1. 依据与边界
 
-主依据为 [规模实际交互报告](../../verification/SCALE-USAGE.md)、[Release 画面](../../verification/scale-usage/release-contact-sheet.jpg)、[3000 条机器结果](../../verification/scale-usage/scale-final-3000/metrics.json)和[纯滚动统计](../../verification/scale-usage/release-interaction/gfxinfo-scroll-only.txt)。以下是报告既有结果，不是本计划新跑的性能数据。
+主依据为 [规模实际交互报告](../../verification/SCALE-USAGE.md)、[Release 画面](../../verification/scale-usage/release-contact-sheet.jpg)、[3000 条机器结果](../../verification/scale-usage/scale-final-3000/metrics.json)和[纯滚动统计](../../verification/scale-usage/release-interaction/gfxinfo-scroll-only.txt)。以下是历史规模报告的既有结果，不是本次修订新跑的性能数据。最新准备结果见 [工作区准备记录](../../verification/WORKSPACE-PREPARATION.md)：157 项 JVM、25 项设备检查通过，Lint 0 错误/27 警告，Debug/Release 及设备测试 APK 构建通过。新增暂停/仅归档入口回归已通过；无需再次实现归档管理入口。该轮 3000 条评分约 1074ms、本地查询约 851ms，仍为单次回归采样，不替换下表历史值或充当分位数基线。
 
 | 当前结果 | 数值 | 对应决策 |
 |---|---:|---|
@@ -41,18 +41,19 @@
 - 保存期间仅允许现有操作按钮进入暂时不可重复提交状态；不插入全屏加载页、不移动内容。无障碍提示复用现有提示通道。
 - 先减少后台工作与无效重绘，再考虑列表容器。不得通过删减例句、标签、批注、装饰或内容密度来达到性能数字。
 - 普通/大字号、浅色/深色、紧凑/详细、键盘显示、空态都需要对照。截图数据固定；只遮罩系统时钟、电量、网络状态和光标闪烁。
-- 同设备对照时字号与换行一致，主要控件位置/尺寸偏差不超过 1dp；非遮罩区域色差超过 8/255 的像素原则上不超过 0.5%。差异超过阈值必须定位，不能扩大遮罩使测试通过。
+- 同设备对照时字号与换行一致，主要控件位置/尺寸偏差不超过 1dp。先对同一基线 APK、同数据同状态重复截图至少 5 次测量噪声，再固定像素比对阈值；初始参考值为色差超过 8/255 的像素不超过非遮罩区域的 0.5%。阈值校准必须在优化前记录，不能看过改版结果后放宽阈值或扩大遮罩。
+- 背景/强调色、字体/字号/字重、图标、卡片尺寸与间距、文字换行分别检查；关键视觉回归即使落在全屏像素容差内也不通过。暂停与仅归档管理入口加入截图和触摸矩阵。
 
 ## 3. 分期交付与优先级
 
 | 子项目 | 任务 | 可独立交付的结果 | 前置 |
 |---|---|---|---|
-| A：测量、提交与状态正确性 | 0–2 | UI 不被保存阻塞；失败不假成功、重复点击不重复评分 | 当前代码 |
+| A：测量、存储契约与状态正确性 | 0–2 | 冻结跨后端协议，接入串行提交；失败不假成功、重复点击不重复评分 | 6026d85 |
 | B：增量持久化与备份 | 3–4 | 评分/历史局部事务；可验证迁移；超过 4MiB 的库可备份恢复 | A |
 | C：搜索与渲染 | 5–6 | 输入反馈和滚动改善，截图与交互一致 | 0；接入 A/B 的数据版本 |
 | D：交付验收 | 7 | Release 实测、兼容性证据、视觉对照和剩余限制 | A/B/C |
 
-建议先交付 A，再完成 B；C 的 trace 可在 A/B 之前采集，但不要同时大改数据层和页面容器。每个子项目留一个可恢复检查点。提交、推送和设备数据替换按实际执行时的用户授权范围处理，本次编制计划不执行这些动作。
+建议按 0 → 1a（协议/契约测试）→ 1b（旧 JSON 适配与异步接入）→ 2 → 3 → 4 推进，再验收 5–6。A 先冻结读写、提交结果、事件查重、版本和恢复协议，B 只替换后端及增量实现，不再次改变 UI 调用协议。评分和本地查询优先接入，其余修改入口在 A 验收前全部收口，不能让同步界面写入与后台可写 Library 并存。C 的 trace 可在 A/B 之前采集，但不要同时大改数据层和页面容器。每个子项目留一个可恢复检查点。实施时的提交、推送和设备数据替换按用户授权范围处理；本次修订只保存文档的本地提交，不执行应用实现、推送或设备数据替换。
 
 ## 4. 文件职责地图
 
@@ -62,7 +63,7 @@
 |---|---|
 | `MainActivity.java` | 保留生命周期、导航、公共 View 工厂；逐步委托提交/屏幕状态，取消同步整库落盘 |
 | `Repository.java` | 迁移期保留旧 JSON 存储适配；读、写、恢复、回退全部经统一入口 |
-| 新 `LibraryStore.java`、`LibraryCommand.java`、`CommitResult.java` | 串行提交、版本/恢复代次、持久化确认；不持有 Activity/View |
+| 新 `LibraryStore.java`、`LibraryCommand.java`、`CommitResult.java`、`StoreBackend.java` | 统一读写契约、串行提交、版本/恢复代次、持久化确认；UI 不接触后端或可写 Library；不持有 Activity/View |
 | 新 `ReviewSessionState.java`、`NotebookScreenState.java` | 保存当前卡片、提交状态、统计、筛选、页码和阅读锚点 |
 | `ReviewUi.java`、`QueryUi.java`、`NotebookUi.java` | 提交操作并绑定结果，避免直接修改共享实体或根据失败提交更新统计 |
 | `ConversationTitles.java` | 通过 session ID、revision、epoch 应用命名结果，经过同一提交入口 |
@@ -82,32 +83,37 @@
 
 **文件：** 读取现有报告和样本；新增 `scripts/audit-performance-preserve-ui.py`、`app/src/androidTest/java/com/lexinote/nativeapp/PerformanceInstrumentation.java`；结果写入 `docs/verification/performance-preserve-ui/baseline/`。
 
-- [ ] 保存当前 diff、未跟踪文件清单、源码 SHA-256、APK SHA-256、样本 SHA-256，保留原有未提交改动，不运行 reset/clean。
+- [ ] 从 `6026d85` 或其仅文档修订后继提交开始，记录实际 HEAD、diff、未跟踪文件清单、源码/APK/样本 SHA-256；先确认干净状态。有新的未提交修改则保留并列明来源，不运行 reset/clean。
 - [ ] 测试默认使用唯一 cache 目录的数据仓库；若需修改已安装应用的数据，先保存实际存储文件、回退文件及加密配置并核验恢复，不能依赖测试 finally 作为唯一保护。
 - [ ] 固定数据、时区、应用字号、系统字号、主题、分辨率、刷新率、动画和键盘状态；冷启动与热操作分开。
 - [ ] 记录输入事件、首次可见反馈、业务提交成功和 UI idle 四个时间，避免把禁用按钮的快反馈等同于写入完成。
-- [ ] 每场景 5 次热身、30 次测量、3 轮；独立记录 1000 条、3000 条、3000 条加 1 万评分事件。重复评分样本通过合法业务命令生成，不直接拼出不满足 schema 的事件。
+- [ ] 每场景 5 次热身、30 次测量、3 轮；独立记录 1000 条、3000 条、3000 条加 1 万评分事件。历史样本通过合法业务命令生成，不直接拼出不满足 schema 的事件。
+- [ ] 评分/查询每个样本开始前恢复同一份隔离数据及页面状态；恢复、队列准备、清理和截图不计入动作耗时。固定计划、卡片、日期、评分、历史数量和缓存预热策略，避免连续 30 次评分改变队列、配额与数据大小。热身也在独立副本执行，不污染正式样本。
+- [ ] 冷启动、首次队列生成、已有队列读取和纯滚动分别测量；采用相同 Release/benchmark 构建配置，保留原始样本并逐轮计算分位数，不把 Debug 到 idle、首次反馈和持久化成功混成一个指标。
 - [ ] 超出旧 JSON 容量的历史样本，旧后端只记录领域/容量拒绝基线，增量后端完成后再测正常提交；不能先放宽生产上限把样本强行写入旧库。
 - [ ] 采集笔记纯滚动的 Perfetto，标记 `command.prepare`、`command.persist`、`query.filter`、`card.bind`、`screen.render`；不同时采样键盘输入和滚动来推断卡片瓶颈。
 - [ ] 截图覆盖书架、紧凑首/末页、详细列表、搜索结果、词汇详情、复习正/背面/评分后、空计划、长会话、设置。浅深色和大字号分别留基线。
 
 **检查点：** 基线有来源与操作记录；不能将旧的单次结果重新标为多次 P95。实测前先读 [系统 tracing 文档](https://developer.android.com/topic/performance/tracing)。
 
-### Task 1：建立串行异步提交入口
+### Task 1：先冻结跨后端契约，再建立串行异步提交入口
 
-**文件：** 新建 `LibraryStore.java`、`LibraryCommand.java`、`CommitResult.java`；修改 `Repository.java`、`MainActivity.java`；新增 `LibraryStoreTest.java` 与 `PersistenceInstrumentation.java`。
+**文件：** 新建 `LibraryStore.java`、`LibraryCommand.java`、`CommitResult.java`、`StoreBackend.java`；修改 `Repository.java`、`MainActivity.java`；新增 `StorageContractTest.java`、`LibraryStoreTest.java` 与 `PersistenceInstrumentation.java`。
 
-公共协议使用下列最小接口；具体命令返回的值只能包含 ID、标量或不可变 DTO，不返回可写 JSONObject：
+**Task 1a：先定义并测试公共契约。** `LibraryCommand` 表达业务动作，不以 `apply(Library workingCopy)` 作为界面协议；可写 Library 只存在于旧后端适配内部。JSON 和 SQLite 运行相同契约测试，UI 不感知后端切换。
 
-```java
-interface LibraryCommand<R> {
-  R apply(Library workingCopy) throws Exception;
-}
-interface CommitCallback<R> {
-  void succeeded(long revision, R result);
-  void failed(Exception error);
-}
-```
+| 操作 | 必须明确的约定 |
+|---|---|
+| 读取/查询 | 异步返回不可变展示 DTO、generation、revision；不得通过返回 JSONObject/JSONArray 泄露可写状态 |
+| 提交命令 | 输入只含业务 ID、必要 payload、操作 ID、预期 generation；一个命令原子成功或失败，成功后返回已持久化 revision |
+| 查询评分事件 | 按 generation 与 eventId 查询持久记录，并核对原评分、时长和发生时间；JSON 阶段查已保存事件，SQLite 阶段查唯一索引 |
+| 恢复/回退 | 是带代次屏障的排队操作；旧命令拒绝而非静默应用到新数据；成功后发布新的 generation |
+| 失败与解绑 | 返回明确错误且不发布成功状态；回调只交给当前有效订阅，Activity 销毁不取消已受理事务 |
+| 生命周期重连 | 重新读取已提交视图；有可恢复 eventId 时查询结果，没有时不自动重发评分 |
+
+- [ ] 为成功、失败、命令顺序、事件查重、恢复屏障、取消订阅和只读结果编写后端无关契约测试，先用可控假后端验证；明确 `CommitResult` 和读取 DTO 的字段再接入页面。
+
+**Task 1b：实现 JSON 适配与串行入口。** 评分、本地查询先接入，并沿同一协议收口其余修改入口；SQLite 只实现既定 `StoreBackend` 及局部事务，避免重复改造调用链。
 
 - [ ] 先写故障/调度测试：阻塞式假存储期间 UI 事件可以执行；失败不发布新版本；两个命令按序提交；恢复前排队命令不能覆盖恢复后的数据。
 - [ ] 一个应用进程级 Store 持有独立的串行执行器；网络请求和 ZIP 编码继续使用各自工作线程，避免一个慢网络请求挡住评分。Activity 销毁仅解绑 UI 回调，不能关闭全局存储执行器。
@@ -131,9 +137,9 @@ interface CommitCallback<R> {
 - [ ] 用 session ID/revision/epoch 替代跨异步边界的 JSONObject 对象身份判断；标题、AI 补充和查询结果只对正确的数据版本生效。
 - [ ] 保存笔记筛选、排序、页码、锚点，保存复习计划/日期/当前任务 ID、正背面和会话汇总；禁止把整份库塞进 Bundle。
 - [ ] 卡片耗时用单调时钟记录前台可见时间，退后台暂停；进程恢复从已持久化事件重建计数，并重置当前显示计时，避免 `cardStartTime=0` 被算成 24 小时。
-- [ ] 页面状态只存已提交结果与提交标识；Activity 重建后重新绑定 Store。进程重启后以数据库中是否已有固定事件 ID 判断成功，不能盲目重复发送。
+- [ ] 页面状态只存已提交结果与提交标识；Activity 重建后重新绑定 Store。进程重启后通过统一存储接口查询固定 eventId 的已持久化记录；本任务先由 JSON 后端实现，Task 3 再由 SQLite 实现，不提前依赖数据库。若没有可恢复操作标识，只刷新已提交队列/统计，不自动重发评分。
 
-**验收：** 保存失败、快速双击、旋转、深浅主题切换、进程死亡后返回、评分跨本地日期及恢复期间退出均有设备用例；截图主内容保持原布局。
+**验收：** 在 JSON 后端完成保存失败、快速双击、旋转、深浅主题切换、进程死亡后返回、评分跨本地日期及恢复期间退出用例；Task 3 使用相同契约和设备用例验收 SQLite。暂停/仅归档管理入口原有回归继续通过；截图主内容保持原布局。
 
 ### Task 3：SQLite 增量事务与可恢复迁移
 
@@ -161,6 +167,9 @@ interface CommitCallback<R> {
 - [ ] 将全量 `Library.validate` 留给迁移/导入和完整校验；正常命令按受影响实体与约束验证。数据库事务完成前不得发布新 UI 状态。
 - [ ] 每笔记显示、未知字段和顺序保留原协议。删除词汇后的历史评分按照现有业务规则保留，不能用级联删除静默清空学习历史。
 - [ ] 导入和“回到上次恢复前”改用同一数据库的 generation 数据集：导入到非活动 generation，校验后事务切换活动指针；保存上一 generation 供回退。避免在打开的 WAL 数据库旁直接替换单个 .db 文件。
+- [ ] 明确 generation 生命周期：活动版、最近恢复前版本和正在备份读取的版本不得清理；失败导入的暂存版本可清理。无读取引用且不再保留的旧版本在串行存储入口分批清理，测试中断后可继续，不能积累每次导入的全部历史副本。
+- [ ] 迁移/恢复验证同时覆盖进程死亡、磁盘空间不足和重新打开。恢复指针和数据集必须一致；SQLite 后端重新执行 Task 1a 的全部契约测试及 Task 2 的设备状态回归。
+- [ ] 旧 APK 回退必须配套恢复同一检查点的迁移前数据/图片/本机设置，并先保留迁移后的最新数据；不能只覆盖安装旧 APK 后让它读取过期 library.json。默认优先修复或前进恢复，禁止自动降级导致新增学习记录丢失。
 
 **验收：** 1000/3000/评分历史增长三档评分写入的数据量基本恒定；超过 4MiB 的合法数据不阻止正常评级；迁移/导入中断不会损伤原库。此时仍需 Task 4 才能宣称大库备份闭环完成。
 
@@ -173,6 +182,9 @@ interface CommitCallback<R> {
 - [ ] 用临时磁盘文件/非活动 generation 暂存导入，边读边核验字段、配额、图片与 CRC，全部通过后切换；失败清理本次暂存内容，不动活动库及上一回退版本。
 - [ ] 分离本地数据库容量、导入文件容量、解压容量、单实体容量和工作缓冲预算。首轮继续保留 16MiB 总归档/解压预算，流式文本可使用该总预算，至少通过 8MiB 文本样本；图片计入同一总预算，不能宣称任意大小均可备份。
 - [ ] 上述 16MiB 是拟定的首轮预算，不直接放宽旧内存解码路径。流式路径在受限堆环境通过前，继续保留原保护；若失败，先修复峰值内存，不把阈值调大使测试通过。
+- [ ] 区分格式兼容与容量兼容：继续支持旧版字段/ZIP结构，但超过旧版 4MiB 或其设备动态容量的导出不承诺旧 APK 可读；用小于旧限值样本做旧解码器互通，用 8MiB 样本做新流式路径闭环，分别记录。
+- [ ] 16MiB 是完整备份的首轮预算，不是数据库容量上限。超过预算时完整备份明确失败且保留原数据，不静默丢图、删评分或导出不完整库；现有筛选导出只能称为部分导出。将容量不足列为剩余限制，后续提高完整备份预算须另做内存/磁盘验证，不能宣称已解决任意规模备份。
+- [ ] 导出使用临时目标，校验并完成后才报告成功；超限/取消不覆盖已有有效备份。长事务/版本读取结束后释放保留引用，再允许清理旧 generation。
 - [ ] 不修改 SecureSettings 的本机隔离边界；备份脱敏、异常路径、缺图报错、跨设备图片重映射和恢复前预览继续有效。
 
 **验收：** 8MiB 纯文本库可评分、备份、恢复和回导；大图/配额超限清楚拒绝；导出时连续评分不会造成混合版本备份。最低 API26 和受限堆设备/模拟环境分别检查。
@@ -208,7 +220,7 @@ interface CommitCallback<R> {
 **文件：** 新增 `docs/verification/PERFORMANCE-PRESERVE-UI.md`；产物放 `docs/verification/performance-preserve-ui/`；根据完成范围更新 README，不重写历史规模报告的测量值。
 
 - [ ] 运行全部 JVM 测试、Lint、Debug/Release 构建；保留当前 157 项测试并增加实际新覆盖，不能以删测试或放宽断言换通过。
-- [ ] 运行原 Scale 的 1000/3000 场景及标题真实触摸回归；补交互事务失败、数据迁移、恢复回退、并发导出、生命周期恢复和视觉矩阵。
+- [ ] 运行当前 25 项设备基线：1000/3000 规模各 11 项、标题真实触摸 1 项、暂停/仅归档入口 2 项；补交互事务失败、数据迁移、恢复回退、并发导出、生命周期恢复和视觉矩阵。
 - [ ] 按 Task 0 的相同 Release 方法输出三轮 P50/P95/P99、帧指标、trace、冷启动、内存与截图差异。设备/刷新率/后台负载变化单独记录，不混用 Debug 和 Release 数字。
 - [ ] 至少 30 分钟反复搜索、翻页、详情往返、复习及长会话切换；记录 GC 后内存趋势和 bitmap/图片压力。没有物理设备时明确保留该项限制。
 - [ ] 验证标准库、共享引用、未知字段、旧备份、8MiB 文本、图片及坏档；新数据库故障不自动覆盖迁移前文件，加密设置逐字节保持。
@@ -243,9 +255,10 @@ adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 adb shell am instrument -w -e size 1000 -e mode final com.lexinote.nativeapp.test/com.lexinote.nativeapp.ScaleInstrumentation
 adb shell am instrument -w -e size 3000 -e mode final com.lexinote.nativeapp.test/com.lexinote.nativeapp.ScaleInstrumentation
 adb shell am instrument -w -e size 3000 -e mode title com.lexinote.nativeapp.test/com.lexinote.nativeapp.ScaleInstrumentation
+adb shell am instrument -w -e size 1000 -e mode empty-states com.lexinote.nativeapp.test/com.lexinote.nativeapp.ScaleInstrumentation
 ```
 
-新增 runner 在各自任务中创建后，按完全限定类名通过 `-PdeviceRunner=...` 构建。实际安装前保存设备数据；以上是未来执行命令，本次计划编制未安装/导入或运行这些命令。
+新增 runner 在各自任务中创建后，按完全限定类名通过 `-PdeviceRunner=...` 构建。实际安装前保存成套 APK 和数据检查点；迁移后不能只回装旧 APK。以上是后续实施的复现命令，本次计划修订不运行它们。
 
 预期：Gradle 退出码 0、JUnit 无失败/错误、Lint 无错误且不新增未解释警告；所有设备用例失败列表为空。性能是否达标和视觉是否一致分别验收，不用测试数量替代。
 
@@ -266,4 +279,5 @@ adb shell am instrument -w -e size 3000 -e mode title com.lexinote.nativeapp.tes
 - [x] 把已完成的分页/集合/只读保存优化与后续任务区分，未重复安排为待修复问题。
 - [x] 视觉基线、功能约束、失败语义、迁移回退及备份容量均有任务和验收条件。
 - [x] 执行文件、命令、依赖和阶段检查点明确；未把性能目标描述成既有测量结果。
-- [x] 本次只新增计划文档，不修改应用源码、测试源码、设备数据或既有规划文件，不提交或推送。
+- [x] 本次仅修订本计划，不修改应用源码、测试源码、设备数据或其他计划的任务完成状态；按工作区准备要求保存本地文档提交，不推送。
+- [x] 修订覆盖基线、统一协议、阶段依赖、迁移回退、备份兼容/配额及重复测量/视觉噪声校准；所有优化实现任务继续保持未执行。
