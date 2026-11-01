@@ -127,7 +127,10 @@ public final class ReviewPlans {
   private Set<String> pool(JSONObject p) {
     Set<String> result = new LinkedHashSet<>();
     collect(p.optString("notebook_id"), result, new HashSet<>());
-    result.removeIf(id -> library.find("vocabularies", id) == null);
+    Set<String> existing = new HashSet<>();
+    JSONArray vocabulary = library.array("vocabularies");
+    for (int i = 0; i < vocabulary.length(); i++) existing.add(vocabulary.optJSONObject(i).optString("id"));
+    result.retainAll(existing);
     return result;
   }
 
@@ -183,6 +186,11 @@ public final class ReviewPlans {
   }
 
   /** Initializes today's fixed task list if absent. Also a command: save the library afterwards. */
+  /** Checks whether today's fixed task list exists without generating or mutating it. */
+  public synchronized boolean hasDailyQueue(String id, long now) {
+    return savedDay(id, date(active(id), now)) != null;
+  }
+
   public synchronized JSONObject dailyQueue(String id, long now) {
     JSONObject p = active(id);
     String localDate = date(p, now);

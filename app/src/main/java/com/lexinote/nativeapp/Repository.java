@@ -26,8 +26,9 @@ public final class Repository {
   }
 
   public void save(Library library) throws Exception {
-    Library.validate(library.snapshot());
-    write(file, library.snapshot());
+    JSONObject snapshot = library.snapshot();
+    Library.validate(snapshot);
+    write(file, snapshot);
   }
 
   private void write(AtomicFile target, JSONObject data) throws Exception {

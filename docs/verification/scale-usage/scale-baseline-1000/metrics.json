@@ -1,0 +1,34 @@
+{
+  "decode_and_library_ms": 870,
+  "notebook_global_render_main_ms": 2069,
+  "notebook_global_render_to_idle_ms": 6273,
+  "global_body_children": 1000,
+  "search_action_to_idle_ms": 1369,
+  "notebook_heavy_render_main_ms": 2882,
+  "notebook_heavy_render_to_idle_ms": 4784,
+  "review_dashboard_main_ms": 1294,
+  "review_dashboard_to_idle_ms": 1365,
+  "review_same_plan_main_ms": 1686,
+  "review_same_plan_to_idle_ms": 2060,
+  "review_next_plan_main_ms": 1134,
+  "review_next_plan_to_idle_ms": 1157,
+  "long_assistant_main_ms": 26,
+  "long_assistant_to_idle_ms": 283,
+  "local_query_main_ms": 577,
+  "local_query_to_idle_ms": 600,
+  "repository_save_worker_ms": 340,
+  "zip_roundtrip_ms": 807,
+  "heap_used_bytes": 41780176,
+  "passed": [
+    "search returns matching phrase",
+    "12 review plans visible",
+    "600 message history retained",
+    "local query stays offline",
+    "backup ZIP roundtrip preserves vocabulary",
+    "empty review guide attached"
+  ],
+  "failed": [
+    "bounded notebook card count: java.lang.AssertionError: eagerly rendered 1000 children",
+    "read-only dashboard avoids full snapshot writes: java.lang.AssertionError: read-only dashboard rewrote library"
+  ]
+}

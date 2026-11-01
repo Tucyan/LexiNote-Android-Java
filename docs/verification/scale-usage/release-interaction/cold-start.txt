@@ -1,0 +1,7 @@
+Starting: Intent { cmp=com.lexinote.nativeapp/.MainActivity }
+Status: ok
+LaunchState: COLD
+Activity: com.lexinote.nativeapp/.MainActivity
+TotalTime: 846
+WaitTime: 851
+Complete

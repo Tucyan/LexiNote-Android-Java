@@ -1,0 +1,3 @@
+
+{"decode_and_library_ms":1178,"passed":[],"failed":["actual title pointer enters detail and returns to filter: java.lang.RuntimeException: java.lang.AssertionError: title pointer swallowed by selectable label"]}
+PASS 0 FAIL 1

@@ -1,0 +1,61 @@
+Applications Memory Usage (in Kilobytes):
+Uptime: 66165941 Realtime: 66165941
+
+** MEMINFO in pid 26744 [com.lexinote.nativeapp] **
+                   Pss  Private  Private  SwapPss      Rss     Heap     Heap     Heap
+                 Total    Dirty    Clean    Dirty    Total     Size    Alloc     Free
+                ------   ------   ------   ------   ------   ------   ------   ------
+  Native Heap    32552    32524        0       86    33676    46544    40880     1585
+  Dalvik Heap    28615    28472       48      245    30344    49375    24799    24576
+ Dalvik Other      748      708        0        7     1380
+        Stack      456      456        0        0      464
+       Ashmem       23        0        0        0      596
+    Other dev       14        0       12        0      140
+     .so mmap     3100      564       20       50    39236
+    .jar mmap     1717        0        0        0    32448
+    .apk mmap      107        0        0        0     1288
+    .dex mmap       60        0       32        0      848
+    .oat mmap      731        0        0        0    12004
+    .art mmap     1280      524        4       95    21456
+   Other mmap     4864        4     3328        1     8256
+      Unknown      623      612        0       16     1100
+        TOTAL    75390    63864     3444      500   183236    95919    65679    26161
+
+ App Summary
+                       Pss(KB)                        Rss(KB)
+                        ------                         ------
+           Java Heap:    29000                          51800
+         Native Heap:    32524                          33676
+                Code:      616                          85860
+               Stack:      456                            464
+            Graphics:        0                              0
+       Private Other:     4712
+              System:     8082
+             Unknown:                                   11436
+
+           TOTAL PSS:    75390            TOTAL RSS:   183236       TOTAL SWAP PSS:      500
+
+ Objects
+               Views:      625         ViewRootImpl:        1
+         AppContexts:        5           Activities:        1
+              Assets:       20        AssetManagers:        0
+       Local Binders:       16        Proxy Binders:       59
+       Parcel memory:        5         Parcel count:       22
+    Death Recipients:        0             WebViews:        0
+
+ Native Allocations
+                         Count                       Total(kB)
+                        ------                         ------
+    Other (malloced):    10729                           1025
+ Other (nonmalloced):       92                             67
+   Bitmap (malloced):       11                             25
+
+ Mapped Bitmaps
+                         Count                       Size(KB)
+                        ------                         ------
+              Mapped:        0                              0
+              Unique:        0                              0
+
+ SQL
+         MEMORY_USED:        0
+  PAGECACHE_OVERFLOW:        0          MALLOC_SIZE:        0

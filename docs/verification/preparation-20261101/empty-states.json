@@ -1,0 +1,8 @@
+{
+  "decode_and_library_ms": 1438,
+  "passed": [
+    "paused plans remain visible and manageable",
+    "archived-only plans can reopen management"
+  ],
+  "failed": []
+}

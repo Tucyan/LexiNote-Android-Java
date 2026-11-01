@@ -5,6 +5,7 @@ import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.text.InputType;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.*;
@@ -53,43 +54,234 @@ final class ReviewUi {
       renderActiveSession();
     } else if ("completed".equals(phase)) {
       renderCompletedSession();
+    } else if ("manage".equals(phase)) {
+      renderManagePlans();
     } else {
       phase = "dashboard";
       renderDashboard();
     }
   }
 
+  static class SwipableLayout extends LinearLayout {
+    private final MainActivity a;
+    private float startX, startY;
+    private long startTime;
+    private boolean isHorizontalDrag;
+    private final Runnable onSwipeLeft;
+    private final Runnable onSwipeRight;
+
+    SwipableLayout(MainActivity a, Runnable onSwipeLeft, Runnable onSwipeRight) {
+      super(a);
+      this.a = a;
+      this.onSwipeLeft = onSwipeLeft;
+      this.onSwipeRight = onSwipeRight;
+      setOrientation(VERTICAL);
+      setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    @Override
+    public boolean onInterceptTouchEvent(MotionEvent ev) {
+      switch (ev.getAction()) {
+        case MotionEvent.ACTION_DOWN:
+          startX = ev.getX();
+          startY = ev.getY();
+          startTime = System.currentTimeMillis();
+          isHorizontalDrag = false;
+          break;
+        case MotionEvent.ACTION_MOVE:
+          float dx = ev.getX() - startX;
+          float dy = ev.getY() - startY;
+          if (Math.abs(dx) > a.dp(14) && Math.abs(dx) > Math.abs(dy) * 1.3f) {
+            isHorizontalDrag = true;
+            if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+            return true;
+          }
+          break;
+        case MotionEvent.ACTION_UP:
+        case MotionEvent.ACTION_CANCEL:
+          if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
+          break;
+      }
+      return super.onInterceptTouchEvent(ev);
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+      switch (event.getAction()) {
+        case MotionEvent.ACTION_DOWN:
+          startX = event.getX();
+          startY = event.getY();
+          startTime = System.currentTimeMillis();
+          isHorizontalDrag = false;
+          return true;
+        case MotionEvent.ACTION_MOVE:
+          float dx = event.getX() - startX;
+          float dy = event.getY() - startY;
+          if (Math.abs(dx) > a.dp(14) && Math.abs(dx) > Math.abs(dy) * 1.3f) {
+            isHorizontalDrag = true;
+            if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+          }
+          break;
+        case MotionEvent.ACTION_UP:
+          if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
+          if (isHorizontalDrag) {
+            float totalDx = event.getX() - startX;
+            float totalDy = event.getY() - startY;
+            if (Math.abs(totalDx) > a.dp(36) && Math.abs(totalDx) > Math.abs(totalDy)) {
+              if (totalDx < 0 && onSwipeLeft != null) {
+                onSwipeLeft.run();
+                return true;
+              } else if (totalDx > 0 && onSwipeRight != null) {
+                onSwipeRight.run();
+                return true;
+              }
+            }
+          }
+          break;
+        case MotionEvent.ACTION_CANCEL:
+          if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
+          break;
+      }
+      return true;
+    }
+  }
+
+  static final class PlanSortInfo {
+    final JSONObject plan;
+    final int priority; // 1 = pending tasks, 2 = no tasks scheduled / rest, 3 = all done
+    final int remaining;
+    final int totalTarget;
+    final boolean scheduled;
+
+    PlanSortInfo(JSONObject plan, int priority, int remaining, int totalTarget, boolean scheduled) {
+      this.plan = plan;
+      this.priority = priority;
+      this.remaining = remaining;
+      this.totalTarget = totalTarget;
+      this.scheduled = scheduled;
+    }
+  }
+
+  Set<String> getDisabledPlanIds() {
+    Set<String> set = new HashSet<>();
+    JSONObject settings = a.library.settings();
+    JSONArray arr = settings.optJSONArray("disabled_review_plans");
+    if (arr != null) {
+      for (int i = 0; i < arr.length(); i++) {
+        String id = arr.optString(i, null);
+        if (id != null && !id.trim().isEmpty()) set.add(id);
+      }
+    }
+    return set;
+  }
+
+  boolean isPlanActive(String planId) {
+    if (planId == null) return false;
+    return !getDisabledPlanIds().contains(planId);
+  }
+
+  void setPlanActive(String planId, boolean active) {
+    if (planId == null) return;
+    a.change(() -> {
+      JSONObject settings = a.library.settings();
+      JSONArray arr = settings.optJSONArray("disabled_review_plans");
+      Set<String> set = new LinkedHashSet<>();
+      if (arr != null) {
+        for (int i = 0; i < arr.length(); i++) {
+          String id = arr.optString(i, null);
+          if (id != null && !id.trim().isEmpty()) set.add(id);
+        }
+      }
+      if (active) {
+        set.remove(planId);
+      } else {
+        set.add(planId);
+      }
+      JSONArray newArr = new JSONArray();
+      for (String id : set) newArr.put(id);
+      Library.put(settings, "disabled_review_plans", newArr);
+    });
+  }
+
+  List<PlanSortInfo> getSortedActivePlans(long nowMillis) {
+    JSONArray all = a.library.reviewPlans().list(false);
+    Set<String> disabled = getDisabledPlanIds();
+    List<PlanSortInfo> list = new ArrayList<>();
+    boolean generatedDailyQueues = false;
+    for (int i = 0; i < all.length(); i++) {
+      JSONObject p = all.optJSONObject(i);
+      if (p == null) continue;
+      String pid = p.optString("id");
+      if (disabled.contains(pid)) continue;
+
+      generatedDailyQueues |= !a.library.reviewPlans().hasDailyQueue(pid, nowMillis);
+      JSONObject day = a.library.reviewPlans().dailyQueue(pid, nowMillis);
+      boolean scheduled = day.optBoolean("scheduled", false);
+      int newTarget = day.optInt("new_target", 0);
+      int reviewTarget = day.optInt("review_target", 0);
+      int totalTarget = newTarget + reviewTarget;
+      JSONArray q = day.optJSONArray("queue");
+      int remaining = q != null ? q.length() : 0;
+
+      int priority;
+      if (scheduled && totalTarget > 0 && remaining > 0) {
+        priority = 1;
+      } else if (!scheduled || totalTarget == 0) {
+        priority = 2;
+      } else {
+        priority = 3;
+      }
+      list.add(new PlanSortInfo(p, priority, remaining, totalTarget, scheduled));
+    }
+
+    if (generatedDailyQueues && !a.persist()) return Collections.emptyList();
+
+    Collections.sort(list, (o1, o2) -> {
+      if (o1.priority != o2.priority) {
+        return Integer.compare(o1.priority, o2.priority);
+      }
+      if (o1.priority == 1) {
+        return Integer.compare(o2.remaining, o1.remaining);
+      }
+      return o1.plan.optString("name", "").compareTo(o2.plan.optString("name", ""));
+    });
+    return list;
+  }
+
+  String renderDots(int currentIdx, int total) {
+    if (total <= 1) return "";
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < total; i++) {
+      sb.append(i == currentIdx ? "● " : "○ ");
+    }
+    return sb.toString().trim();
+  }
+
+  LinearLayout createCardLayout(String title) {
+    LinearLayout value = a.column();
+    value.setPadding(a.dp(14), a.dp(14), a.dp(14), a.dp(14));
+    value.setBackground(a.shape(a.card, 16, a.border));
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+    lp.bottomMargin = a.dp(14);
+    value.setLayoutParams(lp);
+    if (title != null) {
+      TextView heading = a.text(title, 16, true);
+      LinearLayout.LayoutParams h = new LinearLayout.LayoutParams(-1, -2);
+      h.bottomMargin = a.dp(12);
+      value.addView(heading, h);
+    }
+    return value;
+  }
+
   void renderDashboard() {
     a.body.removeAllViews();
     a.body.setPadding(a.dp(16), a.dp(16), a.dp(16), a.dp(32));
 
-    JSONArray activePlans = a.library.reviewPlans().list(false);
+    long now = System.currentTimeMillis();
+    JSONArray allPlans = a.library.reviewPlans().list(false);
 
-    // 1. Header Card
-    LinearLayout header = a.card(null);
-    LinearLayout heading = a.row();
-    heading.setGravity(Gravity.CENTER_VERTICAL);
-    LinearLayout iconCircle = a.column();
-    iconCircle.setGravity(Gravity.CENTER);
-    GradientDrawable circle = new GradientDrawable();
-    circle.setShape(GradientDrawable.OVAL);
-    circle.setColor((a.accent & 0x00FFFFFF) | 0x1A000000);
-    iconCircle.setBackground(circle);
-    iconCircle.addView(a.icon("calendar-outline", 24, a.accent));
-    heading.addView(iconCircle, new LinearLayout.LayoutParams(a.dp(48), a.dp(48)));
-
-    LinearLayout titleCol = a.column();
-    LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, -2, 1);
-    titleLp.leftMargin = a.dp(12);
-    titleCol.addView(a.text("复习背诵计划", 18, true));
-    TextView subTv = a.text("基于艾宾浩斯记忆曲线，按每日配额科学背诵", 12, false);
-    subTv.setTextColor(a.muted);
-    titleCol.addView(subTv);
-    heading.addView(titleCol, titleLp);
-    header.addView(heading);
-
-    // If no active plans exist, render empty state guide
-    if (activePlans.length() == 0) {
+    // If completely no plans exist, render empty state guide
+    if (allPlans.length() == 0) {
       LinearLayout emptyCard = a.card(null);
       emptyCard.setGravity(Gravity.CENTER);
       emptyCard.setPadding(a.dp(20), a.dp(32), a.dp(20), a.dp(32));
@@ -117,51 +309,183 @@ final class ReviewUi {
       cfLp.topMargin = a.dp(22);
       cfLp.gravity = Gravity.CENTER_HORIZONTAL;
       emptyCard.addView(createFirstBtn, cfLp);
+      if (a.library.reviewPlans().list(true).length() > 0) {
+        Button manageArchived = a.chip("计划管理", false, v -> {
+          phase = "manage";
+          a.render();
+        });
+        LinearLayout.LayoutParams manageLp = new LinearLayout.LayoutParams(-2, a.dp(36));
+        manageLp.topMargin = a.dp(12);
+        manageLp.gravity = Gravity.CENTER_HORIZONTAL;
+        emptyCard.addView(manageArchived, manageLp);
+      }
       return;
     }
 
-    // Ensure valid activePlanId
-    boolean foundPlan = false;
+    List<PlanSortInfo> sortedActivePlans = getSortedActivePlans(now);
+
+    // If all plans are paused/inactive
+    if (sortedActivePlans.isEmpty()) {
+      LinearLayout pausedCard = a.card(null);
+      pausedCard.setGravity(Gravity.CENTER);
+      pausedCard.setPadding(a.dp(20), a.dp(32), a.dp(20), a.dp(32));
+      LinearLayout.LayoutParams pcLp = new LinearLayout.LayoutParams(-1, -2);
+      pcLp.topMargin = a.dp(14);
+      pausedCard.setLayoutParams(pcLp);
+
+      pausedCard.addView(a.icon("pause-circle-outline", 52, a.subtle));
+
+      TextView pausedTitle = a.text("所有复习计划均已暂停", 17, true);
+      pausedTitle.setTextColor(a.foreground);
+      LinearLayout.LayoutParams ptLp = new LinearLayout.LayoutParams(-2, -2);
+      ptLp.topMargin = a.dp(14);
+      pausedCard.addView(pausedTitle, ptLp);
+
+      TextView pausedDesc = a.text("你已停用所有复习计划。可前往「计划管理」重新激活计划，或新建一个计划。", 13, false);
+      pausedDesc.setGravity(Gravity.CENTER);
+      pausedDesc.setTextColor(a.muted);
+      LinearLayout.LayoutParams pdLp = new LinearLayout.LayoutParams(-1, -2);
+      pdLp.topMargin = a.dp(8);
+      pausedCard.addView(pausedDesc, pdLp);
+
+      LinearLayout btnRow = a.row();
+      btnRow.setGravity(Gravity.CENTER);
+      LinearLayout.LayoutParams brLp = new LinearLayout.LayoutParams(-1, -2);
+      brLp.topMargin = a.dp(20);
+      btnRow.setLayoutParams(brLp);
+
+      Button gotoManageBtn = a.primaryButton("⚙ 前往计划管理", v -> {
+        phase = "manage";
+        a.render();
+      });
+      btnRow.addView(gotoManageBtn, new LinearLayout.LayoutParams(a.dp(160), a.dp(44)));
+
+      View bGap = new View(a);
+      btnRow.addView(bGap, new LinearLayout.LayoutParams(a.dp(12), 1));
+
+      Button newPlanBtn = a.chip("＋ 新建计划", true, v -> showCreatePlanModal());
+      btnRow.addView(newPlanBtn, new LinearLayout.LayoutParams(-2, a.dp(44)));
+
+      pausedCard.addView(btnRow);
+      return;
+    }
+
+    // Determine current plan index in sortedActivePlans
+    int currentPlanIndex = -1;
     if (activePlanId != null) {
-      for (int i = 0; i < activePlans.length(); i++) {
-        JSONObject ap = activePlans.optJSONObject(i);
-        if (ap != null && activePlanId.equals(ap.optString("id"))) {
-          foundPlan = true;
+      for (int i = 0; i < sortedActivePlans.size(); i++) {
+        if (activePlanId.equals(sortedActivePlans.get(i).plan.optString("id"))) {
+          currentPlanIndex = i;
           break;
         }
       }
     }
-    if (!foundPlan) {
-      activePlanId = activePlans.optJSONObject(0).optString("id");
+    if (currentPlanIndex == -1) {
+      currentPlanIndex = 0;
+      activePlanId = sortedActivePlans.get(0).plan.optString("id");
     }
 
-    JSONObject initialPlan = a.library.reviewPlans().get(activePlanId);
-    if (initialPlan == null) {
-      activePlanId = activePlans.optJSONObject(0).optString("id");
-      initialPlan = a.library.reviewPlans().get(activePlanId);
-    }
-    final JSONObject plan = initialPlan;
+    final int currentIdx = currentPlanIndex;
+    final int totalActive = sortedActivePlans.size();
+    final PlanSortInfo currentSortInfo = sortedActivePlans.get(currentIdx);
+    final JSONObject plan = currentSortInfo.plan;
 
-    // 2. Plan Switcher Bar
+    // 1. Header Card (Title, Manage Chip, Pager Controls, Switcher Pills)
+    LinearLayout header = createCardLayout(null);
+    a.body.addView(header);
+
+    LinearLayout heading = a.row();
+    heading.setGravity(Gravity.CENTER_VERTICAL);
+    LinearLayout iconCircle = a.column();
+    iconCircle.setGravity(Gravity.CENTER);
+    GradientDrawable circle = new GradientDrawable();
+    circle.setShape(GradientDrawable.OVAL);
+    circle.setColor((a.accent & 0x00FFFFFF) | 0x1A000000);
+    iconCircle.setBackground(circle);
+    iconCircle.addView(a.icon("calendar-outline", 24, a.accent));
+    heading.addView(iconCircle, new LinearLayout.LayoutParams(a.dp(48), a.dp(48)));
+
+    LinearLayout titleCol = a.column();
+    LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, -2, 1);
+    titleLp.leftMargin = a.dp(12);
+    titleCol.addView(a.text("复习背诵计划", 18, true));
+    TextView subTv = a.text("基于艾宾浩斯记忆曲线，按每日配额科学背诵", 12, false);
+    subTv.setTextColor(a.muted);
+    titleCol.addView(subTv);
+    heading.addView(titleCol, titleLp);
+
+    Button manageChip = a.chip("计划管理 ⚙", false, v -> {
+      phase = "manage";
+      a.render();
+    });
+    manageChip.setTextSize(11 * a.scale);
+    heading.addView(manageChip);
+    header.addView(heading);
+
+    // Pager Row (if multiple active plans)
+    if (totalActive > 1) {
+      LinearLayout pagerRow = a.row();
+      pagerRow.setGravity(Gravity.CENTER_VERTICAL);
+      LinearLayout.LayoutParams prLp = new LinearLayout.LayoutParams(-1, -2);
+      prLp.topMargin = a.dp(10);
+      pagerRow.setLayoutParams(prLp);
+
+      Button prevBtn = a.chip("‹", false, v -> {
+        int prev = (currentIdx - 1 + totalActive) % totalActive;
+        activePlanId = sortedActivePlans.get(prev).plan.optString("id");
+        a.render();
+      });
+      prevBtn.setTextSize(14 * a.scale);
+      prevBtn.setPadding(a.dp(12), 0, a.dp(12), 0);
+      pagerRow.addView(prevBtn, new LinearLayout.LayoutParams(-2, a.dp(28)));
+
+      TextView dotTv = a.text(renderDots(currentIdx, totalActive) + "  " + (currentIdx + 1) + " / " + totalActive + " · 左右滑动切换", 11, true);
+      dotTv.setTextColor(a.accent);
+      dotTv.setGravity(Gravity.CENTER);
+      LinearLayout.LayoutParams dtLp = new LinearLayout.LayoutParams(0, -2, 1);
+      pagerRow.addView(dotTv, dtLp);
+
+      Button nextBtn = a.chip("›", false, v -> {
+        int next = (currentIdx + 1) % totalActive;
+        activePlanId = sortedActivePlans.get(next).plan.optString("id");
+        a.render();
+      });
+      nextBtn.setTextSize(14 * a.scale);
+      nextBtn.setPadding(a.dp(12), 0, a.dp(12), 0);
+      pagerRow.addView(nextBtn, new LinearLayout.LayoutParams(-2, a.dp(28)));
+
+      header.addView(pagerRow);
+    }
+
+    // Plan Switcher Pills Bar
     LinearLayout switcherRow = a.row();
-    switcherRow.setPadding(0, a.dp(10), 0, a.dp(4));
+    switcherRow.setPadding(0, a.dp(8), 0, a.dp(4));
 
-    for (int i = 0; i < activePlans.length(); i++) {
-      JSONObject p = activePlans.optJSONObject(i);
-      if (p == null) continue;
+    for (int i = 0; i < sortedActivePlans.size(); i++) {
+      PlanSortInfo psi = sortedActivePlans.get(i);
+      JSONObject p = psi.plan;
       String pid = p.optString("id");
       String pname = p.optString("name", "计划");
       boolean isSelected = pid.equals(activePlanId);
-      switcherRow.addView(scopePill(pname, isSelected, () -> {
+
+      String pillLabel = pname;
+      if (psi.priority == 1) {
+        pillLabel += " (" + psi.remaining + ")";
+      } else if (psi.priority == 2) {
+        pillLabel += " (休)";
+      } else {
+        pillLabel += " (✓)";
+      }
+
+      switcherRow.addView(scopePill(pillLabel, isSelected, () -> {
         activePlanId = pid;
         a.render();
       }));
     }
 
-    // Add "+ 新建计划" button chip
-    Button addPlanBtn = a.chip("+ 新建计划", false, v -> showCreatePlanModal());
-    addPlanBtn.setLayoutParams(new LinearLayout.LayoutParams(-2, a.dp(38)));
-    addPlanBtn.setPadding(a.dp(12), 0, a.dp(12), 0);
+    Button addPlanBtn = a.chip("+ 新建", false, v -> showCreatePlanModal());
+    addPlanBtn.setLayoutParams(new LinearLayout.LayoutParams(-2, a.dp(34)));
+    addPlanBtn.setPadding(a.dp(10), 0, a.dp(10), 0);
     switcherRow.addView(addPlanBtn);
 
     HorizontalScrollView switcherScroll = new HorizontalScrollView(a);
@@ -169,16 +493,54 @@ final class ReviewUi {
     switcherScroll.addView(switcherRow);
     header.addView(switcherScroll);
 
-    // 3. Active Plan Details & Settings Box
-    LinearLayout planDetailsBox = a.card(null);
+    // 2. Swipable Container wrapping Plan details, Today's task, and 7-day stats
+    SwipableLayout swipeContainer = new SwipableLayout(a,
+        () -> {
+          if (totalActive > 1) {
+            int next = (currentIdx + 1) % totalActive;
+            activePlanId = sortedActivePlans.get(next).plan.optString("id");
+            a.render();
+          }
+        },
+        () -> {
+          if (totalActive > 1) {
+            int prev = (currentIdx - 1 + totalActive) % totalActive;
+            activePlanId = sortedActivePlans.get(prev).plan.optString("id");
+            a.render();
+          }
+        });
+
+    // Plan Details Box
+    LinearLayout planDetailsBox = createCardLayout(null);
     planDetailsBox.setPadding(a.dp(16), a.dp(14), a.dp(16), a.dp(16));
     LinearLayout.LayoutParams pdbLp = new LinearLayout.LayoutParams(-1, -2);
     pdbLp.topMargin = a.dp(12);
     planDetailsBox.setLayoutParams(pdbLp);
 
-    // Plan Title & Actions Row
     LinearLayout pTitleRow = a.row();
     pTitleRow.setGravity(Gravity.CENTER_VERTICAL);
+
+    if (currentSortInfo != null) {
+      TextView stBadge;
+      if (currentSortInfo.priority == 1) {
+        stBadge = a.text("🟢 待学 " + currentSortInfo.remaining, 11, true);
+        stBadge.setTextColor(Color.parseColor("#10B981"));
+        stBadge.setBackground(a.shape(0x1A10B981, 8, 0));
+      } else if (currentSortInfo.priority == 2) {
+        stBadge = a.text("☕ 今日休息", 11, true);
+        stBadge.setTextColor(Color.parseColor("#F59E0B"));
+        stBadge.setBackground(a.shape(0x1AF59E0B, 8, 0));
+      } else {
+        stBadge = a.text("✅ 今日完成", 11, true);
+        stBadge.setTextColor(a.accent);
+        stBadge.setBackground(a.shape((a.accent & 0x00FFFFFF) | 0x1A000000, 8, 0));
+      }
+      stBadge.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
+      LinearLayout.LayoutParams sbLp = new LinearLayout.LayoutParams(-2, -2);
+      sbLp.rightMargin = a.dp(6);
+      pTitleRow.addView(stBadge, sbLp);
+    }
+
     TextView planNameTv = a.text(plan.optString("name"), 17, true);
     planNameTv.setTextColor(a.foreground);
     pTitleRow.addView(planNameTv);
@@ -190,8 +552,18 @@ final class ReviewUi {
     editPlanBtn.setTextSize(11 * a.scale);
     pTitleRow.addView(editPlanBtn);
 
-    View gapChip = new View(a);
-    pTitleRow.addView(gapChip, new LinearLayout.LayoutParams(a.dp(6), 1));
+    View gapChip1 = new View(a);
+    pTitleRow.addView(gapChip1, new LinearLayout.LayoutParams(a.dp(6), 1));
+
+    Button managePlanBtn = a.chip("管理", false, v -> {
+      phase = "manage";
+      a.render();
+    });
+    managePlanBtn.setTextSize(11 * a.scale);
+    pTitleRow.addView(managePlanBtn);
+
+    View gapChip2 = new View(a);
+    pTitleRow.addView(gapChip2, new LinearLayout.LayoutParams(a.dp(6), 1));
 
     Button archivePlanBtn = a.chip("归档", false, v -> confirmArchivePlan(activePlanId));
     archivePlanBtn.setTextSize(11 * a.scale);
@@ -212,7 +584,7 @@ final class ReviewUi {
     nbRow.addView(nbTv);
     planDetailsBox.addView(nbRow);
 
-    // Badges Row (Frequency & Quota)
+    // Badges Row
     LinearLayout badgesRow = a.row();
     badgesRow.setGravity(Gravity.CENTER_VERTICAL);
     LinearLayout.LayoutParams bgLp = new LinearLayout.LayoutParams(-1, -2);
@@ -237,13 +609,13 @@ final class ReviewUi {
     badgesRow.addView(quotaBadge);
 
     planDetailsBox.addView(badgesRow);
+    swipeContainer.addView(planDetailsBox);
 
     // 4. Today's Task Card
-    long now = System.currentTimeMillis();
     JSONObject day = a.library.reviewPlans().dailyQueue(activePlanId, now);
-    a.persist(); // DailyQueue generates today's fixed task list if absent
+    // Newly generated daily tasks were persisted once while collecting active plans.
 
-    LinearLayout todayCard = a.card(null);
+    LinearLayout todayCard = createCardLayout(null);
     todayCard.setPadding(a.dp(16), a.dp(16), a.dp(16), a.dp(18));
     LinearLayout.LayoutParams tcLp = new LinearLayout.LayoutParams(-1, -2);
     tcLp.topMargin = a.dp(12);
@@ -258,7 +630,6 @@ final class ReviewUi {
     int completed = Math.max(0, totalTarget - remaining);
 
     if (!scheduled) {
-      // Non-scheduled rest day
       LinearLayout restRow = a.row();
       restRow.setGravity(Gravity.CENTER_VERTICAL);
       restRow.addView(a.icon("cafe-outline", 36, a.accent));
@@ -284,7 +655,6 @@ final class ReviewUi {
       reLp.topMargin = a.dp(8);
       todayCard.addView(restExtraBtn, reLp);
     } else if (totalTarget == 0) {
-      // No words available
       LinearLayout emptyWords = a.column();
       emptyWords.setGravity(Gravity.CENTER);
       emptyWords.setPadding(0, a.dp(12), 0, a.dp(12));
@@ -298,7 +668,6 @@ final class ReviewUi {
       emptyWords.addView(ewSub);
       todayCard.addView(emptyWords);
     } else if (remaining == 0) {
-      // All tasks completed for today
       LinearLayout doneCol = a.column();
       doneCol.setGravity(Gravity.CENTER);
       doneCol.setPadding(0, a.dp(10), 0, a.dp(10));
@@ -324,11 +693,9 @@ final class ReviewUi {
 
       todayCard.addView(doneCol);
     } else {
-      // Active tasks pending
       TextView todayTitle = a.text("今日学习任务", 16, true);
       todayCard.addView(todayTitle);
 
-      // Metrics Row
       LinearLayout tmRow = a.row();
       tmRow.setPadding(a.dp(6), a.dp(8), a.dp(6), a.dp(8));
       GradientDrawable tmBg = new GradientDrawable();
@@ -347,7 +714,6 @@ final class ReviewUi {
       addMetric(tmRow, reviewTarget, "复习配额", a.foreground);
       todayCard.addView(tmRow);
 
-      // Progress bar
       int pct = (int) Math.round(((double) completed / Math.max(1, totalTarget)) * 100);
       LinearLayout pbRow = a.row();
       pbRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -365,7 +731,6 @@ final class ReviewUi {
       pbRow.addView(pctTv);
       todayCard.addView(pbRow);
 
-      // Mode Selector
       TextView modeTitle = a.text("复习模式", 13, true);
       LinearLayout.LayoutParams mtLp = new LinearLayout.LayoutParams(-1, -2);
       mtLp.topMargin = a.dp(14);
@@ -403,7 +768,6 @@ final class ReviewUi {
               }),
           new LinearLayout.LayoutParams(0, -1, 1));
 
-      // Start Button
       Button startBtn = a.primaryButton("开启今日复习（剩余 " + remaining + " 词）", v -> startDailyReview());
       LinearLayout.LayoutParams sbLp = new LinearLayout.LayoutParams(-1, a.dp(50));
       sbLp.topMargin = a.dp(16);
@@ -411,6 +775,7 @@ final class ReviewUi {
       startBtn.setTextSize(16 * a.scale);
       todayCard.addView(startBtn);
     }
+    swipeContainer.addView(todayCard);
 
     // 5. Past 7 Days Statistics Card
     try {
@@ -419,7 +784,7 @@ final class ReviewUi {
       JSONObject stats = a.library.reviewPlans().statistics(activePlanId, fromDate.toString(), todayDate.toString());
       JSONObject totals = stats.optJSONObject("totals");
 
-      LinearLayout statsCard = a.card(null);
+      LinearLayout statsCard = createCardLayout(null);
       statsCard.setPadding(a.dp(16), a.dp(14), a.dp(16), a.dp(16));
       LinearLayout.LayoutParams scLp = new LinearLayout.LayoutParams(-1, -2);
       scLp.topMargin = a.dp(12);
@@ -447,13 +812,346 @@ final class ReviewUi {
       addMetricDivider(sRow);
       addMetric(sRow, totals != null ? totals.optInt("attempts", 0) : 0, "累计答题", a.foreground);
       statsCard.addView(sRow);
+      swipeContainer.addView(statsCard);
     } catch (Exception ignored) {}
+
+    a.body.addView(swipeContainer);
+  }
+
+  void renderManagePlans() {
+    a.body.removeAllViews();
+    a.body.setPadding(a.dp(16), a.dp(12), a.dp(16), a.dp(32));
+
+    long now = System.currentTimeMillis();
+    JSONArray allPlans = a.library.reviewPlans().list(false);
+    JSONArray archivedPlans = a.library.reviewPlans().list(true);
+    Set<String> disabledIds = getDisabledPlanIds();
+
+    // 1. Navigation Top Bar
+    LinearLayout navRow = a.row();
+    navRow.setGravity(Gravity.CENTER_VERTICAL);
+    navRow.setPadding(0, a.dp(4), 0, a.dp(12));
+
+    Button backBtn = a.chip("‹ 返回复习", true, v -> {
+      phase = "dashboard";
+      a.render();
+    });
+    backBtn.setTextSize(12 * a.scale);
+    navRow.addView(backBtn);
+
+    TextView titleTv = a.text(" 复习计划管理", 17, true);
+    LinearLayout.LayoutParams ttLp = new LinearLayout.LayoutParams(0, -2, 1);
+    ttLp.leftMargin = a.dp(8);
+    navRow.addView(titleTv, ttLp);
+
+    Button newPlanBtn = a.primaryButton("＋ 新建计划", v -> showCreatePlanModal());
+    newPlanBtn.setTextSize(12 * a.scale);
+    navRow.addView(newPlanBtn, new LinearLayout.LayoutParams(-2, a.dp(36)));
+    a.body.addView(navRow);
+
+    // Separate into active, inactive, archived
+    List<PlanSortInfo> activeList = getSortedActivePlans(now);
+    List<JSONObject> inactiveList = new ArrayList<>();
+    List<JSONObject> archivedList = new ArrayList<>();
+
+    for (int i = 0; i < allPlans.length(); i++) {
+      JSONObject p = allPlans.optJSONObject(i);
+      if (p == null) continue;
+      String pid = p.optString("id");
+      if (disabledIds.contains(pid)) {
+        inactiveList.add(p);
+      }
+    }
+
+    for (int i = 0; i < archivedPlans.length(); i++) {
+      JSONObject p = archivedPlans.optJSONObject(i);
+      if (p != null && p.optBoolean("archived", false)) {
+        archivedList.add(p);
+      }
+    }
+
+    // 2. Summary & Overview Card
+    LinearLayout summaryCard = createCardLayout(null);
+    summaryCard.setPadding(a.dp(16), a.dp(12), a.dp(16), a.dp(14));
+    LinearLayout.LayoutParams scLp = new LinearLayout.LayoutParams(-1, -2);
+    scLp.bottomMargin = a.dp(14);
+    summaryCard.setLayoutParams(scLp);
+
+    LinearLayout sHeading = a.row();
+    sHeading.setGravity(Gravity.CENTER_VERTICAL);
+    sHeading.addView(a.icon("layers-outline", 18, a.accent));
+    TextView sTitle = a.text(" 学习计划总览", 15, true);
+    sHeading.addView(sTitle);
+    summaryCard.addView(sHeading);
+
+    TextView sInfo = a.text("共 " + allPlans.length() + " 个进行中计划 · "
+        + activeList.size() + " 个已激活 · "
+        + inactiveList.size() + " 个已暂停"
+        + (archivedList.size() > 0 ? (" · " + archivedList.size() + " 个已归档") : ""), 12, false);
+    sInfo.setTextColor(a.muted);
+    LinearLayout.LayoutParams siLp = new LinearLayout.LayoutParams(-1, -2);
+    siLp.topMargin = a.dp(4);
+    summaryCard.addView(sInfo, siLp);
+
+    TextView sTip = a.text("💡 激活状态说明：已激活的计划会呈现在复习首页，按「今日待学 > 休息日 > 已完成」排序，支持左右滑动切换；暂停的计划不参与日常复习。", 11, false);
+    sTip.setTextColor(a.accent);
+    sTip.setPadding(a.dp(10), a.dp(8), a.dp(10), a.dp(8));
+    sTip.setBackground(a.shape((a.accent & 0x00FFFFFF) | 0x14000000, 8, 0));
+    LinearLayout.LayoutParams stLp = new LinearLayout.LayoutParams(-1, -2);
+    stLp.topMargin = a.dp(8);
+    summaryCard.addView(sTip, stLp);
+    a.body.addView(summaryCard);
+
+    // If completely empty
+    if (allPlans.length() == 0 && archivedList.isEmpty()) {
+      LinearLayout emptyCard = createCardLayout(null);
+      emptyCard.setGravity(Gravity.CENTER);
+      emptyCard.setPadding(a.dp(20), a.dp(36), a.dp(20), a.dp(36));
+      emptyCard.addView(a.icon("bookmarks-outline", 48, a.subtle));
+      TextView et = a.text("暂无任何复习计划", 16, true);
+      LinearLayout.LayoutParams etLp = new LinearLayout.LayoutParams(-2, -2);
+      etLp.topMargin = a.dp(12);
+      emptyCard.addView(et, etLp);
+      Button cBtn = a.primaryButton("新建第一个复习计划", v -> showCreatePlanModal());
+      LinearLayout.LayoutParams cbLp = new LinearLayout.LayoutParams(a.dp(200), a.dp(44));
+      cbLp.topMargin = a.dp(16);
+      emptyCard.addView(cBtn, cbLp);
+      a.body.addView(emptyCard);
+      return;
+    }
+
+    // 3. Section: 已激活计划
+    TextView activeSectionTitle = a.text("已激活计划 (" + activeList.size() + ")", 14, true);
+    activeSectionTitle.setTextColor(a.foreground);
+    activeSectionTitle.setPadding(0, a.dp(4), 0, a.dp(8));
+    a.body.addView(activeSectionTitle);
+
+    if (activeList.isEmpty()) {
+      LinearLayout noActiveCard = createCardLayout(null);
+      noActiveCard.setPadding(a.dp(16), a.dp(16), a.dp(16), a.dp(16));
+      LinearLayout.LayoutParams naLp = new LinearLayout.LayoutParams(-1, -2);
+      naLp.bottomMargin = a.dp(14);
+      noActiveCard.setLayoutParams(naLp);
+      TextView nat = a.text("暂无已激活的计划。请从下方「未激活计划」中激活，或新建计划。", 12, false);
+      nat.setTextColor(a.muted);
+      noActiveCard.addView(nat);
+      a.body.addView(noActiveCard);
+    } else {
+      for (int i = 0; i < activeList.size(); i++) {
+        PlanSortInfo psi = activeList.get(i);
+        a.body.addView(createPlanManageCard(psi.plan, true, psi, i + 1));
+      }
+    }
+
+    // 4. Section: 未激活 / 暂停计划
+    if (!inactiveList.isEmpty()) {
+      TextView inactSectionTitle = a.text("未激活 / 暂停计划 (" + inactiveList.size() + ")", 14, true);
+      inactSectionTitle.setTextColor(a.muted);
+      inactSectionTitle.setPadding(0, a.dp(12), 0, a.dp(8));
+      a.body.addView(inactSectionTitle);
+
+      for (JSONObject p : inactiveList) {
+        a.body.addView(createPlanManageCard(p, false, null, 0));
+      }
+    }
+
+    // 5. Section: 已归档计划
+    if (!archivedList.isEmpty()) {
+      TextView archSectionTitle = a.text("已归档计划 (" + archivedList.size() + ")", 14, true);
+      archSectionTitle.setTextColor(a.muted);
+      archSectionTitle.setPadding(0, a.dp(16), 0, a.dp(8));
+      a.body.addView(archSectionTitle);
+
+      for (JSONObject p : archivedList) {
+        a.body.addView(createArchivedPlanCard(p));
+      }
+    }
+  }
+
+  View createPlanManageCard(JSONObject plan, boolean isActive, PlanSortInfo psi, int rank) {
+    LinearLayout card = createCardLayout(null);
+    card.setPadding(a.dp(16), a.dp(14), a.dp(16), a.dp(14));
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+    lp.bottomMargin = a.dp(10);
+    card.setLayoutParams(lp);
+
+    String pid = plan.optString("id");
+    boolean isCurrentActive = pid.equals(activePlanId);
+
+    // Top Row: Rank/Status Badge + Plan Name + Current Indicator
+    LinearLayout topRow = a.row();
+    topRow.setGravity(Gravity.CENTER_VERTICAL);
+
+    if (isActive && psi != null) {
+      TextView badge;
+      if (psi.priority == 1) {
+        badge = a.text("🟢 待学 " + psi.remaining + " 词", 11, true);
+        badge.setTextColor(Color.parseColor("#10B981"));
+        badge.setBackground(a.shape(0x1A10B981, 8, 0));
+      } else if (psi.priority == 2) {
+        badge = a.text("☕ 今日休息", 11, true);
+        badge.setTextColor(Color.parseColor("#F59E0B"));
+        badge.setBackground(a.shape(0x1AF59E0B, 8, 0));
+      } else {
+        badge = a.text("✅ 今日已搞定", 11, true);
+        badge.setTextColor(a.accent);
+        badge.setBackground(a.shape((a.accent & 0x00FFFFFF) | 0x1A000000, 8, 0));
+      }
+      badge.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
+      topRow.addView(badge);
+    } else {
+      TextView pauseBadge = a.text("⏸️ 暂停中", 11, true);
+      pauseBadge.setTextColor(a.subtle);
+      pauseBadge.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
+      pauseBadge.setBackground(a.shape(a.inputBg, 8, a.border));
+      topRow.addView(pauseBadge);
+    }
+
+    TextView nameTv = a.text(" " + plan.optString("name", "计划"), 16, true);
+    nameTv.setTextColor(isActive ? a.foreground : a.muted);
+    LinearLayout.LayoutParams ntLp = new LinearLayout.LayoutParams(0, -2, 1);
+    ntLp.leftMargin = a.dp(6);
+    topRow.addView(nameTv, ntLp);
+
+    if (isCurrentActive) {
+      TextView curTag = a.text("当前激活", 10, true);
+      curTag.setTextColor(a.accent);
+      curTag.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
+      curTag.setBackground(a.shape((a.accent & 0x00FFFFFF) | 0x22000000, 6, a.accent));
+      topRow.addView(curTag);
+    }
+    card.addView(topRow);
+
+    // Notebook Info & Badges Row
+    JSONObject nb = a.library.find("notebooks", plan.optString("notebook_id"));
+    String nbName = nb != null ? nb.optString("name", "笔记本") : "已绑定笔记";
+
+    LinearLayout metaRow = a.row();
+    metaRow.setGravity(Gravity.CENTER_VERTICAL);
+    LinearLayout.LayoutParams metaLp = new LinearLayout.LayoutParams(-1, -2);
+    metaLp.topMargin = a.dp(8);
+    metaRow.setLayoutParams(metaLp);
+
+    metaRow.addView(a.icon("folder-open-outline", 13, a.muted));
+    TextView nbTv = a.text(" " + nbName, 12, false);
+    nbTv.setTextColor(a.muted);
+    metaRow.addView(nbTv);
+
+    View metaSpacer = new View(a);
+    metaRow.addView(metaSpacer, new LinearLayout.LayoutParams(a.dp(10), 1));
+
+    String freqLabel = formatWeekdaysBadge(plan.optJSONArray("weekdays"));
+    TextView freqTv = a.text(freqLabel, 11, false);
+    freqTv.setTextColor(a.muted);
+    freqTv.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
+    freqTv.setBackground(a.shape(a.inputBg, 6, a.border));
+    metaRow.addView(freqTv);
+
+    View metaSpacer2 = new View(a);
+    metaRow.addView(metaSpacer2, new LinearLayout.LayoutParams(a.dp(6), 1));
+
+    String quotaLabel = "新词 " + plan.optInt("daily_new_limit") + " · 复习 " + plan.optInt("daily_review_limit");
+    TextView quotaTv = a.text(quotaLabel, 11, false);
+    quotaTv.setTextColor(a.muted);
+    quotaTv.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
+    quotaTv.setBackground(a.shape(a.inputBg, 6, a.border));
+    metaRow.addView(quotaTv);
+
+    card.addView(metaRow);
+
+    // Actions Row
+    LinearLayout actRow = a.row();
+    actRow.setGravity(Gravity.CENTER_VERTICAL);
+    LinearLayout.LayoutParams actLp = new LinearLayout.LayoutParams(-1, -2);
+    actLp.topMargin = a.dp(12);
+    actRow.setLayoutParams(actLp);
+
+    if (isActive) {
+      Button selectBtn = a.primaryButton("进入复习", v -> {
+        activePlanId = pid;
+        phase = "dashboard";
+        a.render();
+      });
+      selectBtn.setTextSize(11 * a.scale);
+      actRow.addView(selectBtn, new LinearLayout.LayoutParams(-2, a.dp(34)));
+
+      View actGap = new View(a);
+      actRow.addView(actGap, new LinearLayout.LayoutParams(a.dp(8), 1));
+
+      Button toggleActiveBtn = a.chip("设为未激活", false, v -> {
+        setPlanActive(pid, false);
+        if (pid.equals(activePlanId)) {
+          activePlanId = null;
+        }
+        a.render();
+      });
+      toggleActiveBtn.setTextSize(11 * a.scale);
+      actRow.addView(toggleActiveBtn);
+    } else {
+      Button activateBtn = a.primaryButton("激活此计划", v -> {
+        setPlanActive(pid, true);
+        activePlanId = pid;
+        a.render();
+      });
+      activateBtn.setTextSize(11 * a.scale);
+      actRow.addView(activateBtn, new LinearLayout.LayoutParams(-2, a.dp(34)));
+    }
+
+    View actSpacer = new View(a);
+    actRow.addView(actSpacer, new LinearLayout.LayoutParams(0, 1, 1));
+
+    Button editBtn = a.chip("编辑", false, v -> showEditPlanModal(plan));
+    editBtn.setTextSize(11 * a.scale);
+    actRow.addView(editBtn);
+
+    View actGap2 = new View(a);
+    actRow.addView(actGap2, new LinearLayout.LayoutParams(a.dp(6), 1));
+
+    Button archiveBtn = a.chip("归档", false, v -> confirmArchivePlan(pid));
+    archiveBtn.setTextSize(11 * a.scale);
+    actRow.addView(archiveBtn);
+
+    card.addView(actRow);
+    return card;
+  }
+
+  View createArchivedPlanCard(JSONObject plan) {
+    LinearLayout card = createCardLayout(null);
+    card.setPadding(a.dp(16), a.dp(12), a.dp(16), a.dp(12));
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+    lp.bottomMargin = a.dp(8);
+    card.setLayoutParams(lp);
+
+    LinearLayout row = a.row();
+    row.setGravity(Gravity.CENTER_VERTICAL);
+
+    TextView badge = a.text("📦 已归档", 11, false);
+    badge.setTextColor(a.subtle);
+    badge.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
+    badge.setBackground(a.shape(a.inputBg, 6, a.border));
+    row.addView(badge);
+
+    TextView nameTv = a.text(" " + plan.optString("name", "计划"), 15, true);
+    nameTv.setTextColor(a.muted);
+    LinearLayout.LayoutParams ntLp = new LinearLayout.LayoutParams(0, -2, 1);
+    ntLp.leftMargin = a.dp(6);
+    row.addView(nameTv, ntLp);
+
+    JSONObject nb = a.library.find("notebooks", plan.optString("notebook_id"));
+    String nbName = nb != null ? nb.optString("name", "笔记本") : "笔记本";
+    TextView nbTv = a.text(nbName, 11, false);
+    nbTv.setTextColor(a.subtle);
+    row.addView(nbTv);
+
+    card.addView(row);
+    return card;
   }
 
   void startDailyReview() {
     long now = System.currentTimeMillis();
+    boolean generatedDailyQueue = !a.library.reviewPlans().hasDailyQueue(activePlanId, now);
     JSONObject day = a.library.reviewPlans().dailyQueue(activePlanId, now);
-    a.persist();
+    if (generatedDailyQueue && !a.persist()) return;
     JSONArray queue = day.optJSONArray("queue");
     if (queue == null || queue.length() == 0) {
       a.say("今日复习任务已完成！");

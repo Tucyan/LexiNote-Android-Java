@@ -1262,6 +1262,9 @@ public final class MainActivity extends Activity {
       } else if ("completed".equals(review.phase)) {
         review.phase = "dashboard";
         render();
+      } else if ("manage".equals(review.phase)) {
+        review.phase = "dashboard";
+        render();
       } else if (page != 0) {
         page = 0;
         render();

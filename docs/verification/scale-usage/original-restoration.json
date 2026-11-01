@@ -1,0 +1,18 @@
+[
+  {
+    "file": "files/library.json",
+    "byte_equal": true
+  },
+  {
+    "file": "shared_prefs/provider_private.xml",
+    "byte_equal": true
+  },
+  {
+    "file": "shared_prefs/WebViewChromiumPrefs.xml",
+    "byte_equal": true
+  },
+  {
+    "file": "shared_prefs/AwOriginVisitLoggerPrefs.xml",
+    "byte_equal": true
+  }
+]

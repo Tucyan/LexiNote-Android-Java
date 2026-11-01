@@ -1,0 +1,20 @@
+[
+  {
+    "vocabularies": 1000,
+    "notebooks": 36,
+    "saved_sessions": 88,
+    "messages": 970,
+    "largest_conversation": 600,
+    "json_bytes": 1170239,
+    "unique_content": true
+  },
+  {
+    "vocabularies": 3000,
+    "notebooks": 36,
+    "saved_sessions": 88,
+    "messages": 970,
+    "largest_conversation": 600,
+    "json_bytes": 2770811,
+    "unique_content": true
+  }
+]

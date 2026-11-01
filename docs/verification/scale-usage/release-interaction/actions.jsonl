@@ -1,0 +1,68 @@
+{"action": "tap", "label": "我的", "bounds": "[1075,2734][1344,2920]", "adb_ms": 100}
+{"action": "swipe", "start": [670, 2420], "end": [670, 730], "duration": 350}
+{"action": "swipe", "start": [670, 2420], "end": [670, 730], "duration": 350}
+{"action": "tap", "label": "选择 ZIP / JSON 备份恢复", "bounds": "[90,1821][1254,1941]", "adb_ms": 124}
+{"action": "tap", "label": "Show roots", "bounds": "[0,159][168,303]", "adb_ms": 159}
+{"action": "tap", "label": "Downloads", "bounds": "[192,550][816,607]", "adb_ms": 139}
+{"action": "tap", "label": "lexinote-scale-3000-with-plans.zip", "bounds": "[222,1395][624,1452]", "adb_ms": 119}
+{"action": "snapshot", "name": "02-restore-confirmation"}
+{"action": "tap", "label": "恢复", "bounds": "[1022,1662][1214,1824]", "adb_ms": 97}
+{"action": "tap", "label": "笔记", "bounds": "[537,2734][806,2920]", "adb_ms": 167}
+{"action": "snapshot", "name": "03-bookshelf"}
+{"action": "tap", "label": "全部词汇", "bounds": "[96,626][624,847]", "adb_ms": 111}
+{"action": "snapshot", "name": "04-global-first-page"}
+{"action": "tap", "label": "下一页", "bounds": "[1065,637][1206,745]", "adb_ms": 120}
+{"action": "tap", "label": "末页", "bounds": "[1206,637][1314,745]", "adb_ms": 122}
+{"action": "snapshot", "name": "05-global-last-page"}
+{"action": "tap", "label": "首页", "bounds": "[30,637][138,745]", "adb_ms": 123}
+{"action": "tap", "label": "搜索词汇、含义或例句…", "bounds": "[42,315][1086,423]", "adb_ms": 126}
+{"action": "type", "value": "project budget"}
+{"action": "snapshot", "name": "06-typed-search"}
+{"action": "tap", "label": "project budget", "bounds": "[78,688][392,753]", "adb_ms": 110}
+{"action": "snapshot", "name": "07-vocabulary-detail"}
+{"action": "tap", "label": "全部词汇", "bounds": "[96,626][624,847]", "adb_ms": 202}
+{"action": "swipe", "start": [670, 2200], "end": [670, 950], "duration": 300}
+{"action": "swipe", "start": [670, 2200], "end": [670, 950], "duration": 300}
+{"action": "snapshot", "name": "08-list-scroll"}
+{"action": "tap", "label": "复习", "bounds": "[806,2734][1075,2920]", "adb_ms": 125}
+{"action": "snapshot", "name": "09-review-plans"}
+{"action": "tap", "label": "›", "bounds": "[1169,423][1254,507]", "adb_ms": 104}
+{"action": "swipe", "start": [1150, 880], "end": [280, 880], "duration": 350}
+{"action": "snapshot", "name": "10-review-swiped"}
+{"action": "tap", "label": "开启今日复习（剩余 20 词）", "bounds": "[96,2007][1248,2157]", "adb_ms": 123}
+{"action": "snapshot", "name": "11-review-question"}
+{"action": "tap", "label": "查看答案 / 翻转卡片", "bounds": "[42,2734][1302,2884]", "adb_ms": 111}
+{"action": "snapshot", "name": "12-review-answer"}
+{"action": "tap", "label": "简单", "bounds": "[898,2749][1302,2815]", "adb_ms": 99}
+{"action": "snapshot", "name": "13-review-rated"}
+{"action": "tap", "label": "笔记", "bounds": "[537,2734][806,2920]", "adb_ms": 134}
+{"action": "tap", "label": "全部词汇", "bounds": "[96,626][624,847]", "adb_ms": 107}
+{"action": "swipe", "start": [670, 2200], "end": [670, 950], "duration": 300}
+{"action": "swipe", "start": [670, 2200], "end": [670, 950], "duration": 300}
+{"action": "tap", "label": "下一页", "bounds": "[1065,637][1206,745]", "adb_ms": 98}
+{"action": "tap", "label": "末页", "bounds": "[1206,637][1314,745]", "adb_ms": 114}
+{"action": "snapshot", "name": "14-final-last-page"}
+{"action": "tap", "label": "首页", "bounds": "[30,637][138,745]", "adb_ms": 161}
+{"action": "tap", "label": "搜索词汇、含义或例句…", "bounds": "[42,315][1086,423]", "adb_ms": 166}
+{"action": "type", "value": "project budget"}
+{"action": "tap", "label": "project budget", "bounds": "[78,688][392,753]", "adb_ms": 119}
+{"action": "snapshot", "name": "15-final-vocabulary-detail"}
+{"action": "assert", "check": "title opens vocabulary detail", "passed": true}
+{"action": "assert", "check": "detail back preserves search scope", "passed": true}
+{"action": "tap", "label": "复习", "bounds": "[806,2734][1075,2920]", "adb_ms": 106}
+{"action": "tap", "label": "›", "bounds": "[1169,423][1254,507]", "adb_ms": 126}
+{"action": "snapshot", "name": "16-final-review"}
+{"action": "tap", "label": "笔记", "bounds": "[537,2734][806,2920]", "adb_ms": 173}
+{"action": "tap", "label": "全部词汇", "bounds": "[96,626][624,847]", "adb_ms": 120}
+{"action": "snapshot", "name": "17-final-ready"}
+{"action": "swipe", "start": [670, 2300], "end": [670, 900], "duration": 320}
+{"action": "swipe", "start": [670, 2300], "end": [670, 900], "duration": 320}
+{"action": "swipe", "start": [670, 2300], "end": [670, 900], "duration": 320}
+{"action": "swipe", "start": [670, 2300], "end": [670, 900], "duration": 320}
+{"action": "swipe", "start": [670, 2300], "end": [670, 900], "duration": 320}
+{"action": "swipe", "start": [670, 900], "end": [670, 2300], "duration": 320}
+{"action": "swipe", "start": [670, 900], "end": [670, 2300], "duration": 320}
+{"action": "swipe", "start": [670, 900], "end": [670, 2300], "duration": 320}
+{"action": "swipe", "start": [670, 900], "end": [670, 2300], "duration": 320}
+{"action": "swipe", "start": [670, 900], "end": [670, 2300], "duration": 320}
+{"action": "snapshot", "name": "18-final-scroll-ready"}

@@ -19,6 +19,9 @@ final class NotebookUi {
   String sortOrder = "最新"; // 最新, 最早, A-Z, Z-A
   String viewMode = "compact"; // compact, detailed
   String activeCollectionId = null;
+  static final int RESULT_PAGE_SIZE = 40;
+  int resultPage = 0;
+  String resultScope = "";
   boolean selecting = false;
   final LinkedHashSet<String> selectedVocabularyIds = new LinkedHashSet<>();
 
@@ -124,13 +127,13 @@ final class NotebookUi {
   int countMatches(String type, String status, String feature, Set<String> tags) {
     JSONObject n = (selected == null || "nb_global_root".equals(selected))
         ? null : a.library.find("notebooks", selected);
-    JSONArray refs = n == null ? null : n.optJSONArray("vocabulary_ids");
+    Set<String> refs = notebookReferences(n);
     JSONArray vs = a.library.array("vocabularies");
     int count = 0;
     for (int i = 0; i < vs.length(); i++) {
       JSONObject v = vs.optJSONObject(i);
       if (v == null) continue;
-      if (refs != null && !contains(refs, v.optString("id"))) continue;
+      if (refs != null && !refs.contains(v.optString("id"))) continue;
       if (!type.equals("全部")
           && !v.optString("type", "word").equals(type.equals("短语") ? "phrase" : "word"))
         continue;
@@ -166,11 +169,11 @@ final class NotebookUi {
     List<JSONObject> out = new ArrayList<>();
     JSONObject n = (selected == null || "nb_global_root".equals(selected))
         ? null : a.library.find("notebooks", selected);
-    JSONArray refs = n == null ? null : n.optJSONArray("vocabulary_ids");
+    Set<String> refs = notebookReferences(n);
     JSONArray vs = a.library.array("vocabularies");
     for (int i = 0; i < vs.length(); i++) {
       JSONObject v = vs.optJSONObject(i);
-      if (refs != null && !contains(refs, v.optString("id"))) continue;
+      if (refs != null && !refs.contains(v.optString("id"))) continue;
       if (!typeFilter.equals("全部")
           && !v.optString("type", "word").equals(typeFilter.equals("短语") ? "phrase" : "word"))
         continue;
@@ -219,6 +222,14 @@ final class NotebookUi {
         v2.optString("content", "").compareToIgnoreCase(v1.optString("content", "")));
     }
     return out;
+  }
+
+  private Set<String> notebookReferences(JSONObject notebook) {
+    if (notebook == null) return null;
+    Set<String> result = new HashSet<>();
+    JSONArray ids = notebook.optJSONArray("vocabulary_ids");
+    for (int i = 0; ids != null && i < ids.length(); i++) result.add(ids.optString(i));
+    return result;
   }
 
   static boolean contains(JSONArray a, String id) {
@@ -880,6 +891,15 @@ final class NotebookUi {
       }
     }
     List<JSONObject> rows = visible();
+    String scope = new JSONArray(Arrays.asList(selected, filter, typeFilter, statusFilter,
+        featureFilter, sortOrder, new JSONArray(selectedTags))).toString();
+    if (!scope.equals(resultScope)) {
+      resultScope = scope;
+      resultPage = 0;
+      a.scroll.post(() -> a.scroll.scrollTo(0, 0));
+    }
+    int pages = Math.max(1, (rows.size() + RESULT_PAGE_SIZE - 1) / RESULT_PAGE_SIZE);
+    resultPage = Math.max(0, Math.min(resultPage, pages - 1));
     pruneSelection(rows);
     LinearLayout selectionBar = a.row();
     selectionBar.setPadding(a.dp(14), a.dp(4), a.dp(14), a.dp(4));
@@ -903,11 +923,27 @@ final class NotebookUi {
       selectionBar.addView(
           a.chip("操作 (" + selectedVocabularyIds.size() + ")", true, view -> batchMenu()));
     }
-    resultsBar = selectionBar;
     selectionBar.addView(a.text("结果 " + rows.size() + " 条", 12, false));
-    controls.addView(selectionBar);
+    LinearLayout resultControls = a.column();
+    resultControls.addView(selectionBar);
+    resultsBar = resultControls;
+    controls.addView(resultControls);
+    if (pages > 1) {
+      LinearLayout pager = a.row();
+      pager.setGravity(Gravity.CENTER_VERTICAL);
+      pager.setPadding(a.dp(10), 0, a.dp(10), a.dp(4));
+      addResultPageButton(pager, "首页", 0, resultPage > 0, controls);
+      addResultPageButton(pager, "上一页", resultPage - 1, resultPage > 0, controls);
+      TextView position = a.text("第 " + (resultPage + 1) + " / " + pages + " 页", 11, false);
+      position.setGravity(Gravity.CENTER);
+      pager.addView(position, new LinearLayout.LayoutParams(0, -2, 1));
+      addResultPageButton(pager, "下一页", resultPage + 1, resultPage + 1 < pages, controls);
+      addResultPageButton(pager, "末页", pages - 1, resultPage + 1 < pages, controls);
+      resultControls.addView(pager);
+    }
 
-    for (JSONObject v : rows) {
+    int end = Math.min(rows.size(), (resultPage + 1) * RESULT_PAGE_SIZE);
+    for (JSONObject v : rows.subList(resultPage * RESULT_PAGE_SIZE, end)) {
       JSONObject display = null;
       JSONObject n = (selected == null || "nb_global_root".equals(selected))
           ? null : a.library.find("notebooks", selected);
@@ -935,6 +971,22 @@ final class NotebookUi {
       empty.addView(hint);
       a.body.addView(empty, new LinearLayout.LayoutParams(-1, a.dp(260)));
     }
+  }
+
+  private void addResultPageButton(LinearLayout pager, String label, int target,
+      boolean enabled, LinearLayout controls) {
+    Button button = a.chip(label, false, view -> {
+      resultPage = target;
+      renderResults(controls);
+      a.scroll.post(() -> a.scroll.scrollTo(0, 0));
+    });
+    button.setTextSize(11 * a.scale);
+    button.setMinWidth(0);
+    button.setMinimumWidth(0);
+    button.setPadding(a.dp(7), 0, a.dp(7), 0);
+    button.setEnabled(enabled);
+    button.setAlpha(enabled ? 1f : .4f);
+    pager.addView(button, new LinearLayout.LayoutParams(-2, a.dp(36)));
   }
 
   void showFilterSheet() {
@@ -1323,10 +1375,12 @@ final class NotebookUi {
     LinearLayout title = a.row();
     title.setGravity(Gravity.CENTER_VERTICAL);
     TextView word = a.text(vocabulary.optString("content"), 16, true);
+    word.setTextIsSelectable(false);
     word.setOnClickListener(view -> { if (selecting) { toggleSelected(vocabulary.optString("id")); a.render(); } else detail(vocabulary); });
     title.addView(word);
     String type = vocabulary.optString("type", "word").equals("phrase") ? "短语" : "单词";
     TextView typeBadge = a.text(type, 11, true);
+    typeBadge.setTextIsSelectable(false);
     typeBadge.setTextColor(a.muted);
     typeBadge.setPadding(a.dp(7), a.dp(3), a.dp(7), a.dp(3));
     typeBadge.setBackground(a.shape(a.inputBg, 16, 0));
@@ -1480,6 +1534,7 @@ final class NotebookUi {
 
     String type = vocabulary.optString("type", "word").equals("phrase") ? "短语" : "单词";
     TextView typeBadge = a.text(type, 11, true);
+    typeBadge.setTextIsSelectable(false);
     typeBadge.setTextColor(a.accent);
     typeBadge.setPadding(a.dp(7), a.dp(3), a.dp(7), a.dp(3));
     typeBadge.setBackground(a.shape((a.accent & 0x00FFFFFF) | 0x1A000000, 16, 0));

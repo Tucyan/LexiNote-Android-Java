@@ -1,0 +1,17 @@
+[
+  {
+    "path": "releases\\lexinote-native-20261101-scale.apk",
+    "bytes": 1069809,
+    "sha256": "69e5cbe8e80dde3ce46b43765f88ad98b5b807a8f84f284ccd0f61a7254e4771"
+  },
+  {
+    "path": "docs\\fixtures\\scale-usage\\lexinote-scale-3000-with-plans.zip",
+    "bytes": 206890,
+    "sha256": "1017f854d600ec36c465ea0f908365be442c8551958b9430e5f32d6ee067adee"
+  },
+  {
+    "path": "docs\\fixtures\\scale-usage\\lexinote-scale-1000.zip",
+    "bytes": 91071,
+    "sha256": "e502c72beabe81f16ea3e68ed126f208fe135e3a223fd2f093617b5b1648108e"
+  }
+]
