@@ -572,12 +572,15 @@ final class AssistantUi {
 
         TextView chipText = a.text(starter, 13, false);
         chipText.setTextColor(a.foreground);
+        chipText.setTextIsSelectable(false);
         chip.addView(chipText, new LinearLayout.LayoutParams(0, -2, 1));
 
         TextView arrow = a.text("›", 16, true);
         arrow.setTextColor(a.muted);
+        arrow.setTextIsSelectable(false);
         chip.addView(arrow);
 
+        a.passiveLabels(chip);
         chip.setOnClickListener(
             v -> {
               v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
@@ -628,14 +631,17 @@ final class AssistantUi {
 
       TextView text = a.text(cleanLabel, 13, false);
       text.setTextColor(a.foreground);
+      text.setTextIsSelectable(false);
       text.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
       row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
 
       TextView arrow = a.text("›", 16, true);
       arrow.setTextColor(a.muted);
+      arrow.setTextIsSelectable(false);
       arrow.setPadding(a.dp(6), 0, 0, 0);
       row.addView(arrow);
 
+      a.passiveLabels(row);
       row.setOnClickListener(
           v -> {
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
