@@ -20,3 +20,8 @@ docs/ui-parity/current.xml
 docs/ui-parity/source-current.xml
   
 .workbuddy/  
+__pycache__/
+*.pyc
+*.perfetto-trace
+**/backup-user-data/
+

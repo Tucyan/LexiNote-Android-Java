@@ -1,0 +1,16 @@
+{
+  "scale": "3000events",
+  "mode": "benchmark",
+  "round": 1,
+  "sample_count": 30,
+  "warmup_count": 5,
+  "fixture_load_ms": 2571,
+  "loaded_history_events": 10000,
+  "capacity_rejection_expected": true,
+  "capacity_rejection_actual": true,
+  "capacity_rejection_message": "笔记文本超过当前设备容量（最高4 MB），本次修改未写入",
+  "passed": [
+    "capacity_rejection_baseline_verified"
+  ],
+  "failed": []
+}

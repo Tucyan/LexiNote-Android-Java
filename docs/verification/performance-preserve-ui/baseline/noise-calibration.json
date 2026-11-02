@@ -1,0 +1,10 @@
+{
+  "calibrated": true,
+  "runs_evaluated": 5,
+  "pairs_compared": 10,
+  "status_bar_mask_height": 118,
+  "max_noise_ratio": 0.002821,
+  "max_noise_percent": "0.2821%",
+  "threshold_safe": true,
+  "calibrated_threshold": 0.005
+}

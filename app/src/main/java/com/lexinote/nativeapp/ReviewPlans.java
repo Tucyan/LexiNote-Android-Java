@@ -186,9 +186,54 @@ public final class ReviewPlans {
   }
 
   /** Initializes today's fixed task list if absent. Also a command: save the library afterwards. */
-  /** Checks whether today's fixed task list exists without generating or mutating it. */
   public synchronized boolean hasDailyQueue(String id, long now) {
     return savedDay(id, date(active(id), now)) != null;
+  }
+
+  public synchronized JSONObject findEvent(String eventId) {
+    JSONObject e = find(items("events"), "id", eventId);
+    return e == null ? null : Library.copy(e);
+  }
+
+  public synchronized boolean isScheduled(JSONObject plan, long now) {
+    if (plan == null) return false;
+    String localDate = date(plan, now);
+    JSONArray weekdays = plan.optJSONArray("weekdays");
+    if (weekdays == null) return false;
+    int dayOfWeek = LocalDate.parse(localDate).getDayOfWeek().getValue();
+    for (int i = 0; i < weekdays.length(); i++) {
+      if (weekdays.optInt(i) == dayOfWeek) return true;
+    }
+    return false;
+  }
+
+  /** Pure read-only view of today's queue. NEVER mutates days array, NEVER requires disk save. */
+  public synchronized JSONObject peekDailyQueue(String id, long now) {
+    JSONObject p = active(id);
+    String localDate = date(p, now);
+    JSONObject day = savedDay(id, localDate);
+    if (day == null) return null;
+    Set<String> available = pool(p);
+    JSONObject view = Library.copy(day);
+    JSONArray tasks = day.optJSONArray("tasks"), queue = new JSONArray();
+    for (int i = 0; i < tasks.length(); i++) {
+      JSONObject task = tasks.optJSONObject(i);
+      if (!task.optBoolean("completed") && available.contains(task.optString("vocab_id")))
+        queue.put(Library.copy(task));
+    }
+    view.remove("tasks");
+    Library.put(view, "queue", queue);
+    return view;
+  }
+
+  /**
+   * Mutating command: atomically generates today's daily queue if missing.
+   * Returns true if a new queue was generated, false if already existed.
+   */
+  public synchronized boolean prepareDailyQueue(String id, long now) {
+    if (hasDailyQueue(id, now)) return false;
+    dailyQueue(id, now);
+    return true;
   }
 
   public synchronized JSONObject dailyQueue(String id, long now) {

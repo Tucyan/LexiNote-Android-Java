@@ -1,0 +1,23 @@
+[
+  {
+    "file": "files/library.json",
+    "byte_equal": true,
+    "expected_sha": "7cd8b35e27e7fa5906fe5c73f30def2dcee7e259f0b4765b79966e9e43c66f8f",
+    "actual_sha": "7cd8b35e27e7fa5906fe5c73f30def2dcee7e259f0b4765b79966e9e43c66f8f",
+    "bytes": 2805040
+  },
+  {
+    "file": "files/before-restore.json",
+    "byte_equal": true,
+    "expected_sha": "e28be41241db3b2e3d69069ec5d7b1fdcc25751955b6794adce122df428f5a22",
+    "actual_sha": "e28be41241db3b2e3d69069ec5d7b1fdcc25751955b6794adce122df428f5a22",
+    "bytes": 278818
+  },
+  {
+    "file": "shared_prefs/provider_private.xml",
+    "byte_equal": true,
+    "expected_sha": "27f7691a791e486f03f1a644ef4a64cb2c3a0fe40d79466d292d90ef3b8373ce",
+    "actual_sha": "27f7691a791e486f03f1a644ef4a64cb2c3a0fe40d79466d292d90ef3b8373ce",
+    "bytes": 2542
+  }
+]

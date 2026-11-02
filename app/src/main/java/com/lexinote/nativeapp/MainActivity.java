@@ -15,10 +15,15 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
 import org.json.*;
+import com.lexinote.nativeapp.storage.LibraryStore;
+import com.lexinote.nativeapp.storage.JsonStoreBackend;
+import com.lexinote.nativeapp.storage.contract.LibraryCommand;
+import com.lexinote.nativeapp.storage.contract.CommitResult;
 
 public final class MainActivity extends Activity {
   Library library;
   Repository repository;
+  public LibraryStore store;
   SecureSettings secure;
   LinearLayout root, body, nav, footer;
   ScrollView scroll;
@@ -32,7 +37,7 @@ public final class MainActivity extends Activity {
   ImageEditorState imageEditorState = ImageEditorState.initial();
   JSONObject imageRegion;
   ConversationTitles titles;
-  int generation = 0;
+  int aiRequestToken = 0;
   AiClient active;
   String requestFailureLocation = "";
   final ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -58,8 +63,18 @@ public final class MainActivity extends Activity {
     repository = new Repository(this);
     secure = new SecureSettings(this);
     titles = new ConversationTitles(this);
+    store = LibraryStore.getInstance(this);
+    store.bind(this);
     try {
-      library = repository.load();
+      if (store.getBackend() instanceof JsonStoreBackend) {
+        JsonStoreBackend jsonBackend = (JsonStoreBackend) store.getBackend();
+        if (jsonBackend.getInitError() != null) {
+          throw jsonBackend.getInitError();
+        }
+        library = jsonBackend.getWorkingLibrarySnapshot();
+      } else {
+        library = repository.load();
+      }
       committed = library.snapshot();
     } catch (Exception e) {
       library = new Library();
@@ -704,8 +719,17 @@ public final class MainActivity extends Activity {
   boolean persist() {
     if (recoveryOnly) return false;
     try {
-      repository.save(library);
-      committed = library.snapshot();
+      final JSONObject snapshot = library.snapshot();
+      committed = snapshot;
+      if (store != null) {
+        store.dispatch(this, LibraryCommand.persistSnapshot(store.currentGeneration(), snapshot, System.currentTimeMillis()), result -> {
+          if (!result.isSuccess()) {
+            error(new IOException("后台写入失败：" + result.getMessage()));
+          }
+        });
+      } else {
+        repository.save(library);
+      }
       return true;
     } catch (Exception e) {
       String sessionId = session == null ? null : session.optString("id");
@@ -715,6 +739,20 @@ public final class MainActivity extends Activity {
       }
       error(new IOException("写入失败，已恢复上次成功保存的数据：" + e.getMessage(), e));
       return false;
+    }
+  }
+
+  public void dispatch(LibraryCommand command, java.util.function.Consumer<CommitResult> callback) {
+    if (store != null) {
+      store.dispatch(this, command, result -> {
+        if (result.isSuccess() && result.getSnapshot() != null) {
+          this.library = result.getSnapshot();
+          render();
+        }
+        if (callback != null) {
+          callback.accept(result);
+        }
+      });
     }
   }
 
@@ -752,7 +790,7 @@ public final class MainActivity extends Activity {
       say("正在请求，可取消后重新发送");
       return;
     }
-    final int token = ++generation;
+    final int token = ++aiRequestToken;
     requestFailureLocation = "";
     try {
       active = new AiClient(secure.getProvider(), secure.getApiKey());
@@ -777,7 +815,7 @@ public final class MainActivity extends Activity {
             handler.post(
                 () -> {
                   if (progress != null) progress.dismiss();
-                  if (token != generation || !alive()) return;
+                  if (token != aiRequestToken || !alive()) return;
                   active = null;
                   query.partialReply = "";
                   try {
@@ -792,7 +830,7 @@ public final class MainActivity extends Activity {
             handler.post(
                 () -> {
                   if (progress != null) progress.dismiss();
-                  if (token != generation || !alive()) return;
+                  if (token != aiRequestToken || !alive()) return;
                   active = null;
                   query.partialReply = "";
                   if (session != null && session == requestSession) {
@@ -814,7 +852,7 @@ public final class MainActivity extends Activity {
   }
 
   void cancel() {
-    generation++;
+    aiRequestToken++;
     if (active != null) active.cancel();
     active = null;
     if (query != null) query.partialReply = "";
@@ -1183,7 +1221,7 @@ public final class MainActivity extends Activity {
     cancel();
     titles.reset();
     final Library before = library;
-    final int token = ++generation;
+    final int token = ++aiRequestToken;
     ProgressDialog p = ProgressDialog.show(this, "", "正在恢复…", true, false);
     worker.execute(
         () -> {
@@ -1206,8 +1244,13 @@ public final class MainActivity extends Activity {
             handler.post(
                 () -> {
                   p.dismiss();
-                  if (token != generation || !alive()) return;
+                  if (token != aiRequestToken || !alive()) return;
                   library = restored;
+                  if (store != null) {
+                    store.dispatch(MainActivity.this, LibraryCommand.importLibrary(0L, backup, System.currentTimeMillis()), r -> {
+                      // Backend is atomically updated and synchronized with new generation
+                    });
+                  }
                   titles.reset();
                   recoveryOnly = false;
                   committed = library.snapshot();
@@ -1280,6 +1323,9 @@ public final class MainActivity extends Activity {
     cancel();
     if (settingsUi != null) settingsUi.models.close();
     if (titles != null) titles.close();
+    if (store != null) {
+      store.unbind(this);
+    }
     worker.shutdownNow();
     super.onDestroy();
   }

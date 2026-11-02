@@ -1,0 +1,12 @@
+{
+  "scale": "3000",
+  "mode": "calibrate",
+  "round": 1,
+  "sample_count": 30,
+  "warmup_count": 5,
+  "fixture_load_ms": 755,
+  "passed": [
+    "noise_calibration_5_runs_completed"
+  ],
+  "failed": []
+}

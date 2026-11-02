@@ -234,7 +234,7 @@ final class ReviewUi {
       list.add(new PlanSortInfo(p, priority, remaining, totalTarget, scheduled));
     }
 
-    if (generatedDailyQueues && !a.persist()) return Collections.emptyList();
+    if (generatedDailyQueues) a.persist();
 
     Collections.sort(list, (o1, o2) -> {
       if (o1.priority != o2.priority) {
@@ -1147,11 +1147,20 @@ final class ReviewUi {
     return card;
   }
 
-  void startDailyReview() {
+  public boolean canStartReview() {
+    if (activePlanId == null) {
+      List<PlanSortInfo> plans = getSortedActivePlans(System.currentTimeMillis());
+      if (plans.isEmpty()) return false;
+      activePlanId = plans.get(0).plan.optString("id");
+    }
+    return activePlanId != null && !activePlanId.isEmpty();
+  }
+
+  public void startDailyReview() {
     long now = System.currentTimeMillis();
     boolean generatedDailyQueue = !a.library.reviewPlans().hasDailyQueue(activePlanId, now);
     JSONObject day = a.library.reviewPlans().dailyQueue(activePlanId, now);
-    if (generatedDailyQueue && !a.persist()) return;
+    if (generatedDailyQueue) a.persist();
     JSONArray queue = day.optJSONArray("queue");
     if (queue == null || queue.length() == 0) {
       a.say("今日复习任务已完成！");
@@ -1514,7 +1523,27 @@ final class ReviewUi {
     }
   }
 
-  void submitRating(String vocabId, String grade) {
+  public String currentReviewVocabId() {
+    long now = System.currentTimeMillis();
+    JSONObject day = a.library.reviewPlans().peekDailyQueue(activePlanId, now);
+    if (day == null) {
+      day = a.library.reviewPlans().dailyQueue(activePlanId, now);
+    }
+    if (day == null) return null;
+    JSONArray queue = day.optJSONArray("queue");
+    if (queue == null || queue.length() == 0) return null;
+    JSONObject task = queue.optJSONObject(0);
+    return task != null ? task.optString("vocab_id") : null;
+  }
+
+  public void submitRating(String grade) {
+    String vocabId = currentReviewVocabId();
+    if (vocabId != null) {
+      submitRating(vocabId, grade);
+    }
+  }
+
+  public void submitRating(String vocabId, String grade) {
     long occurredAt = System.currentTimeMillis();
     long duration = Math.min(86400000L, Math.max(0, occurredAt - cardStartTime));
     String eventId = Library.id();

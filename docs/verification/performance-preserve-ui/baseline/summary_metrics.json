@@ -1,0 +1,268 @@
+{
+  "1000": {
+    "rounds": 3,
+    "samples_per_round": 30,
+    "total_samples": 90,
+    "metrics": {
+      "rating_input_to_feedback_ms": {
+        "count": 90,
+        "mean": 466.39,
+        "stddev": 103.94,
+        "min": 362.05,
+        "max": 1000.55,
+        "p50": 430.16,
+        "p90": 570.96,
+        "p95": 657.88,
+        "p99": 910.94,
+        "target_p95": 100.0,
+        "target_eval": "BASELINE_OVER_TARGET"
+      },
+      "rating_input_to_commit_ms": {
+        "count": 90,
+        "mean": 333.66,
+        "stddev": 85.93,
+        "min": 254.63,
+        "max": 732.15,
+        "p50": 303.51,
+        "p90": 438.02,
+        "p95": 477.89,
+        "p99": 720.08,
+        "target_p95": 250.0,
+        "target_eval": "BASELINE_OVER_TARGET"
+      },
+      "rating_input_to_idle_ms": {
+        "count": 90,
+        "mean": 469.26,
+        "stddev": 104.36,
+        "min": 363.08,
+        "max": 1007.22,
+        "p50": 431.91,
+        "p90": 572.52,
+        "p95": 663.07,
+        "p99": 914.34
+      },
+      "local_query_content_ms": {
+        "count": 90,
+        "mean": 307.88,
+        "stddev": 90.29,
+        "min": 0.1,
+        "max": 695.2,
+        "p50": 307.93,
+        "p90": 378.99,
+        "p95": 422.98,
+        "p99": 493.44,
+        "target_p95": 150.0,
+        "target_eval": "BASELINE_OVER_TARGET"
+      },
+      "local_query_commit_ms": {
+        "count": 90,
+        "mean": 194.61,
+        "stddev": 43.81,
+        "min": 135.99,
+        "max": 406.08,
+        "p50": 186.07,
+        "p90": 248.74,
+        "p95": 261.76,
+        "p99": 338.77,
+        "target_p95": 250.0,
+        "target_eval": "BASELINE_OVER_TARGET"
+      },
+      "local_query_idle_ms": {
+        "count": 90,
+        "mean": 345.74,
+        "stddev": 67.07,
+        "min": 256.79,
+        "max": 718.28,
+        "p50": 333.62,
+        "p90": 429.87,
+        "p95": 451.98,
+        "p99": 546.71
+      },
+      "search_input_to_feedback_ms": {
+        "count": 90,
+        "mean": 92.14,
+        "stddev": 21.75,
+        "min": 63.47,
+        "max": 176.38,
+        "p50": 85.42,
+        "p90": 120.71,
+        "p95": 140.42,
+        "p99": 169.07
+      },
+      "search_input_to_idle_ms": {
+        "count": 90,
+        "mean": 109.37,
+        "stddev": 25.01,
+        "min": 71.6,
+        "max": 223.4,
+        "p50": 104.03,
+        "p90": 136.01,
+        "p95": 157.04,
+        "p99": 201.6,
+        "target_p95": 200.0,
+        "target_eval": "PASS"
+      },
+      "review_plan_switch_ms": {
+        "count": 30,
+        "mean": 29.42,
+        "stddev": 14.89,
+        "min": 11.27,
+        "max": 77.32,
+        "p50": 25.06,
+        "p90": 48.79,
+        "p95": 56.4,
+        "p99": 72.39,
+        "target_p95": 100.0,
+        "target_eval": "PASS"
+      }
+    },
+    "single_events": {
+      "review_first_plans_gen_ms": 357.0
+    },
+    "pure_scrolling": {
+      "total_frames": 101,
+      "janky_frames": 91,
+      "jank_percentage": 90.1,
+      "p50_ms": 77,
+      "p90_ms": 121,
+      "p95_ms": 129,
+      "p99_ms": 450
+    }
+  },
+  "3000": {
+    "rounds": 3,
+    "samples_per_round": 30,
+    "total_samples": 90,
+    "metrics": {
+      "rating_input_to_feedback_ms": {
+        "count": 90,
+        "mean": 1068.07,
+        "stddev": 110.93,
+        "min": 900.83,
+        "max": 1544.09,
+        "p50": 1052.31,
+        "p90": 1190.41,
+        "p95": 1253.24,
+        "p99": 1424.32,
+        "target_p95": 100.0,
+        "target_eval": "BASELINE_OVER_TARGET"
+      },
+      "rating_input_to_commit_ms": {
+        "count": 90,
+        "mean": 772.8,
+        "stddev": 86.99,
+        "min": 623.14,
+        "max": 1166.7,
+        "p50": 761.39,
+        "p90": 892.91,
+        "p95": 942.77,
+        "p99": 1016.17,
+        "target_p95": 250.0,
+        "target_eval": "BASELINE_OVER_TARGET"
+      },
+      "rating_input_to_idle_ms": {
+        "count": 90,
+        "mean": 1071.09,
+        "stddev": 111.08,
+        "min": 902.78,
+        "max": 1545.92,
+        "p50": 1055.62,
+        "p90": 1195.86,
+        "p95": 1254.56,
+        "p99": 1427.55
+      },
+      "local_query_content_ms": {
+        "count": 90,
+        "mean": 751.19,
+        "stddev": 117.8,
+        "min": 0.1,
+        "max": 1319.23,
+        "p50": 739.25,
+        "p90": 830.86,
+        "p95": 878.08,
+        "p99": 1044.53,
+        "target_p95": 150.0,
+        "target_eval": "BASELINE_OVER_TARGET"
+      },
+      "local_query_commit_ms": {
+        "count": 90,
+        "mean": 475.56,
+        "stddev": 64.9,
+        "min": 416,
+        "max": 920.62,
+        "p50": 457.98,
+        "p90": 524.45,
+        "p95": 568.09,
+        "p99": 712.18,
+        "target_p95": 250.0,
+        "target_eval": "BASELINE_OVER_TARGET"
+      },
+      "local_query_idle_ms": {
+        "count": 90,
+        "mean": 801.69,
+        "stddev": 93.37,
+        "min": 695.77,
+        "max": 1326.4,
+        "p50": 778.98,
+        "p90": 893.49,
+        "p95": 946.64,
+        "p99": 1126.26
+      },
+      "search_input_to_feedback_ms": {
+        "count": 90,
+        "mean": 249.29,
+        "stddev": 54.18,
+        "min": 182.19,
+        "max": 568.11,
+        "p50": 241.77,
+        "p90": 289.11,
+        "p95": 313.51,
+        "p99": 448.89
+      },
+      "search_input_to_idle_ms": {
+        "count": 90,
+        "mean": 268.32,
+        "stddev": 54.73,
+        "min": 190.26,
+        "max": 591.16,
+        "p50": 258.12,
+        "p90": 314.89,
+        "p95": 326.4,
+        "p99": 460.27,
+        "target_p95": 200.0,
+        "target_eval": "BASELINE_OVER_TARGET"
+      },
+      "review_plan_switch_ms": {
+        "count": 30,
+        "mean": 25.68,
+        "stddev": 10.43,
+        "min": 12.53,
+        "max": 60.82,
+        "p50": 24.2,
+        "p90": 35.28,
+        "p95": 45.6,
+        "p99": 58.4,
+        "target_p95": 100.0,
+        "target_eval": "PASS"
+      }
+    },
+    "single_events": {
+      "review_first_plans_gen_ms": 809.33
+    },
+    "pure_scrolling": {
+      "total_frames": 98,
+      "janky_frames": 89,
+      "jank_percentage": 90.82,
+      "p50_ms": 69,
+      "p90_ms": 125,
+      "p95_ms": 150,
+      "p99_ms": 600
+    }
+  },
+  "3000events": {
+    "capacity_rejection_expected": true,
+    "capacity_rejection_actual": true,
+    "capacity_rejection_message": "\u7b14\u8bb0\u6587\u672c\u8d85\u8fc7\u5f53\u524d\u8bbe\u5907\u5bb9\u91cf\uff08\u6700\u9ad84 MB\uff09\uff0c\u672c\u6b21\u4fee\u6539\u672a\u5199\u5165",
+    "loaded_history_events": 10000
+  }
+}
