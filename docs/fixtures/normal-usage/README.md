@@ -18,6 +18,8 @@
 
 词条均有中英释义和例句，20 个常见单词附音标；没有把不确定音标填成占位值。工作沟通、阅读表达、日常生活、学术学习四个主题各含 20 个单词和 10 个短语。默认笔记引用 20 条，短语精练引用全部 40 条短语；不同笔记共享同一词条实体。8 个常用词另有一个义项。
 
+词条和已知词典字段带有 `field_meta.<字段>.is_ai_generated: false`；模拟助手消息、AI 标题及后续问题标为 `true`。另有[混合来源字段样例](../field-provenance/lexinote-provenance-sample.json)：同一义项保留词库释义并单独标记模型生成的例句和备注。
+
 会话包含邮件措辞、上下文猜词、近义词区分、used to 句型、主谓一致、阅读改写等内容，包含多轮问答和一份 Markdown 表格。临时会话 5 条中，有 3 条直接答疑和 2 条查询派生会话；8 条保存会话包含查询及后续问答。
 
 模拟数据时间跨度约四周，包含已复习与待复习状态。初次导入验证（应用基线e05c186）的旧计数统计显示120条词汇、48条熟练、72条待复习；后续修复按评级计算掌握程度，同样本重算为16条熟练（另外32条末次为困难/再次），词条和历史次数完整保留。见[修复验收](../../verification/USAGE-FIXES.md)。待复习数会随当前日期变化。
@@ -34,6 +36,6 @@
 
 生成脚本：[create-normal-usage-fixture.cjs](../../../scripts/create-normal-usage-fixture.cjs)，词汇种子：[normal-usage-lexicon.json](../../../scripts/fixtures/normal-usage-lexicon.json)。在原生项目根目录执行 `node scripts/create-normal-usage-fixture.cjs ../LexiNote` 可重新生成；需要原版项目已安装的 TypeScript/fflate 依赖，无需模型 API。数据内容固定，ZIP 容器时间戳可能随重新生成变化。
 
-ZIP SHA-256：`6AB25EA08BBE716C4B1307B08E763D0FA1AE131D4B179C585BCA9684D9323F58`。
+ZIP SHA-256：`4DC81A9D11AD15890A035F420ABDA461AF194FEF1CD9934D28DD8EB67F73501B`。
 
-JSON SHA-256：`F2C3B0E7D3AB2F563DE4AB3ACEE59B2F97E3493BF0F9F2ACD0C00C41E74A92FB`。
+JSON SHA-256：`460D7F03E35D7E90C19BA1088FE47775DD226A6B3278C8EF0A07CFE06D232273`。

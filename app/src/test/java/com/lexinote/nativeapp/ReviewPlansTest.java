@@ -271,4 +271,27 @@ public class ReviewPlansTest {
     Library.validate(library.snapshot());
     new Library(library.backup());
   }
+  @Test public void committedRatingMatchesDomainStateOrderAndIsIdempotent() throws Exception {
+    word("apple"); word("banana"); String p = plan(2, 1);
+    JSONArray queue = library.reviewPlans().dailyQueue(p, monday).getJSONArray("queue");
+    String first = queue.getJSONObject(0).getString("vocab_id");
+    String second = queue.getJSONObject(1).getString("vocab_id");
+    library.reviewPlans().record(p, first, "再次", "one", 1, monday);
+    library.reviewPlans().record(p, second, "再次", "two", 2, monday + 1);
+    Library projection = new Library(library.snapshot());
+    library.reviewPlans().record(p, first, "简单", "three", 3, monday + 2);
+    JSONObject review = library.snapshot().getJSONObject("review");
+    JSONArray states = review.getJSONArray("states"), days = review.getJSONArray("days"), events = review.getJSONArray("events");
+    JSONObject state = states.getJSONObject(states.length() - 1);
+    state.put("future_field", "preserved");
+    JSONObject delta = new JSONObject().put("state", state).put("day", days.getJSONObject(0)).put("event", events.getJSONObject(events.length() - 1));
+    projection.reviewPlans().applyCommittedRating(delta);
+    projection.reviewPlans().applyCommittedRating(delta);
+    JSONObject got = projection.snapshot().getJSONObject("review");
+    assertEquals(second, got.getJSONArray("states").getJSONObject(0).getString("vocab_id"));
+    assertEquals(first, got.getJSONArray("states").getJSONObject(1).getString("vocab_id"));
+    assertEquals("preserved", got.getJSONArray("states").getJSONObject(1).getString("future_field"));
+    assertEquals(3, got.getJSONArray("events").length());
+    assertEquals(days.toString(), got.getJSONArray("days").toString());
+  }
 }

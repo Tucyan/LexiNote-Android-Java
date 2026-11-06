@@ -14,6 +14,7 @@ public final class QueryRequest {
     VOCABULARY_BY_ID,
     NOTEBOOK_BY_ID,
     DAILY_QUEUE,
+    REVIEW_EVENT,
     PLAN_STATISTICS,
     SETTINGS,
     SESSIONS
@@ -47,6 +48,10 @@ public final class QueryRequest {
 
   public static QueryRequest settings() {
     return new QueryRequest(Type.SETTINGS, null, null);
+  }
+
+  public static QueryRequest reviewEvent(String eventId) {
+    return new QueryRequest(Type.REVIEW_EVENT, eventId, null);
   }
 
   public static QueryRequest dailyQueue(String planId, long nowMs) {

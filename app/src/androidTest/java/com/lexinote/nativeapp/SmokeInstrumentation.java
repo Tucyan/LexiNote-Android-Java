@@ -37,13 +37,14 @@ public final class SmokeInstrumentation extends Instrumentation {
               startActivitySync(
                   new Intent(getTargetContext(), MainActivity.class)
                       .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+      DeviceAsync.ready(this, activity);
       waitForIdleSync();
       main(() -> before = activity.library.snapshot());
       main(this::testNavigation);
       record("five native tabs");
       testQueryLayoutContract();
       record("52dp header, 62dp icon tabs and equal-height 312dp query modes");
-      main(this::testOfflineQueryAndSharedNotebooks);
+      testOfflineQueryAndSharedNotebooks();
       record("offline query, shared vocabulary references, result navigation");
       main(this::testConfirmationAndSessionImageIsolation);
       record("assistant proposals require hub confirmation and session images stay isolated");
@@ -148,8 +149,8 @@ public final class SmokeInstrumentation extends Instrumentation {
         });
   }
 
-  private void testOfflineQueryAndSharedNotebooks() {
-    try {
+  private void testOfflineQueryAndSharedNotebooks() throws Exception {
+    DeviceAsync.save(this, activity, () -> {
       activity.library = new Library();
       String a = activity.library.settings().getString("default_notebook_id");
       String b = activity.library.createNotebook("Smoke second notebook", null);
@@ -163,7 +164,8 @@ public final class SmokeInstrumentation extends Instrumentation {
           id.equals(activity.library.saveResult(word, new String[] {b}, new JSONObject())),
           "Vocabulary duplicate");
       check(activity.library.array("vocabularies").length() == 1, "Entity duplicated");
-      check(activity.persist(), "Fixture persistence failed");
+    }, true);
+    main(() -> {
       activity.screen = "tabs";
       activity.page = 0;
       activity.image = Uri.parse("file:///hidden-mode-image.jpg");
@@ -171,6 +173,10 @@ public final class SmokeInstrumentation extends Instrumentation {
       activity.query.draft = "native smoke";
       activity.render();
       activity.query.submit();
+    });
+    DeviceAsync.drain(this, activity);
+    main(() -> {
+      try {
       check("result".equals(activity.screen), "Offline lookup did not open result");
       check(
           activity.session.getJSONObject("query_results").getBoolean("is_from_local"),
@@ -195,9 +201,8 @@ public final class SmokeInstrumentation extends Instrumentation {
       activity.screen = "tabs";
       activity.page = 0;
       activity.render();
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
+      } catch (Exception e) { throw new RuntimeException(e); }
+    });
   }
 
   private void testReview() {
@@ -332,6 +337,7 @@ public final class SmokeInstrumentation extends Instrumentation {
             startActivitySync(
                 new Intent(getTargetContext(), MainActivity.class)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+    try { DeviceAsync.ready(this, activity); } catch (Exception e) { throw new RuntimeException(e); }
     waitForIdleSync();
     main(
         () -> {
@@ -339,7 +345,11 @@ public final class SmokeInstrumentation extends Instrumentation {
           check(
               findButton(activity.root, "选择 ZIP / JSON 备份恢复") != null,
               "Restore entry missing on corrupt data");
-          check(!activity.persist(), "Recovery screen overwrote original with an empty library");
+        });
+    try { DeviceAsync.save(this, activity, null, false); }
+    catch (Exception e) { throw new RuntimeException(e); }
+    main(
+        () -> {
           try {
             activity.repository.preserveCorruptData();
             java.io.File[] copies =

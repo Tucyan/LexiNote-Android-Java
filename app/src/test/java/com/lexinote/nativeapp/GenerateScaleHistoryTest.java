@@ -108,10 +108,11 @@ public class GenerateScaleHistoryTest {
       deleteDir(tempDir);
     }
 
-    // Export fixture to disk
+    // Ordinary tests validate generated data without rewriting versioned fixtures.
     byte[] payload = snapshot.toString().getBytes(StandardCharsets.UTF_8);
     assertTrue("Payload must exceed 4MB", payload.length > BackupArchive.MAX_JSON_BYTES);
 
+    if (!Boolean.getBoolean("lexinote.regenerateScaleFixtures")) return;
     File outJson = new File(repoRoot, "docs/fixtures/scale-usage/lexinote-scale-3000-events-10000.json");
     outJson.getParentFile().mkdirs();
     java.nio.file.Files.write(outJson.toPath(), payload);

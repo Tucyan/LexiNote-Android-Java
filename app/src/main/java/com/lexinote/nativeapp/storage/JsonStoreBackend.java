@@ -122,6 +122,12 @@ public class JsonStoreBackend implements StoreBackend {
         Library.put(doc, "settings", Library.copy(workingCopy.settings()));
         return new ReadOnlyView(doc, generation, revision);
       }
+      case REVIEW_EVENT: {
+        JSONObject doc = new JSONObject();
+        JSONObject event = workingCopy.reviewPlans().findEvent(request.getEntityId());
+        if (event != null) Library.put(doc, "event", event);
+        return new ReadOnlyView(doc, generation, revision);
+      }
       case DAILY_QUEUE: {
         long now = request.getParams().optLong("now_ms", System.currentTimeMillis());
         JSONObject day = workingCopy.reviewPlans().peekDailyQueue(request.getEntityId(), now);
@@ -146,6 +152,17 @@ public class JsonStoreBackend implements StoreBackend {
       return CommitResult.conflict(
           expectedGen, generation, command.getEventId(), "Expected generation mismatch");
     }
+
+    if (command.getType() == LibraryCommand.Type.SAVE_SESSION) {
+      JSONObject payload = command.getPayload();
+      if (payload.has("base_revision") && payload.optLong("base_revision", -1) != revision)
+        return CommitResult.failure(CommitResult.Status.GENERATION_CONFLICT, generation, revision,
+            command.getEventId(), "会话快照版本已过期，请刷新后重试", null);
+    }
+
+    JSONObject capturedPayload = command.getPayload();
+    if (capturedPayload.has("base_revision") && capturedPayload.optLong("base_revision") != revision)
+      return CommitResult.conflict(command.getExpectedGeneration(), generation, command.getEventId(), "Stale snapshot revision");
 
     // 2. Pre-mutation working snapshot for atomic rollback
     JSONObject beforeSnapshot = workingCopy.snapshot();
@@ -173,7 +190,8 @@ public class JsonStoreBackend implements StoreBackend {
             if (!planId.equals(existing.optString("plan_id"))
                 || !vocabId.equals(existing.optString("vocab_id"))
                 || !grade.equals(existing.optString("grade"))
-                || duration != existing.optLong("duration_ms")) {
+                || duration != existing.optLong("duration_ms")
+                || !java.time.Instant.ofEpochMilli(occurredAt).toString().equals(existing.optString("occurred_at"))) {
               throw new IllegalArgumentException("事件ID已用于其他答题");
             }
             isIdempotentIgnored = true;

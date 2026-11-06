@@ -1,0 +1,82 @@
+{
+  "version": "1.1",
+  "export_date": "2026-10-28T02:00:00.000Z",
+  "notebooks": [],
+  "vocabularies": [
+    {
+      "id": "provenance-bank",
+      "type": "word",
+      "content": "bank",
+      "field_meta": {
+        "content": {
+          "is_ai_generated": false
+        },
+        "type": {
+          "is_ai_generated": false
+        }
+      },
+      "created_at": "2026-10-28T02:00:00.000Z",
+      "updated_at": "2026-10-28T02:00:00.000Z",
+      "meanings": [
+        {
+          "id": "provenance-bank-river",
+          "part_of_speech": "noun",
+          "zh_definition": "河岸；河畔",
+          "en_definition": "the land alongside a river",
+          "phonetic": "/bæŋk/",
+          "source": "合成词库样例",
+          "example": "After the flood, the children played on the bank.",
+          "remarks": "此例句用于展示“河岸”义。",
+          "field_meta": {
+            "part_of_speech": {
+              "is_ai_generated": false
+            },
+            "zh_definition": {
+              "is_ai_generated": false
+            },
+            "en_definition": {
+              "is_ai_generated": false
+            },
+            "phonetic": {
+              "is_ai_generated": false
+            },
+            "source": {
+              "is_ai_generated": false
+            },
+            "example": {
+              "is_ai_generated": true
+            },
+            "remarks": {
+              "is_ai_generated": true
+            }
+          }
+        },
+        {
+          "id": "provenance-bank-financial",
+          "part_of_speech": "noun",
+          "zh_definition": "银行",
+          "en_definition": "a financial institution that accepts and lends money",
+          "phonetic": "/bæŋk/",
+          "source": "合成词库样例",
+          "field_meta": {
+            "part_of_speech": {
+              "is_ai_generated": false
+            },
+            "zh_definition": {
+              "is_ai_generated": false
+            },
+            "en_definition": {
+              "is_ai_generated": false
+            },
+            "phonetic": {
+              "is_ai_generated": false
+            },
+            "source": {
+              "is_ai_generated": false
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

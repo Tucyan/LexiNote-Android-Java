@@ -1,0 +1,15 @@
+INSTRUMENTATION_RESULT: cited_S1=by and large | by and large - 总的来说，大体上，一般而言 ... by and large 不久; 大体上, 基本上; 大体上，总的看来; 大体上，总的说来，一般的说 ... ADV in general; on the whole 一般说来...
+INSTRUMENTATION_RESULT: cited_S2=by and large | by and large 大體上,基本上,總的說來,全盤看來,大概 ... by and large adv : usually; as a rule; "by and large it doesn't rain much here" [syn: generally, more often than not, most
+INSTRUMENTATION_RESULT: context_explanation=原句‘By and large, the changes worked well.’中，该短语位于句首作状语，表示对整体情况的概括，意为‘大体上、基本上’，与词典释义‘大体上, 基本上’一致。
+INSTRUMENTATION_RESULT: dictionary_context=live model result saved with field provenance
+INSTRUMENTATION_RESULT: gateway_models_http_status=200
+INSTRUMENTATION_RESULT: model=deepseek-v4.1-flash
+INSTRUMENTATION_RESULT: retrieved_sources=3
+INSTRUMENTATION_RESULT: selected_sense=大体上, 基本上
+INSTRUMENTATION_RESULT: sentence=By and large, the changes worked well.
+INSTRUMENTATION_RESULT: status=passed
+INSTRUMENTATION_RESULT: validated_citations=2
+INSTRUMENTATION_RESULT: verification_meaning=大体上，基本上
+INSTRUMENTATION_RESULT: verification_status=supported
+INSTRUMENTATION_RESULT: word=by and large
+INSTRUMENTATION_CODE: -1

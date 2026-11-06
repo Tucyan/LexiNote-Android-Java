@@ -1,0 +1,9 @@
+google/sdk_gphone16k_x86_64/emu64xa16k:17/CP21.260330.005/15181570:user/dev-keys
+Physical size: 1080x2424
+Physical density: 420
+1.0
+192m
+GMT
+MemTotal:        2013496 kB
+MemFree:          403824 kB
+MemAvailable:     971620 kB

@@ -1,0 +1,1 @@
+PASS: Activity recreation retained one accepted rating and did not resend it

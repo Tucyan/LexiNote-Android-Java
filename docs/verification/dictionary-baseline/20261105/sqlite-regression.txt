@@ -1,0 +1,2 @@
+
+PASS: SQLite migration, score parity, event replay, reopen and rollback

@@ -1,0 +1,14 @@
+[
+  {
+    "Path": "app/build/outputs/apk/debug/app-debug.apk",
+    "Hash": "1ADA76B9450CA08E5FB77036747FF0CA5C8025294AD3B8403A03BBB3917025E4"
+  },
+  {
+    "Path": "app/build/outputs/apk/release/app-release.apk",
+    "Hash": "76F52759500DF9498285915E146C40B3A7105656BD6DBA21B7DA663930100EDA"
+  },
+  {
+    "Path": "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk",
+    "Hash": "3385D4EF352B114F8A676216A7CB9F428BE398775EA0564F54624CBA9A0F0318"
+  }
+]

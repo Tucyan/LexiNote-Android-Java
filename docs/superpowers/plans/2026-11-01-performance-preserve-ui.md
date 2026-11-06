@@ -1,5 +1,7 @@
 # 保持现有 UI 的性能与架构优化实施计划
 
+> 2026-11-05 起，继续开发按 [Java 基准版开发计划](2026-11-05-dictionary-baseline.md) 排期。本文件保留原性能指标、复现命令与历史状态。旧笔记字段兼容的验收范围由新计划更新。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 降低大词库下评分、查词、搜索和滚动的等待，解决整库 JSON 的写入与容量耦合，并保留当前 UI 的视觉与交互。
@@ -8,7 +10,7 @@
 
 **Tech Stack:** Java 17、Android framework View、ExecutorService、SQLiteOpenHelper、org.json、流式 JSON/ZIP、ADB、Perfetto；仅在实测需要列表回收时增加 AndroidX RecyclerView。
 
-**状态：** 2026-11-01 编制并修订，仅更新计划，优化实现任务均尚未执行。工作目录为 `C:\Users\ALmerb\Desktop\MyProgram\LexiNote-Android-Java`，分支 `codex/android-native-java`。实现基线为已完成准备的提交 `6026d85`，包含规模优化、原有复习页面修改和归档计划管理入口修复；开始执行时另记录实际 HEAD 与干净状态。旧 `f3bc5c2` 仅作为历史来源，不作为本计划执行起点。
+**状态：** 2026-11-05 执行中，尚未整体验收。实际本轮起点 `7073de93b2aea6e582b39eb1cbf4f6d164c30612`，分支 `codex/android-native-java`。Task 1/2 复核后补修异步确认、连续保存和生命周期；Task 3/4 已接入 SQLite 热路径及流式备份并进行设备回归；Task 5/6 已有索引、过期请求保护及局部勾选更新。完整 DTO、非高频命令增量化、视觉噪声校准、Release 重复测量和 trace 归因仍待完成，各任务未因局部实现而统一打勾。实际证据和后续顺序见 [执行进度](../../verification/PERFORMANCE-PRESERVE-UI.md)。`6026d85` 是原计划准备基线，旧 `f3bc5c2` 仅保留为历史来源。
 
 ---
 

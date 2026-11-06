@@ -53,4 +53,16 @@ public class LibraryTest {
     l.settings().put("api_key", "secret");
     assertFalse(l.backup().toString().contains("secret"));
   }
+
+  @Test
+  public void backupRetainsUsageCountersWhileRemovingCredentialFields() throws Exception {
+    Library library = new Library();
+    JSONObject settings = library.settings();
+    settings.put("api_key", "credential-1"); settings.put("apiKey", "credential-2");
+    settings.put("providers", new JSONArray().put(new JSONObject().put("apiKey", "credential-3")));
+    settings.put("token_count", 12); settings.put("usage", new JSONObject().put("total_tokens", 34));
+    JSONObject safe = library.backup().getJSONObject("settings");
+    assertFalse(safe.has("api_key")); assertFalse(safe.has("apiKey")); assertFalse(safe.has("providers"));
+    assertEquals(12, safe.getInt("token_count")); assertEquals(34, safe.getJSONObject("usage").getInt("total_tokens"));
+  }
 }

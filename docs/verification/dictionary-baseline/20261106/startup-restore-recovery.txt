@@ -1,0 +1,2 @@
+INSTRUMENTATION_RESULT: result=isolated startup failure, recovery callbacks, failed restore preservation and backend reopen passed; no process restart
+INSTRUMENTATION_CODE: -1

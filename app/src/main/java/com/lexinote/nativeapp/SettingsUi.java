@@ -141,7 +141,7 @@ final class SettingsUi {
     backup.addView(zipBackupBtn, zbLp);
     Button jsonBackupBtn = a.button(
         "保存全量 JSON 备份",
-        v -> a.export("lexinote-backup.json", "application/json", a.library.backup().toString()));
+        v -> a.backupJson());
     LinearLayout.LayoutParams jbLp = new LinearLayout.LayoutParams(-1, a.dp(40));
     jbLp.bottomMargin = a.dp(4);
     backup.addView(jsonBackupBtn, jbLp);
@@ -160,13 +160,7 @@ final class SettingsUi {
                       "恢复",
                       (d, w) -> {
                         try {
-                          a.cancel();
-                          a.library = a.repository.rollback();
-                          a.titles.reset();
-                          a.committed = a.library.snapshot();
-                          a.session = null;
-                          a.render();
-                          a.say("已回退");
+                          a.rollbackLibrary();
                         } catch (Exception e) {
                           a.error(e);
                         }

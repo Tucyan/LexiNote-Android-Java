@@ -1,0 +1,3 @@
+
+{"scale":"3000","mode":"scroll","round":1,"sample_count":30,"warmup_count":5,"fixture_load_ms":166,"pure_scroll_completed":true,"passed":["routine5_pure_scrolling_completed"],"failed":[]}
+PASS 1 FAIL 0

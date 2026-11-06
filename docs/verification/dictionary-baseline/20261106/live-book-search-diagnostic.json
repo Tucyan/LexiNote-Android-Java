@@ -1,0 +1,50 @@
+[
+  {
+    "query": "book",
+    "status": 200,
+    "items": [
+      {
+        "title": "英国安德鲁﹒纳伯格联合国际有限公司北京代表处",
+        "host": "nurnberg.com.cn",
+        "matching_sense": false,
+        "excerpt": "ZERO POINT - 图书类型：大众哲学 - 作者 ... 页 数：192页 出版时间：2025年3月 ... 审读资料：电子稿 - 内容简介 ... | UNHITCHED: The Divorce Book for Women ... 心灵励志 - 作者：Oona Metz ..."
+      },
+      {
+        "title": "Colgate Bookstore - Website Footer",
+        "host": "www.colgatebookstore.com",
+        "matching_sense": false,
+        "excerpt": "Mutual InterestWolfgangSmith, Olivia$18.99ISBN: 9781639738403Living Writers 2025 ... Saving History: How White Evangelicals Tour The Nation's Cap"
+      },
+      {
+        "title": "MARINER BOOKS-当当图书",
+        "host": "search.dangdang.com",
+        "matching_sense": false,
+        "excerpt": "Tolentino, Jia /2025-10-21 /Mariner Books ... Don /2025-10-21 /Mariner Books ... Amy Reading /2025-09-30 /Mariner Books"
+      }
+    ]
+  },
+  {
+    "query": "book v. 登记, 预订 dictionary",
+    "status": 200,
+    "items": [
+      {
+        "title": "欧路词典|英汉-汉英词典 Book是什么意思_Book的中文解释和发音_Book的翻译_Book怎么读",
+        "host": "dict.eudic.net",
+        "matching_sense": true,
+        "excerpt": "book ... - n. , 籍 - 账簿 ... - vt. & vi. 预订 - vt. 登记, 记账 - 订立演出契约 时 态: booked, booking, books ... book in 登记；预定 book for 预订"
+      },
+      {
+        "title": "book是什么意思_book的用法_翻译_读音_海词词典",
+        "host": "m.dict.cn",
+        "matching_sense": true,
+        "excerpt": "签到,登记 sign one's name on the list of guest at the hotel, etc. ... 现代英语中除可表示“登记”“记账”外，多用作“预订”解，也可表示“订立演出契约”。 - book作“登记”“记账”“订立演出契约”解时..."
+      },
+      {
+        "title": "Chinese Translation of “THE HOTEL IS BOOKED UP” | Collins English-Simplified Dictionary",
+        "host": "www.collinsdictionary.com",
+        "matching_sense": true,
+        "excerpt": "(ticket, table, seat, room) 预订 [yùdìng] 2. (traffic warden, police officer) 登记 [dēngjì] ... (at hotel) 登记入住 [dēngjì rùzhù]美 = check in"
+      }
+    ]
+  }
+]

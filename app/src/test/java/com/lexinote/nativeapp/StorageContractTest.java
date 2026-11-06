@@ -285,6 +285,12 @@ public abstract class StorageContractTest {
 
     assertFalse("Conflicting parameters for existing eventId must be rejected", res2.isSuccess());
     assertEquals("Status must be VALIDATION_FAILED", CommitResult.Status.VALIDATION_FAILED, res2.getStatus());
+    long revision = backend.getRevision();
+    CommitResult differentTime = backend.execute(LibraryCommand.recordReview(
+        backend.getGeneration(), eventId, planId, vocabId, "简单", 1000L, now + 1));
+    assertEquals("Reused eventId with a different occurrence time must be rejected",
+        CommitResult.Status.VALIDATION_FAILED, differentTime.getStatus());
+    assertEquals("Conflicting event must not change revision", revision, backend.getRevision());
   }
 
   @Test

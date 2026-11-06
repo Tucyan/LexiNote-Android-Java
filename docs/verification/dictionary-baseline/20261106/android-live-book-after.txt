@@ -1,0 +1,16 @@
+INSTRUMENTATION_RESULT: cited_S1=欧路词典|英汉-汉英词典 Book是什么意思_Book的中文解释和发音_Book的翻译_Book怎么读 | book ... - n. , 籍 - 账簿 ... - vt. & vi. 预订 - vt. 登记, 记账 - 订立演出契约 时 态: booked, booking, books ... book in 登记；预定 book for 预订
+INSTRUMENTATION_RESULT: cited_S2=book是什么意思_book的用法_翻译_读音_海词词典 | 签到,登记 sign one's name on the list of guest at the hotel, etc. ... 现代英语中除可表示“登记”“记账”外，多用作“预订”解，也可表示“订立演出契约”。 - book作“登记”“记账”“订立演出契约”解时...
+INSTRUMENTATION_RESULT: cited_S3=book | n.书，书籍；本子，簿册 ... - v.预订，预约；（警方）将……记录在案；（裁判）记名警告 - 【名】 （Book）（英）布克 ... - 1in the book◎[美国英语]记录在案的 ... - 2book on有关…的书 - 3book in登记；预定
+INSTRUMENTATION_RESULT: context_explanation=句中 'book' 作动词，后接名词短语 'a flight to Singapore'，表示预订航班，对应义项 'v. 登记, 预订'。
+INSTRUMENTATION_RESULT: dictionary_context=live model result saved with field provenance
+INSTRUMENTATION_RESULT: gateway_models_http_status=200
+INSTRUMENTATION_RESULT: model=deepseek-v4.1-flash
+INSTRUMENTATION_RESULT: retrieved_sources=3
+INSTRUMENTATION_RESULT: selected_sense=v. 登记, 预订
+INSTRUMENTATION_RESULT: sentence=I need to book a flight to Singapore for next Monday.
+INSTRUMENTATION_RESULT: status=passed
+INSTRUMENTATION_RESULT: validated_citations=3
+INSTRUMENTATION_RESULT: verification_meaning=v. 登记, 预订
+INSTRUMENTATION_RESULT: verification_status=supported
+INSTRUMENTATION_RESULT: word=book
+INSTRUMENTATION_CODE: -1

@@ -1,0 +1,1 @@
+stage=passed metrics={"notebook_references":9780,"fixture_ms":10270,"startup_ms":3723,"search_ms":393,"vocabulary_detail_ms":77,"local_query_ms":175,"rating_ms":297,"reopen_ms":6731}

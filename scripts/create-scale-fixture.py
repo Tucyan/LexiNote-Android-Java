@@ -10,15 +10,54 @@ terms = dict(x.split(":") for x in "budget:预算|plan:计划|report:报告|targ
 assert len(contexts) * len(terms) == 2880
 anchor = datetime.datetime(2026,11,1,2,tzinfo=datetime.timezone.utc)
 def stamp(i): return (anchor-datetime.timedelta(hours=i)).isoformat(timespec="milliseconds").replace("+00:00","Z")
+def field_meta(obj, fields, generated=False):
+ obj["field_meta"]={field:{"is_ai_generated":generated} for field in fields if field in obj and obj[field] not in (None, "", [])}
+ return obj
+def mark(obj, fields, generated):
+ if not isinstance(obj, dict): return
+ meta=obj.setdefault("field_meta", {})
+ for field in fields:
+  if field in obj and obj[field] not in (None, "", []): meta[field]={"is_ai_generated":generated}
+ if not meta: obj.pop("field_meta", None)
+def apply_provenance(data):
+ for vocab in data.get("vocabularies", []):
+  mark(vocab, ["content", "type", "phonetic", "tags"], False)
+  for meaning in vocab.get("meanings", []):
+   mark(meaning, ["part_of_speech", "zh_definition", "en_definition", "phonetic", "example", "source", "remarks"], False)
+   for annotation in meaning.get("annotations", []): mark(annotation, ["content", "target_text"], False)
+ for session in data.get("recent_queries", []) + data.get("conversations", []):
+  mark(session, ["input_text", "source_context"], False)
+  for result_key in ("query_results", "result"):
+   result=session.get(result_key)
+   if not isinstance(result, dict): continue
+   mark(result, ["word", "type", "phonetic"], False)
+   mark(result, ["follow_up_questions"], True)
+   for meaning in result.get("meanings", []):
+    mark(meaning, ["part_of_speech", "zh_definition", "en_definition", "phonetic", "example", "source", "remarks"], False)
+   for annotation in meaning.get("annotations", []): mark(annotation, ["content", "target_text"], False)
+  for message in session.get("ai_messages", []):
+   generated=message.get("role")=="assistant"
+   mark(message, ["content"], generated)
+   mark(message.get("action"), ["message", "follow_up_questions"], True)
+  metadata=session.get("metadata")
+  if isinstance(metadata, dict):
+   mark(metadata, ["title"], metadata.get("title_source")=="ai")
+ return data
+def write_zip(path, data):
+ portable=copy.deepcopy(data); portable["version"]="2.2"
+ raw=json.dumps(portable,ensure_ascii=False,separators=(",",":")).encode()
+ with zipfile.ZipFile(path,"w",zipfile.ZIP_DEFLATED) as z:
+  z.writestr("backup.json",raw)
+  z.writestr("checksums.json",json.dumps({"backup.json":format(zlib.crc32(raw)&0xffffffff,"x")}))
 def generate(count):
  d=copy.deepcopy(BASE)
  for i,((left,lzh),(right,rzh)) in enumerate(itertools.product(contexts.items(),terms.items())):
   if len(d["vocabularies"]) >= count: break
   ident=f"scale-phrase-{i:04d}"; content=f"{left} {right}"; date=stamp(i)
-  meaning={"id":ident+"-m1","created_at":date,"updated_at":date,"part_of_speech":"noun phrase","zh_definition":lzh+rzh,"en_definition":f"{right.capitalize()} relating to {left} work or activities.","example":f"We discussed the {content} during the meeting and agreed on the next steps.","phonetic":"","source":"合成工作英语阅读材料","source_images":[],"annotations":[]}
+  meaning=field_meta({"id":ident+"-m1","created_at":date,"updated_at":date,"part_of_speech":"noun phrase","zh_definition":lzh+rzh,"en_definition":f"{right.capitalize()} relating to {left} work or activities.","example":f"We discussed the {content} during the meeting and agreed on the next steps.","phonetic":"","source":"合成工作英语阅读材料","source_images":[],"annotations":[]},["part_of_speech","zh_definition","en_definition","example","source"],False)
   if i%12==0:
-   meaning["annotations"]=[{"id":ident+"-a","meaning_id":meaning["id"],"target_field":"example","target_text":content,"content":"先读例句，回忆搭配含义，再核对中文。","created_at":date,"updated_at":date}]
-  d["vocabularies"].append({"id":ident,"type":"phrase","content":content,"created_at":date,"updated_at":date,"tags":["工作沟通",lzh,"搭配练习"],"meanings":[meaning],"review_count":i%6,"review_due":1793498400000+(i%10-5)*86400000,"review_grade":["再次","困难","简单"][i%3]})
+   meaning["annotations"]=[field_meta({"id":ident+"-a","meaning_id":meaning["id"],"target_field":"example","target_text":content,"content":"先读例句，回忆搭配含义，再核对中文。","created_at":date,"updated_at":date},["target_text","content"],False)]
+  d["vocabularies"].append(field_meta({"id":ident,"type":"phrase","content":content,"created_at":date,"updated_at":date,"tags":["工作沟通",lzh,"搭配练习"],"meanings":[meaning],"review_count":i%6,"review_due":1793498400000+(i%10-5)*86400000,"review_grade":["再次","困难","简单"][i%3]},["content","type","tags"],False))
  ids=[v["id"] for v in d["vocabularies"]]
  for n in d["notebooks"]:
   if n["id"]=="nb_global_root": n["vocabulary_ids"]=ids.copy()
@@ -35,19 +74,30 @@ def generate(count):
   messages=[]
   for j in range(600 if i==0 else 4):
    content=f"How can I use {word} in a work email?" if j%2==0 else f"You can write: We discussed the {word} during the meeting.\n\n先交代背景，再提出明确的下一步行动。\n\n| 表达 | 语气 |\n|---|---|\n| Could you review it? | 礼貌请求 |\n| Please share an update. | 直接清楚 |"
-   messages.append({"id":f"scale-chat-{i}-{j}","role":"user" if j%2==0 else "assistant","content":content,"created_at":stamp(i+j)})
-  d["conversations"].append({"id":f"scale-chat-{i}","created_at":stamp(i),"query_type":"text","input_text":word,"ai_messages":messages,"metadata":{"retention":"saved","origin":"assistant","title":f"工作邮件表达 · {word} · {i+1}","saved_at":stamp(i),"last_used_at":stamp(i)}})
+   messages.append(field_meta({"id":f"scale-chat-{i}-{j}","role":"user" if j%2==0 else "assistant","content":content,"created_at":stamp(i+j)},["content"],j%2==1))
+  d["conversations"].append(field_meta({"id":f"scale-chat-{i}","created_at":stamp(i),"query_type":"text","input_text":word,"ai_messages":messages,"metadata":{"retention":"saved","origin":"assistant","title":f"工作邮件表达 · {word} · {i+1}","field_meta":{"title":{"is_ai_generated":False}},"saved_at":stamp(i),"last_used_at":stamp(i)}},["input_text"],False))
  d["export_date"]=stamp(0)
+ apply_provenance(d)
  payload=json.dumps(d,ensure_ascii=False,separators=(",",":")).encode()
  assert len(set(v["content"].casefold() for v in d["vocabularies"]))==count
  path=OUT/f"lexinote-scale-{count}.json"; path.write_bytes(payload)
  (ASSETS/f"scale-{count}.json").write_bytes(payload)
- portable=copy.deepcopy(d); portable["version"]="2.2"
- raw=json.dumps(portable,ensure_ascii=False,separators=(",",":")).encode()
- with zipfile.ZipFile(OUT/f"lexinote-scale-{count}.zip","w",zipfile.ZIP_DEFLATED) as z:
-  z.writestr("backup.json",raw); z.writestr("checksums.json",json.dumps({"backup.json":format(zlib.crc32(raw)&0xffffffff,"x")}))
+ write_zip(OUT/f"lexinote-scale-{count}.zip",d)
  (ASSETS/f"scale-{count}.zip").write_bytes((OUT/f"lexinote-scale-{count}.zip").read_bytes())
  return {"vocabularies":count,"notebooks":len(d["notebooks"]),"saved_sessions":sum(c.get("metadata",{}).get("retention")=="saved" for c in d["conversations"]),"messages":sum(len(c.get("ai_messages",[])) for c in d["conversations"]),"largest_conversation":600,"json_bytes":len(payload),"unique_content":True}
 summaries=[generate(n) for n in [1000,3000]]
+# Refresh derived fixtures without changing their event/plan IDs or visible content.
+events_path=OUT/"lexinote-scale-3000-events-10000.json"
+if events_path.exists():
+ events=json.loads(events_path.read_text(encoding="utf-8")); apply_provenance(events)
+ assert len(events.get("review",{}).get("events",[]))==10000
+ events_payload=json.dumps(events,ensure_ascii=False,separators=(",",":")).encode()
+ events_path.write_bytes(events_payload); (ASSETS/"scale-3000-events-10000.json").write_bytes(events_payload)
+plans_path=OUT/"lexinote-scale-3000-with-plans.zip"
+if plans_path.exists():
+ with zipfile.ZipFile(plans_path) as z: plans=json.loads(z.read("backup.json"))
+ apply_provenance(plans)
+ assert len(plans.get("review",{}).get("plans",[]))==12
+ write_zip(plans_path,plans)
 (OUT/"summary.json").write_text(json.dumps(summaries,indent=2),encoding="utf-8")
 print(json.dumps(summaries,ensure_ascii=False))

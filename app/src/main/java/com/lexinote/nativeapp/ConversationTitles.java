@@ -75,15 +75,19 @@ final class ConversationTitles {
                         capturedEpoch,
                         epoch)) return;
                 Library.put(currentMeta, "title", title);
+                FieldProvenance.markPresent(currentMeta, true, "title");
                 Library.put(currentMeta, "title_source", "ai");
                 Library.put(currentMeta, "title_revision", revision + 1);
                 Library.put(current, "title", title);
+                FieldProvenance.markPresent(current, true, "title");
                 a.library.touchSession(current, false);
                 if (a.session != null && id.equals(a.session.optString("id"))) {
                   Library.put(a.session, "title", title);
+                  FieldProvenance.markPresent(a.session, true, "title");
                   Library.put(a.session, "metadata", Library.copy(currentMeta));
                 }
-                if (a.persist()) {
+                a.persistAsync(saved -> {
+                  if (!saved) return;
                   // A title update must not rebuild a composer or reset a reading position.
                   android.widget.TextView heading = a.root.findViewWithTag("page-title");
                   if (heading != null
@@ -91,7 +95,7 @@ final class ConversationTitles {
                       && a.session != null
                       && id.equals(a.session.optString("id"))) heading.setText(title);
                   else if (a.screen.equals("tabs") && a.page == 0) a.render();
-                }
+                });
               });
         });
   }
@@ -101,7 +105,9 @@ final class ConversationTitles {
     AiClient client = pending.remove(session.optString("id"));
     if (client != null) client.cancel();
     JSONObject meta = session.optJSONObject("metadata");
+    FieldProvenance.markPresent(session, false, "title");
     if (meta != null) {
+      FieldProvenance.markPresent(meta, false, "title");
       Library.put(meta, "title_source", "user");
       Library.put(meta, "title_revision", meta.optInt("title_revision") + 1);
     }

@@ -29,17 +29,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
-# Section 6 Quantitative Targets (docs/superpowers/plans/2026-11-01-performance-preserve-ui.md)
-TARGETS = {
-    "rating_input_to_feedback_ms": {"target_p95": 100.0, "desc": "Rating first visible feedback"},
-    "rating_input_to_commit_ms": {"target_p95": 250.0, "desc": "Rating persist and advance (3000 scale)"},
-    "local_query_content_ms": {"target_p95": 150.0, "desc": "Local query content display"},
-    "local_query_commit_ms": {"target_p95": 250.0, "desc": "Local query history persisted"},
-    "search_input_to_idle_ms": {"target_p95": 200.0, "desc": "Search input to filtered idle"},
-    "review_plan_switch_ms": {"target_p95": 100.0, "desc": "Existing plan switch (read-only)"},
-    "review_first_plans_gen_ms": {"target_p95": 500.0, "desc": "First 12 plans generation"},
-    "scroll_jank_percent": {"target_max": 25.0, "desc": "Pure scroll janky frames percentage"},
-    "scroll_p95_ms": {"target_max": 40.0, "desc": "Pure scroll P95 frame time"},
+# The runner measures observed draws and polling-based callback upper bounds.
+# These are not exact Section 6 targets, so they are reported without PASS/FAIL.
+TARGETS: Dict[str, Dict[str, Any]] = {}
+MEASUREMENT_NOTES = {
+    "backend": "isolated cache SQLite fixtures using the SQLite store implementation",
+    "commit": "successful UI callback observation upper bound; includes polling delay, not exact durable commit time",
+    "draw": "first observed draw after input; not proof of visible feedback or content",
+    "search": "correct result observed by polling; includes polling delay",
+    "frames": "requires trace coverage and device/refresh-rate verification; no automatic target verdict",
 }
 
 
@@ -392,27 +390,6 @@ class BenchmarkDriver:
                     single_events_pool: Dict[str, List[float]] = {}
                     scroll_stats_pool: Dict[str, Any] = {}
 
-                    if scale in ["3000_10k", "3000events"]:
-                        # Capacity rejection baseline check
-                        print("  Running capacity rejection baseline check on 3000+10,000 events...")
-                        am_cmd = (
-                            f"am instrument -w -e size {scale} -e mode benchmark -e round 1 "
-                            f"com.lexinote.nativeapp.test/{self.args.runner}"
-                        )
-                        self.adb.shell(am_cmd, timeout=120)
-                        remote_dir = f"/sdcard/Android/data/com.lexinote.nativeapp/files/perf-benchmark-{scale}-r1"
-                        local_dir = self.out_dir / scale / "round-1"
-                        self.adb.pull(remote_dir, local_dir)
-                        if (local_dir / "metrics.json").exists():
-                            m_data = json.loads((local_dir / "metrics.json").read_text(encoding="utf-8"))
-                            summary_metrics[scale] = {
-                                "capacity_rejection_expected": m_data.get("capacity_rejection_expected", True),
-                                "capacity_rejection_actual": m_data.get("capacity_rejection_actual", False),
-                                "capacity_rejection_message": m_data.get("capacity_rejection_message", ""),
-                                "loaded_history_events": m_data.get("loaded_history_events", 10000),
-                            }
-                        continue
-
                     for r in range(1, self.args.rounds + 1):
                         print(f"  Round {r}/{self.args.rounds}...")
                         am_cmd = (
@@ -426,14 +403,23 @@ class BenchmarkDriver:
                         self.adb.pull(remote_dir, local_dir)
 
                         metrics_path = local_dir / "metrics.json"
-                        if metrics_path.exists():
-                            m_data = json.loads(metrics_path.read_text(encoding="utf-8"))
-                            scale_raw["rounds"][f"round_{r}"] = m_data
-                            # Pool timings
-                            for m_name, vals in m_data.get("timings", {}).items():
-                                metric_pool.setdefault(m_name, []).extend(vals)
-                            for s_name, s_val in m_data.get("single_events", {}).items():
-                                single_events_pool.setdefault(s_name, []).append(s_val)
+                        if not metrics_path.exists():
+                            raise RuntimeError(f"Missing metrics for {scale} round {r}; instrumentation: {inst_out}")
+                        m_data = json.loads(metrics_path.read_text(encoding="utf-8"))
+                        if m_data.get("failed"):
+                            raise RuntimeError(f"Instrumentation failed for {scale} round {r}: {m_data['failed']}")
+                        timing_data = m_data.get("timings", {})
+                        required = ("rating_input_to_observed_callback_upper_bound_ms",
+                                    "local_query_observed_callback_upper_bound_ms",
+                                    "search_input_to_correct_result_observed_ms")
+                        for key in required:
+                            if len(timing_data.get(key, [])) != self.args.samples:
+                                raise RuntimeError(f"Incomplete {key} for {scale} round {r}")
+                        scale_raw["rounds"][f"round_{r}"] = m_data
+                        for m_name, vals in timing_data.items():
+                            metric_pool.setdefault(m_name, []).extend(vals)
+                        for s_name, s_val in m_data.get("single_events", {}).items():
+                            single_events_pool.setdefault(s_name, []).append(s_val)
 
                     # Pure scroll profiling with Perfetto & Gfxinfo
                     if not self.args.skip_perfetto:
@@ -479,7 +465,13 @@ class BenchmarkDriver:
                     scale_summary: Dict[str, Any] = {
                         "rounds": self.args.rounds,
                         "samples_per_round": self.args.samples,
-                        "total_samples": len(metric_pool.get("rating_input_to_commit_ms", [])),
+                        "total_samples": len(metric_pool.get("rating_input_to_observed_callback_upper_bound_ms", [])),
+                        "measurement_notes": MEASUREMENT_NOTES,
+                        "per_round_metrics": {
+                            name: {key: StatsCalculator.summarize(values)
+                                   for key, values in raw.get("timings", {}).items() if values}
+                            for name, raw in scale_raw["rounds"].items()
+                        },
                         "metrics": {},
                         "single_events": {},
                         "pure_scrolling": scroll_stats_pool,
@@ -576,28 +568,28 @@ class BenchmarkDriver:
             f"- **Instrumentation Runner**: `{self.args.runner}`",
             f"- **Rounds**: {self.args.rounds} rounds × {self.args.samples} samples (warmups discarded: {self.args.warmups})",
             "",
-            "## 1. Quantitative Latency Baseline vs. Section 6 Targets",
+            "Measurements use isolated cache fixtures with the SQLite store implementation. Commit callback times are polling-based upper bounds; first observed draws do not establish visible feedback. These figures are not automatically compared to Section 6 targets.",
             "",
-            "| Metric | Scale | P50 (ms) | P90 (ms) | P95 (ms) | P99 (ms) | Target P95 | Baseline Status |",
-            "|---|---|---:|---:|---:|---:|---:|:---:|",
+            "## 1. Observed Latencies",
+            "",
+            "| Metric | Scale | P50 (ms) | P90 (ms) | P95 (ms) | P99 (ms) |",
+            "|---|---|---:|---:|---:|---:|",
         ]
 
         for scale, data in summary.items():
             if "metrics" not in data:
                 continue
             for m_name, stats in data["metrics"].items():
-                target_str = f"≤ {stats.get('target_p95', '-')}" if "target_p95" in stats else "-"
-                eval_str = stats.get("target_eval", "-")
                 lines.append(
-                    f"| `{m_name}` | {scale} | {stats['p50']} | {stats['p90']} | {stats['p95']} | {stats['p99']} | {target_str} | {eval_str} |"
+                    f"| `{m_name}` | {scale} | {stats['p50']} | {stats['p90']} | {stats['p95']} | {stats['p99']} |"
                 )
 
         lines.extend([
             "",
             "## 2. Pure Scrolling Framestats & Jank",
             "",
-            "| Scale | Total Frames | Janky Frames | Jank % | P50 (ms) | P90 (ms) | P95 (ms) | P99 (ms) | Target Jank % |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|:---:|",
+            "| Scale | Total Frames | Janky Frames | Jank % | P50 (ms) | P90 (ms) | P95 (ms) | P99 (ms) |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|",
         ])
 
         for scale, data in summary.items():
@@ -606,31 +598,14 @@ class BenchmarkDriver:
                 lines.append(
                     f"| {scale} | {sc.get('total_frames', '-')} | {sc.get('janky_frames', '-')} | "
                     f"{sc.get('jank_percentage', '-')}% | {sc.get('p50_ms', '-')} | {sc.get('p90_ms', '-')} | "
-                    f"{sc.get('p95_ms', '-')} | {sc.get('p99_ms', '-')} | ≤ 25.0% |"
+                    f"{sc.get('p95_ms', '-')} | {sc.get('p99_ms', '-')} |"
                 )
 
-        if "3000_10k" in summary or "3000events" in summary:
-            cap = summary.get("3000_10k") or summary.get("3000events")
-            lines.extend([
-                "",
-                "## 3. 3,000 Items + 10,000 Events Capacity Rejection Baseline",
-                "",
-                f"- **Loaded Legitimate History Events**: {cap.get('loaded_history_events', 10000)}",
-                f"- **Capacity Rejection Expected**: `{cap.get('capacity_rejection_expected')}`",
-                f"- **Capacity Rejection Actual**: `{cap.get('capacity_rejection_actual')}`",
-                f"- **Rejection Message**: *\"{cap.get('capacity_rejection_message')}\"*",
-                "- **Assessment**: Legacy JSON backend enforces the 4MB limit (`MAX_JSON_BYTES`). Successfully establishes capacity rejection baseline for evaluation against Task 3 SQLite incremental transactions.",
-            ])
-
         lines.extend([
-            "",
-            "## 4. Visual Parity & Calibration Artifacts",
-            "",
-            "- **Visual Screenshots**: `visual/light_normal/`, `visual/dark_normal/`, `visual/light_large/`",
-            "- **Contact Sheets**: `visual/contact-sheet-*.png`",
-            "- **Noise Calibration**: `noise-calibration.json`",
-            "- **Storage Restoration**: `original-restoration.json`",
-            "",
+            "", "## 3. Visual Artifacts", "",
+            "- Screenshots: `visual/light_normal/`, `visual/dark_normal/`, `visual/light_large/`",
+            "- Contact sheets: `visual/contact-sheet-*.png`",
+            "- Noise calibration: `noise-calibration.json`",
         ])
         return "\n".join(lines)
 

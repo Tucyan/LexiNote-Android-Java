@@ -1,0 +1,1 @@
+PASS: streaming 3000 vocabulary/10000 event import, local rating/replay/reopen; 10001 events retained

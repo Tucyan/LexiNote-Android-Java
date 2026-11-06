@@ -1,0 +1,22 @@
+{
+  "unit": "micro-yuan",
+  "http": 200,
+  "gatewayUsage": {
+    "input": 16,
+    "output": 5,
+    "total": 21
+  },
+  "usageHttp": 200,
+  "balanceHttp": 200,
+  "usedDelta": 58,
+  "entry": {
+    "model": "deepseek-v4.1-flash",
+    "provider": "火山方舟",
+    "cost": 58,
+    "input": 16,
+    "output": 5,
+    "total": 21,
+    "traceMatched": true,
+    "success": true
+  }
+}

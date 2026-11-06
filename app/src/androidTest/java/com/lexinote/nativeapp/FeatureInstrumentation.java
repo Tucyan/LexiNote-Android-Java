@@ -33,6 +33,7 @@ public final class FeatureInstrumentation extends Instrumentation {
               startActivitySync(
                   new Intent(getTargetContext(), MainActivity.class)
                       .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+      DeviceAsync.ready(this, a);
       waitForIdleSync();
       main(() -> before = a.library.snapshot());
       main(this::queryRecordingAndOrganization);
@@ -44,7 +45,7 @@ public final class FeatureInstrumentation extends Instrumentation {
       capture(this, a, "image-editor");
       sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
       waitForIdleSync();
-      main(this::imageSessionBackup);
+      imageSessionBackup();
       checks.add(
           "full camera output with null result Intent and independent original/selection ZIP"
               + " retention");
@@ -232,6 +233,7 @@ public final class FeatureInstrumentation extends Instrumentation {
   }
 
   void imageSessionBackup() throws Exception {
+    DeviceAsync.save(this, a, () -> {
     a.imageEditorState =
         ImageEditorState.initial().withSelection(SelectedRegion.rectangle(.1, .2, .8, .9));
     a.imageRegion = a.imageEditorState.selection.toJson();
@@ -242,7 +244,8 @@ public final class FeatureInstrumentation extends Instrumentation {
     Library.promoteTemporary(a.session);
     a.query.storeImageSource(a.session);
     a.library.touchSession(a.session, false);
-    check(a.persist(), "Cannot persist source image fixture");
+    }, true);
+    main(() -> {
     String id = a.session.getString("id"),
         original = a.originalImage.toString(),
         derived = a.image.toString();
@@ -271,6 +274,7 @@ public final class FeatureInstrumentation extends Instrumentation {
         "Removed image still saved in conversation");
     a.query.open(a.library.find("conversations", id));
     check(a.image == null && a.originalImage == null, "Removed image returned after reopening");
+    });
   }
 
   static void capture(Instrumentation instrumentation, MainActivity activity, String name)

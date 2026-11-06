@@ -27,6 +27,17 @@ const additions = {
   contrast:['noun','明显差异；对比','an obvious difference between two things','There is a sharp contrast between the two designs.'],
 };
 const phonetics={ agenda:'/əˈdʒendə/',deadline:'/ˈdedlaɪn/',feedback:'/ˈfiːdbæk/',budget:'/ˈbʌdʒɪt/',context:'/ˈkɒntekst/',chapter:'/ˈtʃæptə/',character:'/ˈkærəktə/',plot:'/plɒt/',theme:'/θiːm/',fiction:'/ˈfɪkʃən/',clue:'/kluː/',borrow:'/ˈbɒrəʊ/',repair:'/rɪˈpeə/',routine:'/ruːˈtiːn/',reliable:'/rɪˈlaɪəbl/',method:'/ˈmeθəd/',theory:'/ˈθɪəri/',evidence:'/ˈevɪdəns/',concept:'/ˈkɒnsept/',factor:'/ˈfæktə/' };
+const markFields=(object, fields, generated)=>{
+  const field_meta={...(object.field_meta||{})};
+  for(const field of fields) {
+    const value=object[field];
+    if(value!==undefined&&value!==null&&value!==''&&(!Array.isArray(value)||value.length))
+      field_meta[field]={is_ai_generated:generated};
+  }
+  if(Object.keys(field_meta).length) object.field_meta=field_meta;
+  return object;
+};
+const lexicalMeaningFields=['part_of_speech','zh_definition','en_definition','phonetic','example','source','remarks'];
 const all = [...seed.words,...seed.phrases];
 assert.equal(seed.words.length,80); assert.equal(seed.phrases.length,40);
 assert.equal(new Set(all.map(x=>x.content.normalize('NFKC').toLowerCase())).size,120);
@@ -40,24 +51,24 @@ const vocabularies = all.map((item,i)=>{
   const id=`usage-${item.type}-${String(i+1).padStart(3,'0')}`;
   const created=date(-((28-i%28)*day)+(i%5)*3600000);
   const updated=new Date(Math.max(Date.parse(created),anchor-(2+i%7)*day)).toISOString();
-  const makeMeaning=(values,index)=>({
+  const makeMeaning=(values,index)=>markFields({
     id:`${id}-meaning-${index+1}`,created_at:created,updated_at:updated,
     part_of_speech:values[0],zh_definition:values[1],en_definition:values[2],example:values[3],
     phonetic:phonetics[item.content]||item.phonetic||'',source:`每日学习 · ${themes[item.topic]}`,
     source_images:[],annotations:[],...(item.remarks?{remarks:item.remarks}:{}),
-  });
+  },lexicalMeaningFields,false);
   const meanings=[makeMeaning([item.part_of_speech,item.zh_definition,item.en_definition,item.example],0)];
   if(additions[item.content]) meanings.push(makeMeaning(additions[item.content],1));
   if(i%10===0) {
     const start=item.example.toLowerCase().indexOf(item.content.toLowerCase());
     const target=start<0?item.example:item.example.slice(start,start+item.content.length);
-    meanings[0].annotations.push({id:`${id}-annotation`,meaning_id:meanings[0].id,target_field:'example',target_text:target,
-      content:`保留这句作为${themes[item.topic]}中的用法例句，复习时先遮住中文再回忆。`,created_at:updated,updated_at:updated});
+    meanings[0].annotations.push(markFields({id:`${id}-annotation`,meaning_id:meanings[0].id,target_field:'example',target_text:target,
+      content:`保留这句作为${themes[item.topic]}中的用法例句，复习时先遮住中文再回忆。`,created_at:updated,updated_at:updated},['target_text','content'],false));
   }
-  return {id,type:item.type,content:item.content,created_at:created,updated_at:updated,
+  return markFields({id,type:item.type,content:item.content,created_at:created,updated_at:updated,
     tags:[themes[item.topic],item.type==='word'?'词汇积累':'常用短语',i%3===0?'待复习':'已学习'],meanings,
     review_count:i%5,review_due:i%5===0?anchor-3600000:anchor+((i%4)-1)*day,
-    ...(i%5?{review_grade:['再次','困难','简单'][i%3],reviewed_at:updated}:{})};
+    ...(i%5?{review_grade:['再次','困难','简单'][i%3],reviewed_at:updated}:{})},['content','type','tags'],false);
 });
 const byContent=new Map(vocabularies.map(v=>[v.content,v]));
 const notebook=(id,name,ids,extra={})=>({id,name,created_at:date(-30*day),updated_at:date(-3600000),parent_id:null,
@@ -75,9 +86,12 @@ for(const n of notebooks.filter(n=>n.id!=='nb_global_root')) n.vocabulary_ids.fo
   n.vocabulary_display[id]={meaning_ids:v.meanings.map(m=>m.id),fields:{...fields},meaning_fields:{}};
   if(n.id==='usage-phrases'&&i%4===0) n.vocabulary_display[id].meaning_fields[v.meanings[0].id]={zh_definition:false,en_definition:true};
 });
-const queryResult=v=>({word:v.content,type:v.type,phonetic:v.meanings[0].phonetic,
+const queryResult=v=>{
+  const result=markFields({word:v.content,type:v.type,phonetic:v.meanings[0].phonetic,
   meanings:v.meanings.map(m=>({...m,selected:true,definition_choice:'zh',save_zh:true,save_en:true,save_example:true})),
-  is_from_local:true,local_vocabulary_id:v.id,follow_up_questions:[`能用 ${v.content} 再造一个句子吗？`]});
+  is_from_local:true,local_vocabulary_id:v.id,follow_up_questions:[`能用 ${v.content} 再造一个句子吗？`]},['word','type','phonetic'],false);
+  return markFields(result,['follow_up_questions'],true);
+};
 const querySpecs=[
   ['deadline','deadline：如何礼貌确认截止时间','项目邮件里的 deadline 怎么理解？','deadline 是必须完成某事的最后期限。邮件里可以问：Could you confirm the deadline for the draft?','deadline 和 due date 有什么区别？','deadline 更强调最后期限；due date 常用于作业、账单或交付的到期日期。语境有重叠。确认项目进度时，两者都可以使用。'],
   ['context','context：从上下文猜词','阅读时总看到 in context，这里的 context 是什么？','context 指帮助理解某个词句的上下文或背景。先看前后句，再判断当前词义，比孤立背一个中文对应更可靠。','如果上下文不够，应该怎么办？','先标记不确定的词义，再读下一段。仍无法确定时查词典，并核对词性、搭配和例句，而不是只采用第一个释义。'],
@@ -95,13 +109,13 @@ const querySessions=querySpecs.map((spec,i)=>{
   assert(v,word);
   const created=date(-(9-i)*day-(10-i)*10*60000);
   const last=new Date(Math.max(Date.parse(created)+3*60000,anchor-(10-i)*30*60000)).toISOString();
-  const messages=[['user',q],['assistant',a],['user',q2],['assistant',a2]].map(([role,content],j)=>({id:`${id}-message-${j+1}`,role,content,created_at:new Date(Date.parse(created)+j*60000).toISOString(),
-    ...(role==='assistant'?{action:{kind:'answer',message:content}}:{})}));
+  const messages=[['user',q],['assistant',a],['user',q2],['assistant',a2]].map(([role,content],j)=>markFields({id:`${id}-message-${j+1}`,role,content,created_at:new Date(Date.parse(created)+j*60000).toISOString(),
+    ...(role==='assistant'?{action:markFields({kind:'answer',message:content},['message'],true)}:{})},['content'],role==='assistant'));
   messages[1].query_result=queryResult(v);
-  return {id,created_at:created,query_type:'text',input_text:word,source_context:v.meanings[0].example,
+  return markFields({id,created_at:created,query_type:'text',input_text:word,source_context:v.meanings[0].example,
     query_results:queryResult(v),ai_messages:messages,revision:2,session_state:'ready',
     saved_content:{saved:true,vocabulary_id:v.id,notebook_ids:notebooks.filter(n=>n.id!=='nb_global_root'&&n.vocabulary_ids.includes(v.id)).map(n=>n.id),saved_at:created},
-    metadata:{title,title_source:i%2?'ai':'user',title_revision:1,retention:i<8?'saved':'temporary',origin:'query',created_at:created,last_used_at:last,updated_at:last,...(i<8?{saved_at:created}:{})}};
+    metadata:{title,title_source:i%2?'ai':'user',field_meta:{title:{is_ai_generated:!!(i%2)}},title_revision:1,retention:i<8?'saved':'temporary',origin:'query',created_at:created,last_used_at:last,updated_at:last,...(i<8?{saved_at:created}:{})}},['input_text','source_context'],false);
 });
 const assistantSpecs=[
   ['used to 与 be used to 的区别',[
@@ -123,9 +137,9 @@ const assistantSpecs=[
 ];
 const temporaryAssistants=assistantSpecs.map(([title,pairs],i)=>{
   const id=`usage-assistant-${i+1}`,created=date(-(3-i)*6*3600000),last=date(-(3-i)*20*60000);
-  return {id,created_at:created,query_type:'text',input_text:pairs[0][1],revision:pairs.length/2,session_state:'awaiting_user',
-    ai_messages:pairs.map(([role,content],j)=>({id:`${id}-message-${j+1}`,role,content,created_at:new Date(Date.parse(created)+j*60000).toISOString(),...(role==='assistant'?{action:{kind:'answer',message:content}}:{})})),
-    metadata:{title,title_source:'ai',title_revision:1,retention:'temporary',origin:'assistant',created_at:created,last_used_at:last,updated_at:last}};
+  return markFields({id,created_at:created,query_type:'text',input_text:pairs[0][1],revision:pairs.length/2,session_state:'awaiting_user',
+    ai_messages:pairs.map(([role,content],j)=>markFields({id:`${id}-message-${j+1}`,role,content,created_at:new Date(Date.parse(created)+j*60000).toISOString(),...(role==='assistant'?{action:markFields({kind:'answer',message:content},['message'],true)}:{})},['content'],role==='assistant')),
+    metadata:{title,title_source:'ai',field_meta:{title:{is_ai_generated:true}},title_revision:1,retention:'temporary',origin:'assistant',created_at:created,last_used_at:last,updated_at:last}},['input_text'],false);
 });
 const conversations=[...querySessions,...temporaryAssistants].sort((a,b)=>b.metadata.last_used_at.localeCompare(a.metadata.last_used_at));
 const backup={version:'2.2',export_date:date(0),vocabularies,notebooks,
@@ -140,7 +154,21 @@ async function main(){
   fs.mkdirSync(output,{recursive:true});
   const name='lexinote-normal-usage-20261028';
   fs.writeFileSync(path.join(output,name+'.zip'),archive.bytes);
-  fs.writeFileSync(path.join(output,name+'.json'),JSON.stringify({...archive.backup,version:'1.1'},null,2)+'\n');
+  const json=JSON.stringify({...archive.backup,version:'1.1'},null,2)+'\n';
+  fs.writeFileSync(path.join(output,name+'.json'),json);
+  fs.mkdirSync(path.join(nativeRoot,'app/src/androidTest/assets'),{recursive:true});
+  fs.writeFileSync(path.join(nativeRoot,'app/src/androidTest/assets/normal-usage.json'),json);
+  const provenanceSample={version:'1.1',export_date:date(0),vocabularies:[
+    {id:'provenance-bank',type:'word',content:'bank',field_meta:{content:{is_ai_generated:false},type:{is_ai_generated:false}},created_at:date(0),updated_at:date(0),meanings:[
+      {id:'provenance-bank-river',part_of_speech:'noun',zh_definition:'河岸；河畔',en_definition:'the land alongside a river',phonetic:'/bæŋk/',source:'合成词库样例',example:'After the flood, the children played on the bank.',remarks:'此例句用于展示“河岸”义。',field_meta:{part_of_speech:{is_ai_generated:false},zh_definition:{is_ai_generated:false},en_definition:{is_ai_generated:false},phonetic:{is_ai_generated:false},source:{is_ai_generated:false},example:{is_ai_generated:true},remarks:{is_ai_generated:true}}},
+      {id:'provenance-bank-financial',part_of_speech:'noun',zh_definition:'银行',en_definition:'a financial institution that accepts and lends money',phonetic:'/bæŋk/',source:'合成词库样例',field_meta:{part_of_speech:{is_ai_generated:false},zh_definition:{is_ai_generated:false},en_definition:{is_ai_generated:false},phonetic:{is_ai_generated:false},source:{is_ai_generated:false}}}
+    ]}
+  ]};
+  const provenanceDir=path.join(nativeRoot,'docs/fixtures/field-provenance');
+  fs.mkdirSync(provenanceDir,{recursive:true});
+  const provenanceJson=JSON.stringify(provenanceSample,null,2)+'\n';
+  fs.writeFileSync(path.join(provenanceDir,'lexinote-provenance-sample.json'),provenanceJson);
+  fs.writeFileSync(path.join(nativeRoot,'app/src/androidTest/assets/field-provenance.json'),provenanceJson);
   const summary={words:80,phrases:40,vocabularies:120,meanings:vocabularies.reduce((n,v)=>n+v.meanings.length,0),notebooks:notebooks.length,recent_queries:10,temporary_conversations:5,saved_conversations:8,
     messages:conversations.reduce((n,c)=>n+c.ai_messages.length,0),annotations:vocabularies.reduce((n,v)=>n+v.meanings.reduce((a,m)=>a+m.annotations.length,0),0),images:0,zip_bytes:archive.bytes.length};
   fs.writeFileSync(path.join(output,'summary.json'),JSON.stringify(summary,null,2)+'\n');

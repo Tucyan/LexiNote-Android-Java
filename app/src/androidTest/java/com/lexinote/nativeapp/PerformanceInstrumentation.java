@@ -14,6 +14,8 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import org.json.*;
+import com.lexinote.nativeapp.storage.LibraryStore;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Task 0 Reproducible Performance and Visual Baseline Harness.
@@ -21,20 +23,25 @@ import org.json.*;
  * <p>Direct subclass of {@link android.app.Instrumentation}.
  * Measures 4 distinct timestamps across 5 routines:
  *   t0: Simulated input event injection
- *   t1: First visible UI feedback rendered on screen
- *   t2: Business persistence layer flush to durable storage
- *   t3: Main Looper queue idle
+ *   t1: First observed draw after input (not proof of visible feedback)
+ *   t2: Poll-observed successful commit callback (an upper bound)
+ *   t3: Store and main Looper idle
  *
- * <p>Isolates storage in ephemeral cache directory and resets to identical
- * pristine snapshot before each sample OUTSIDE the measurement timer.
+ * <p>Uses a separate SQLite cache database per rating/query sample,
+ * reset outside the measurement timer. Cache databases are retained because store
+ * close is asynchronous. Results use isolated fixtures rather than real user data.
  * Captures 11 visual baseline screens and 5-run noise calibration.
  */
 public final class PerformanceInstrumentation extends Instrumentation {
+  boolean testStoreInstalled;
+  int fixtureNumber;
   MainActivity a;
   JSONObject beforeSnapshot;
   Repository originalRepository;
   File testDirectory, outputDir;
-  byte[] pristineJsonBytes;
+  byte[] pristineJsonBytes, ratingFixtureBytes;
+  File historicalSeed;
+  String ratingPlanId, ratingFirstTask;
 
   String size = "1000";
   String mode = "benchmark";
@@ -46,6 +53,7 @@ public final class PerformanceInstrumentation extends Instrumentation {
   int fixtureEventsCount = 0;
 
   final JSONObject metrics = new JSONObject();
+  final JSONArray historicalResetTimes = new JSONArray();
   final List<String> passed = new ArrayList<>();
   final List<String> failed = new ArrayList<>();
 
@@ -74,18 +82,35 @@ public final class PerformanceInstrumentation extends Instrumentation {
     try {
       File externalDir = getTargetContext().getExternalFilesDir(null);
       String folderName = "perf-" + mode + "-" + size;
-      if (mode.equals("benchmark") || mode.equals("scroll")) {
+      if (mode.equals("benchmark") || mode.equals("scroll") || mode.equals("search")) {
         folderName += "-r" + round;
       }
       outputDir = new File(externalDir, folderName);
       outputDir.mkdirs();
 
+      check(round > 0 && sampleCount > 0 && warmupCount >= 0, "invalid round/sample counts");
+      check(Arrays.asList("1000", "3000", "3000_10k", "3000events").contains(size), "unknown fixture size");
       metrics.put("scale", size);
       metrics.put("mode", mode);
       metrics.put("round", round);
       metrics.put("sample_count", sampleCount);
       metrics.put("warmup_count", warmupCount);
 
+      boolean historical = size.equals("3000_10k") || size.equals("3000events");
+      testDirectory = new File(getTargetContext().getCacheDir(), "perf-isolated-" + System.nanoTime());
+      check(testDirectory.mkdirs(), "failed to create isolated directory");
+      if (historical) {
+        check(themeArg == null && fontArg == null, "historical benchmark does not support theme/font overrides");
+        long seedStart = SystemClock.elapsedRealtime();
+        historicalSeed = new File(testDirectory, "seed.json");
+        try (InputStream in = getContext().getAssets().open("scale-3000-events-10000.json");
+             OutputStream out = new BufferedOutputStream(new FileOutputStream(historicalSeed))) {
+          byte[] buffer = new byte[32768]; int n;
+          while ((n = in.read(buffer)) != -1) out.write(buffer, 0, n);
+        }
+        metrics.put("fixture_seed_copy_ms", SystemClock.elapsedRealtime() - seedStart);
+        installHistoricalStore(false);
+      } else {
       // Load fixture
       long loadStart = SystemClock.elapsedRealtime();
       JSONObject rawFixture;
@@ -129,53 +154,29 @@ public final class PerformanceInstrumentation extends Instrumentation {
       assetBytes = null;
       System.gc();
 
-      // Start MainActivity
+      // Use a unique cache-only SQLite store before Activity startup.
+      Library initial = new Library(new JSONObject(new String(pristineJsonBytes, StandardCharsets.UTF_8)));
+      if (themeArg != null) {
+        Library.put(initial.settings(), "theme_mode", themeArg);
+        Library.put(initial.settings(), "theme", themeArg);
+      }
+      if (fontArg != null) Library.put(initial.settings(), "font_size", fontArg);
+      pristineJsonBytes = initial.snapshot().toString().getBytes(StandardCharsets.UTF_8);
+      installFixtureStore(initial);
       a = (MainActivity) startActivitySync(
           new Intent(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-      waitForIdleSync();
-
-      // Configure isolated storage repository
+      awaitStore();
       main(() -> {
+        check(a.library != null && a.query != null, "activity load incomplete");
         beforeSnapshot = a.library.snapshot();
         originalRepository = a.repository;
-        testDirectory = new File(a.getCacheDir(), "perf-isolated-" + System.nanoTime());
-        check(testDirectory.mkdirs(), "failed to create isolated repository dir");
-        a.repository = new Repository(new ContextWrapper(a) {
-          @Override
-          public File getFilesDir() {
-            return testDirectory;
-          }
-        });
-
-        // Write pristine fixture into isolated directory
-        File target = new File(testDirectory, "library.json");
-        try (FileOutputStream out = new FileOutputStream(target)) {
-          out.write(pristineJsonBytes);
-          out.getFD().sync();
-        }
-
-        // Apply theme/font if specified
-        if (themeArg != null) {
-          Library.put(fixtureLib.settings(), "theme_mode", themeArg);
-          Library.put(fixtureLib.settings(), "theme", themeArg);
-        }
-        if (fontArg != null) {
-          Library.put(fixtureLib.settings(), "font_size", fontArg);
-        }
-
-        a.cancel();
-        a.titles.reset();
-        a.session = null;
-        a.library = fixtureLib;
-        a.palette();
-        a.committed = (size.equals("3000_10k") || size.equals("3000events")) ? null : fixtureLib.snapshot();
-        a.query = new QueryUi(a);
-        a.notebooks = new NotebookUi(a);
-        a.review = new ReviewUi(a);
+        a.repository = new Repository(testDirectory);
+        a.committed = a.library.snapshot();
         a.screen = "tabs";
         a.page = 0;
         a.render();
       });
+      }
 
       // Dispatch mode
       if (mode.equals("screenshots") || mode.equals("visual")) {
@@ -184,33 +185,31 @@ public final class PerformanceInstrumentation extends Instrumentation {
         runNoiseCalibration();
       } else if (mode.equals("scroll")) {
         runPureScrollRoutine();
-      } else if (size.equals("3000_10k") || size.equals("3000events")) {
-        runCapacityBaselineCheck();
-      } else {
+      } else if (mode.equals("search")) {
+        JSONObject timings = new JSONObject();
+        metrics.put("timings", timings);
+        runSearchRoutine(timings);
+      } else if (mode.equals("benchmark")) {
         runBenchmarkSuite();
+      } else {
+        throw new IllegalArgumentException("Unknown mode: " + mode);
       }
 
     } catch (Throwable e) {
       failed.add("FATAL: " + android.util.Log.getStackTraceString(e));
     } finally {
-      // Data restoration & cleanup
-      if (a != null && beforeSnapshot != null) {
+      // All data touched by this runner is in its isolated cache store.
+      if (a != null) {
         try {
-          main(() -> {
-            a.cancel();
-            a.titles.reset();
-            a.session = null;
-            a.library = new Library(beforeSnapshot);
-            a.repository = originalRepository;
-            a.finish();
-          });
-        } catch (Throwable e) {
-          failed.add("RESTORE_ERROR: " + e.getMessage());
-        }
+          awaitStore();
+          main(() -> { a.cancel(); a.titles.reset(); a.session = null; a.finish(); });
+        } catch (Throwable e) { failed.add("TEARDOWN_ERROR: " + e.getMessage()); }
       }
-      if (testDirectory != null) {
-        deleteRecursive(testDirectory);
-      }
+      if (testStoreInstalled) LibraryStore.resetInstanceForTest();
+      // Store close is asynchronous; retain the cache directory until later cleanup.
+      // The seed streams are closed before import returns, so this one known file is safe to remove.
+      if (historicalSeed != null && historicalSeed.exists() && !historicalSeed.delete())
+        failed.add("TEARDOWN_ERROR: could not remove historical seed");
 
       // Record final metrics.json
       try {
@@ -229,6 +228,88 @@ public final class PerformanceInstrumentation extends Instrumentation {
 
     result.putString("stream", "\n" + metrics.toString() + "\nPASS " + passed.size() + " FAIL " + failed.size() + "\n");
     finish(failed.isEmpty() ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
+  }
+
+  private void installFixtureStore(Library fixture) throws Exception {
+    SqliteLibraryStore backend = new SqliteLibraryStore(getTargetContext(),
+        new File(testDirectory, "fixture-" + (++fixtureNumber) + ".db").getAbsolutePath());
+    backend.initialize();
+    check(backend.restore(fixture.snapshot(), backend.getGeneration()).isSuccess(), "fixture import failed");
+    LibraryStore replacement = new LibraryStore(backend);
+    if (a != null) {
+      awaitStore();
+      a.store.unbind(a);
+    }
+    LibraryStore.setInstanceForTest(replacement);
+    testStoreInstalled = true;
+    if (a != null) {
+      replacement.bind(a);
+      Library display = new Library(backend.loadSnapshot().getRawDocument());
+      long generation = backend.getGeneration(), revision = backend.getRevision();
+      main(() -> {
+        a.store = replacement;
+        a.library = display;
+        a.committed = display.snapshot();
+        a.libraryGeneration = generation;
+        a.libraryRevision = revision;
+        a.dataRevision++;
+      });
+      replacement.loadLibrary(null, ignored -> {});
+      awaitStore();
+    }
+  }
+
+  /** Re-imports a single file into a fresh isolated DB; never materializes history as JSON. */
+  private void installHistoricalStore(boolean prepareRating) throws Exception {
+    long started = SystemClock.elapsedRealtime();
+    if (a != null) {
+      awaitStore();
+      main(() -> { a.cancel(); a.titles.reset(); a.session = null; a.finish(); });
+      waitForIdleSync();
+      a = null;
+      LibraryStore.resetInstanceForTest();
+      testStoreInstalled = false;
+      System.gc();
+    }
+    File database = new File(testDirectory, "fixture-" + (++fixtureNumber) + ".db");
+    SqliteLibraryStore backend = new SqliteLibraryStore(getTargetContext(), database.getAbsolutePath());
+    backend.initialize();
+    com.lexinote.nativeapp.storage.contract.CommitResult imported = backend.importJson(historicalSeed, backend.getGeneration());
+    check(imported.isSuccess(), "streaming fixture import failed: " + imported.getMessage());
+    long generation = backend.getGeneration();
+    try (android.database.sqlite.SQLiteDatabase db = android.database.sqlite.SQLiteDatabase.openDatabase(database.getAbsolutePath(), null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY);
+         android.database.Cursor events = db.rawQuery("SELECT COUNT(*) FROM review_events WHERE generation=?", new String[]{Long.toString(generation)})) {
+      check(events.moveToFirst() && events.getInt(0) == 10000, "history fixture event count mismatch");
+      fixtureEventsCount = events.getInt(0);
+      if (prepareRating) {
+        try (android.database.Cursor plan = db.rawQuery("SELECT id FROM review_plans WHERE generation=? ORDER BY ordinal LIMIT 1", new String[]{Long.toString(generation)})) {
+          check(plan.moveToFirst(), "missing review plan");
+          ratingPlanId = plan.getString(0);
+        }
+      }
+    }
+    if (prepareRating) {
+      com.lexinote.nativeapp.storage.contract.CommitResult prepared = backend.execute(
+          com.lexinote.nativeapp.storage.contract.LibraryCommand.prepareDailyQueue(generation, ratingPlanId, System.currentTimeMillis()));
+      check(prepared.isSuccess(), "rating queue preparation failed");
+      JSONArray tasks = prepared.getUpdatedEntity().getJSONArray("days").getJSONObject(0).getJSONArray("tasks");
+      check(tasks.length() > 0, "no plan has an available rating task");
+      String first = tasks.getJSONObject(0).toString();
+      if (ratingFirstTask != null) check(ratingFirstTask.equals(first), "rating fixture queue changed");
+      ratingFirstTask = first;
+    }
+    LibraryStore.setInstanceForTest(new LibraryStore(backend)); testStoreInstalled = true;
+    historicalResetTimes.put(SystemClock.elapsedRealtime() - started);
+    metrics.put("fixture_reset_ms", historicalResetTimes);
+    a = (MainActivity) startActivitySync(new Intent(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+    awaitStore();
+    check(a.library != null && a.query != null && !a.recoveryOnly, "activity load incomplete");
+    main(() -> { a.repository = new Repository(testDirectory); a.screen = "tabs"; a.page = 0; a.render(); });
+  }
+
+  private void awaitStore() throws Exception {
+    check(LibraryStore.getInstance(getTargetContext()).awaitIdle(30, TimeUnit.SECONDS), "store timeout");
+    waitForIdleSync();
   }
 
   // =========================================================================
@@ -254,8 +335,8 @@ public final class PerformanceInstrumentation extends Instrumentation {
         ratingTotalIdleList.add(t.totalIdleMs);
       }
     }
-    timings.put("rating_input_to_feedback_ms", toJsonArray(ratingFeedbackList));
-    timings.put("rating_input_to_commit_ms", toJsonArray(ratingPersistList));
+    timings.put("rating_input_to_first_observed_draw_ms", toJsonArray(ratingFeedbackList));
+    timings.put("rating_input_to_observed_callback_upper_bound_ms", toJsonArray(ratingPersistList));
     timings.put("rating_input_to_idle_ms", toJsonArray(ratingTotalIdleList));
     passed.add("routine1_rating_actions_" + sampleCount + "_samples");
 
@@ -274,11 +355,66 @@ public final class PerformanceInstrumentation extends Instrumentation {
         queryTotalIdleList.add(t.totalIdleMs);
       }
     }
-    timings.put("local_query_content_ms", toJsonArray(queryContentList));
-    timings.put("local_query_commit_ms", toJsonArray(queryPersistList));
+    timings.put("local_query_input_to_first_observed_draw_ms", toJsonArray(queryContentList));
+    timings.put("local_query_observed_callback_upper_bound_ms", toJsonArray(queryPersistList));
     timings.put("local_query_idle_ms", toJsonArray(queryTotalIdleList));
     passed.add("routine2_local_queries_" + sampleCount + "_samples");
 
+    runSearchRoutine(timings);
+
+    // 4. Daily Queue Generation vs Read
+    JSONObject singleEvents = new JSONObject();
+    metrics.put("single_events", singleEvents);
+
+    // Queue Generation (Cold/First-time for 12 plans on fresh simulated day)
+    long genDate = 1793600000000L;
+    java.util.concurrent.CountDownLatch prepared = new java.util.concurrent.CountDownLatch(1);
+    java.util.concurrent.atomic.AtomicReference<Throwable> prepareFailure = new java.util.concurrent.atomic.AtomicReference<>();
+    long t0Gen = SystemClock.elapsedRealtimeNanos();
+    main(() -> {
+      a.dispatch(com.lexinote.nativeapp.storage.contract.LibraryCommand.prepareDailyQueue(
+          a.libraryGeneration, null, genDate), result -> {
+        try {
+          check(result.isSuccess(), "queue preparation failed: " + result.getMessage());
+          a.library.reviewPlans().applyCommittedDays(result.getUpdatedEntity());
+        } catch (Throwable failure) { prepareFailure.set(failure); }
+        finally { prepared.countDown(); }
+      });
+    });
+    check(prepared.await(30, TimeUnit.SECONDS), "queue preparation callback timeout");
+    if (prepareFailure.get() != null) throw new AssertionError("queue preparation rejected", prepareFailure.get());
+    awaitStore();
+    long t3Gen = SystemClock.elapsedRealtimeNanos();
+    singleEvents.put("review_first_plans_gen_ms", Math.round((t3Gen - t0Gen) / 1_000_000.0));
+    passed.add("routine4_queue_generation_12_plans");
+    main(() -> { a.page = 3; a.render(); });
+    awaitStore();
+
+    // Queue Read (Read-only plan switch asserting zero disk writes)
+    List<Double> planSwitchList = new ArrayList<>();
+    for (int i = 0; i < 10; i++) {
+      awaitStore();
+      long revisionBefore = a.store.currentRevision();
+      long t0Switch = SystemClock.elapsedRealtimeNanos();
+      main(() -> {
+        Button next = findButton(a.root, "›");
+        if (next != null) next.performClick();
+        else a.render();
+      });
+      waitForIdleSync();
+      long t3Switch = SystemClock.elapsedRealtimeNanos();
+      awaitStore();
+      check(a.store.currentRevision() == revisionBefore, "Queue read committed a write");
+      planSwitchList.add((t3Switch - t0Switch) / 1_000_000.0);
+    }
+    timings.put("review_plan_switch_ms", toJsonArray(planSwitchList));
+    passed.add("routine4_queue_read_plan_switch_zero_writes");
+
+    // 5. Pure Scrolling
+    runPureScrollRoutine();
+  }
+
+  private void runSearchRoutine(JSONObject timings) throws Exception {
     // 3. Search Input to Idle (5 warmups + 30 samples)
     List<Double> searchFeedbackList = new ArrayList<>();
     List<Double> searchActionIdleList = new ArrayList<>();
@@ -292,53 +428,10 @@ public final class PerformanceInstrumentation extends Instrumentation {
         searchActionIdleList.add(t.actionToIdleMs);
       }
     }
-    timings.put("search_input_to_feedback_ms", toJsonArray(searchFeedbackList));
-    timings.put("search_input_to_idle_ms", toJsonArray(searchActionIdleList));
+    timings.put("search_input_to_first_observed_draw_ms", toJsonArray(searchFeedbackList));
+    timings.put("search_input_to_correct_result_observed_ms", toJsonArray(searchActionIdleList));
     passed.add("routine3_search_actions_" + sampleCount + "_samples");
 
-    // 4. Daily Queue Generation vs Read
-    JSONObject singleEvents = new JSONObject();
-    metrics.put("single_events", singleEvents);
-
-    // Queue Generation (Cold/First-time for 12 plans on fresh simulated day)
-    long genDate = 1793600000000L;
-    long t0Gen = SystemClock.elapsedRealtimeNanos();
-    main(() -> {
-      JSONArray plans = a.library.reviewPlans().list(false);
-      for (int p = 0; p < plans.length(); p++) {
-        String pid = plans.getJSONObject(p).getString("id");
-        a.library.reviewPlans().dailyQueue(pid, genDate);
-      }
-      a.persist();
-      a.page = 3;
-      a.render();
-    });
-    waitForIdleSync();
-    long t3Gen = SystemClock.elapsedRealtimeNanos();
-    singleEvents.put("review_first_plans_gen_ms", Math.round((t3Gen - t0Gen) / 1_000_000.0));
-    passed.add("routine4_queue_generation_12_plans");
-
-    // Queue Read (Read-only plan switch asserting zero disk writes)
-    List<Double> planSwitchList = new ArrayList<>();
-    File libFile = new File(testDirectory, "library.json");
-    for (int i = 0; i < 10; i++) {
-      long modBefore = libFile.lastModified();
-      long t0Switch = SystemClock.elapsedRealtimeNanos();
-      main(() -> {
-        Button next = findButton(a.root, "›");
-        if (next != null) next.performClick();
-        else a.render();
-      });
-      waitForIdleSync();
-      long t3Switch = SystemClock.elapsedRealtimeNanos();
-      check(libFile.lastModified() == modBefore, "Queue read rewrote library file to disk");
-      planSwitchList.add((t3Switch - t0Switch) / 1_000_000.0);
-    }
-    timings.put("review_plan_switch_ms", toJsonArray(planSwitchList));
-    passed.add("routine4_queue_read_plan_switch_zero_writes");
-
-    // 5. Pure Scrolling
-    runPureScrollRoutine();
   }
 
   // =========================================================================
@@ -357,36 +450,52 @@ public final class PerformanceInstrumentation extends Instrumentation {
   }
 
   private void resetReviewStateForRating() throws Exception {
-    // 1. Reset disk file outside timer
-    File target = new File(testDirectory, "library.json");
-    try (FileOutputStream out = new FileOutputStream(target)) {
-      out.write(pristineJsonBytes);
-      out.getFD().sync();
+    if (historicalSeed != null) {
+      installHistoricalStore(true);
+      String planId = ratingPlanId;
+      main(() -> {
+        a.screen = "tabs"; a.page = 3; a.review = new ReviewUi(a);
+        a.review.activePlanId = planId; a.render(); a.review.startDailyReview();
+      });
+      awaitStore();
+      main(() -> {
+        check("active".equals(a.review.phase), "review did not open a rating card");
+        a.review.revealed = true; a.render();
+      });
+      waitForIdleSync();
+      return;
     }
-    new File(testDirectory, "library.json.bak").delete();
-
-    // 2. Reset in-memory domain model & UI controllers on UI thread
-    main(() -> {
-      try {
-        a.library = new Library(new JSONObject(new String(pristineJsonBytes, StandardCharsets.UTF_8)));
-        a.committed = a.library.snapshot();
-        a.session = null;
-        a.titles.reset();
-
-        String planId = a.library.reviewPlans().list(false).getJSONObject(0).getString("id");
-        long fixedTime = 1793500000000L;
-        a.library.reviewPlans().dailyQueue(planId, fixedTime);
-
-        a.screen = "tabs";
-        a.page = 3;
-        a.review = new ReviewUi(a);
-        a.review.activePlanId = planId;
-        a.render();
-      } catch (Exception e) {
-        throw new RuntimeException("Reset failed: " + e.getMessage(), e);
+    if (ratingFixtureBytes == null) {
+      Library prepared = new Library(new JSONObject(new String(pristineJsonBytes, StandardCharsets.UTF_8)));
+      JSONArray plans = prepared.reviewPlans().list(false);
+      for (int i = 0; i < plans.length(); i++) {
+        String candidate = plans.getJSONObject(i).getString("id");
+        JSONArray queue = prepared.reviewPlans().dailyQueue(candidate, System.currentTimeMillis()).optJSONArray("queue");
+        if (queue != null && queue.length() > 0) {
+          ratingPlanId = candidate;
+          ratingFirstTask = queue.getJSONObject(0).toString();
+          break;
+        }
       }
+      check(ratingPlanId != null, "no plan has an available rating task");
+      ratingFixtureBytes = prepared.snapshot().toString().getBytes(StandardCharsets.UTF_8);
+    }
+    Library fixture = new Library(new JSONObject(new String(ratingFixtureBytes, StandardCharsets.UTF_8)));
+    String planId = ratingPlanId;
+    check(fixture.reviewPlans().hasDailyQueue(planId, System.currentTimeMillis()), "date changed during rating samples");
+    JSONArray queue = fixture.reviewPlans().dailyQueue(planId, System.currentTimeMillis()).optJSONArray("queue");
+    check(queue != null && queue.length() > 0 && ratingFirstTask.equals(queue.getJSONObject(0).toString()),
+        "rating fixture queue changed");
+    installFixtureStore(fixture);
+    main(() -> {
+      a.session = null;
+      a.titles.reset();
+      a.screen = "tabs";
+      a.page = 3;
+      a.review = new ReviewUi(a);
+      a.review.activePlanId = planId;
+      a.render();
     });
-    waitForIdleSync();
 
     // 3. Start review session and reveal answer card
     main(() -> {
@@ -397,75 +506,63 @@ public final class PerformanceInstrumentation extends Instrumentation {
     });
     waitForIdleSync();
     SystemClock.sleep(100);
-    waitForIdleSync();
+    awaitStore();
   }
 
   private Timing4 measureRatingAction() throws Exception {
-    AtomicLong t0 = new AtomicLong(0);
-    AtomicLong t1 = new AtomicLong(0);
-    AtomicLong t2 = new AtomicLong(0);
-    AtomicLong t3 = new AtomicLong(0);
+    return measureCommittedAction(() -> tap("简单"));
+  }
 
-    // Watcher for t2 (durable persistence completion)
-    FileObserver observer = new FileObserver(testDirectory.getAbsolutePath(), FileObserver.CLOSE_WRITE | FileObserver.MOVED_TO) {
-      @Override
-      public void onEvent(int event, String path) {
-        if (path != null && (path.equals("library.json") || path.startsWith("library.json"))) {
-          t2.compareAndSet(0, SystemClock.elapsedRealtimeNanos());
-        }
-      }
+  // This observes the successful UI revision callback; polling makes it an upper bound,
+  // not an exact disk commit timestamp. Missing observations fail rather than becoming idle.
+  private Timing4 measureCommittedAction(Action action) throws Exception {
+    AtomicLong t0 = new AtomicLong(), firstDraw = new AtomicLong();
+    long initialRevision = a.dataRevision;
+    ViewTreeObserver.OnDrawListener listener = () -> {
+      if (t0.get() != 0) firstDraw.compareAndSet(0, SystemClock.elapsedRealtimeNanos());
     };
-    observer.startWatching();
-
-    // Listener for t1 (first visible UI feedback / draw pass)
-    ViewTreeObserver.OnDrawListener drawListener = () -> t1.compareAndSet(0, SystemClock.elapsedRealtimeNanos());
-    main(() -> a.getWindow().getDecorView().getViewTreeObserver().addOnDrawListener(drawListener));
-
-    // Tap "简单" button
-    t0.set(SystemClock.elapsedRealtimeNanos());
-    tap("简单");
-
-    // Settle Looper and unregister listeners
-    waitForIdleSync();
-    t3.set(SystemClock.elapsedRealtimeNanos());
-    observer.stopWatching();
-    main(() -> a.getWindow().getDecorView().getViewTreeObserver().removeOnDrawListener(drawListener));
-
-    long startNano = t0.get();
-    long feedbackNano = t1.get() > 0 ? t1.get() : t3.get();
-    long persistNano = t2.get() > 0 ? t2.get() : t3.get();
-    long idleNano = t3.get();
-
-    Timing4 t = new Timing4();
-    t.feedbackMs = Math.max(0.1, (feedbackNano - startNano) / 1_000_000.0);
-    t.persistMs = Math.max(0.1, (persistNano - startNano) / 1_000_000.0);
-    t.totalIdleMs = Math.max(0.1, (idleNano - startNano) / 1_000_000.0);
-    return t;
+    main(() -> a.getWindow().getDecorView().getViewTreeObserver().addOnDrawListener(listener));
+    try {
+      t0.set(SystemClock.elapsedRealtimeNanos());
+      action.run();
+      long deadline = SystemClock.uptimeMillis() + 30000;
+      boolean committed = false;
+      while (SystemClock.uptimeMillis() < deadline) {
+        final boolean[] observed = {false};
+        runOnMainSync(() -> observed[0] = a.dataRevision > initialRevision);
+        if (observed[0]) { committed = true; break; }
+        SystemClock.sleep(10);
+      }
+      check(committed, "successful commit callback was not observed");
+      long observedCommit = SystemClock.elapsedRealtimeNanos();
+      awaitStore();
+      long idle = SystemClock.elapsedRealtimeNanos();
+      check(firstDraw.get() != 0, "first post-input draw was not observed");
+      Timing4 result = new Timing4();
+      result.feedbackMs = (firstDraw.get() - t0.get()) / 1_000_000.0;
+      result.persistMs = (observedCommit - t0.get()) / 1_000_000.0;
+      result.totalIdleMs = (idle - t0.get()) / 1_000_000.0;
+      return result;
+    } finally {
+      main(() -> a.getWindow().getDecorView().getViewTreeObserver().removeOnDrawListener(listener));
+    }
   }
 
   private void resetQueryState() throws Exception {
-    File target = new File(testDirectory, "library.json");
-    try (FileOutputStream out = new FileOutputStream(target)) {
-      out.write(pristineJsonBytes);
-      out.getFD().sync();
+    if (historicalSeed != null) installHistoricalStore(false);
+    else {
+      Library fixture = new Library(new JSONObject(new String(pristineJsonBytes, StandardCharsets.UTF_8)));
+      installFixtureStore(fixture);
     }
-    new File(testDirectory, "library.json.bak").delete();
-
     main(() -> {
-      try {
-        a.library = new Library(new JSONObject(new String(pristineJsonBytes, StandardCharsets.UTF_8)));
-        a.committed = a.library.snapshot();
-        a.session = null;
-        a.titles.reset();
-        a.screen = "tabs";
-        a.page = 0;
-        a.query = new QueryUi(a);
-        a.query.homeMode = "text";
-        a.query.draft = "project budget";
-        a.render();
-      } catch (Exception e) {
-        throw new RuntimeException("Reset query state failed: " + e.getMessage(), e);
-      }
+      a.session = null;
+      a.titles.reset();
+      a.screen = "tabs";
+      a.page = 0;
+      a.query = new QueryUi(a);
+      a.query.homeMode = "text";
+      a.query.draft = "project budget";
+      a.render();
     });
     waitForIdleSync();
     SystemClock.sleep(50);
@@ -473,42 +570,14 @@ public final class PerformanceInstrumentation extends Instrumentation {
   }
 
   private Timing4 measureLocalQuery() throws Exception {
-    AtomicLong t0 = new AtomicLong(0);
-    AtomicLong t1 = new AtomicLong(0);
-    AtomicLong t2 = new AtomicLong(0);
-    AtomicLong t3 = new AtomicLong(0);
-
-    FileObserver observer = new FileObserver(testDirectory.getAbsolutePath(), FileObserver.CLOSE_WRITE | FileObserver.MOVED_TO) {
-      @Override
-      public void onEvent(int event, String path) {
-        if (path != null && (path.equals("library.json") || path.startsWith("library.json"))) {
-          t2.compareAndSet(0, SystemClock.elapsedRealtimeNanos());
-        }
-      }
-    };
-    observer.startWatching();
-
-    ViewTreeObserver.OnDrawListener drawListener = () -> t1.compareAndSet(0, SystemClock.elapsedRealtimeNanos());
-    main(() -> a.getWindow().getDecorView().getViewTreeObserver().addOnDrawListener(drawListener));
-
-    t0.set(SystemClock.elapsedRealtimeNanos());
-    main(() -> a.query.submit());
-    waitForIdleSync();
-    t3.set(SystemClock.elapsedRealtimeNanos());
-
-    observer.stopWatching();
-    main(() -> a.getWindow().getDecorView().getViewTreeObserver().removeOnDrawListener(drawListener));
-
-    long startNano = t0.get();
-    long contentNano = t1.get() > 0 ? t1.get() : t3.get();
-    long persistNano = t2.get() > 0 ? t2.get() : t3.get();
-    long idleNano = t3.get();
-
-    Timing4 t = new Timing4();
-    t.feedbackMs = Math.max(0.1, (contentNano - startNano) / 1_000_000.0);
-    t.persistMs = Math.max(0.1, (persistNano - startNano) / 1_000_000.0);
-    t.totalIdleMs = Math.max(0.1, (idleNano - startNano) / 1_000_000.0);
-    return t;
+    final boolean[] localHit = {false};
+    main(() -> localHit[0] = a.library.local("project budget") != null);
+    check(localHit[0], "fixture query is not a personal-library hit; refusing possible network fallback");
+    Timing4 timing = measureCommittedAction(() -> main(() -> a.query.submit()));
+    main(() -> localHit[0] = a.session != null && a.session.optJSONObject("query_results") != null
+        && a.session.optJSONObject("query_results").optBoolean("is_from_local"));
+    check(localHit[0], "query did not use the personal library");
+    return timing;
   }
 
   private void resetSearchState() {
@@ -547,13 +616,24 @@ public final class PerformanceInstrumentation extends Instrumentation {
       EditText input = (EditText) v;
       input.setText("project budget");
     });
+    long deadline = SystemClock.uptimeMillis() + 30000;
+    boolean correct = false;
+    while (SystemClock.uptimeMillis() < deadline) {
+      final boolean[] found = {false};
+      runOnMainSync(() -> found[0] = FeatureInstrumentation.find(a.root, w ->
+          w instanceof TextView && "结果 1 条".contentEquals(((TextView) w).getText())) != null);
+      if (found[0]) { correct = true; break; }
+      SystemClock.sleep(10);
+    }
+    check(correct, "latest search result was not observed");
     waitForIdleSync();
     t3.set(SystemClock.elapsedRealtimeNanos());
 
     main(() -> a.getWindow().getDecorView().getViewTreeObserver().removeOnDrawListener(drawListener));
 
+    check(t1.get() > 0, "first post-input draw was not observed");
     long startNano = t0.get();
-    long feedbackNano = t1.get() > 0 ? t1.get() : t3.get();
+    long feedbackNano = t1.get();
     long idleNano = t3.get();
 
     TimingSearch t = new TimingSearch();
@@ -586,6 +666,13 @@ public final class PerformanceInstrumentation extends Instrumentation {
     int yStart = (int) (height * 0.75f);
     int yEnd = (int) (height * 0.25f);
 
+    try (ParcelFileDescriptor reset = getUiAutomation().executeShellCommand(
+        "dumpsys gfxinfo com.lexinote.nativeapp reset");
+         InputStream stream = new ParcelFileDescriptor.AutoCloseInputStream(reset)) {
+      while (stream.read() != -1) { }
+    }
+    Trace.beginSection("notebook.scroll");
+    try {
     // 3 passes down, 3 passes up
     for (int pass = 0; pass < 3; pass++) {
       swipe(midX, yStart, midX, yEnd, 350);
@@ -596,6 +683,7 @@ public final class PerformanceInstrumentation extends Instrumentation {
       SystemClock.sleep(200);
     }
     waitForIdleSync();
+    } finally { Trace.endSection(); }
 
     try (ParcelFileDescriptor pfd = getUiAutomation().executeShellCommand("dumpsys gfxinfo com.lexinote.nativeapp framestats");
          InputStream in = new ParcelFileDescriptor.AutoCloseInputStream(pfd)) {

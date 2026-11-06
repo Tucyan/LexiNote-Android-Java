@@ -7,7 +7,7 @@ import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 
 /** Atomic document snapshots; both active and pre-restore snapshots retain a last good copy. */
-public final class Repository {
+public class Repository {
   private final File baseFile, previousFile;
   private final AtomicFile file, previous;
 

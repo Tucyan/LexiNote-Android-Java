@@ -20,6 +20,8 @@ public final class LibraryStore {
   private static volatile LibraryStore sInstance;
 
   private final StoreBackend backend;
+  private volatile long publishedGeneration = 1L, publishedRevision;
+  private volatile Exception initializationFailure;
   private final ExecutorService executor;
   private final Executor callbackExecutor;
   private final Set<Object> boundTokens = Collections.newSetFromMap(new WeakHashMap<>());
@@ -32,13 +34,14 @@ public final class LibraryStore {
         if (sInstance == null) {
           Context appCtx = context != null ? context.getApplicationContext() : null;
           File dir = (appCtx != null) ? appCtx.getFilesDir() : (context != null ? context.getFilesDir() : new File("."));
-          JsonStoreBackend backend = new JsonStoreBackend(dir);
-          try {
-            backend.initialize();
-          } catch (Exception e) {
-            // Allow fallback initialization so recovery UI can operate
-          }
+          com.lexinote.nativeapp.SqliteLibraryStore backend = new com.lexinote.nativeapp.SqliteLibraryStore(
+              appCtx != null ? appCtx : context, "library.db", new File(dir, "library.json"));
           sInstance = new LibraryStore(backend);
+          LibraryStore instance = sInstance;
+          instance.executor.execute(() -> {
+            try { backend.initialize(); instance.publishVersion(); }
+            catch (Exception error) { instance.initializationFailure = error; try { instance.publishVersion(); } catch (Exception unavailable) { } }
+          });
         }
       }
     }
@@ -99,11 +102,11 @@ public final class LibraryStore {
   }
 
   public long currentGeneration() {
-    return backend.getGeneration();
+    return publishedGeneration;
   }
 
   public long currentRevision() {
-    return backend.getRevision();
+    return publishedRevision;
   }
 
   public StoreBackend getBackend() {
@@ -125,23 +128,28 @@ public final class LibraryStore {
     executor.execute(() -> {
       CommitResult result;
       try {
+        if (initializationFailure != null && command.getType() != LibraryCommand.Type.IMPORT_LIBRARY)
+          throw initializationFailure;
         long expectedGen = command.getExpectedGeneration();
         if (expectedGen > 0 && expectedGen != backend.getGeneration()) {
           result = CommitResult.conflict(
               expectedGen, backend.getGeneration(), command.getEventId(), "Barrier reject");
         } else {
           result = backend.execute(command);
+          if (result.isSuccess() && command.getType() == LibraryCommand.Type.IMPORT_LIBRARY)
+            initializationFailure = null;
         }
       } catch (Exception e) {
         result = CommitResult.failure(
             CommitResult.Status.IO_ERROR,
-            backend.getGeneration(),
-            backend.getRevision(),
+            publishedGeneration,
+            publishedRevision,
             command.getEventId(),
             e.getMessage(),
             e);
       }
 
+      publishVersion();
       final CommitResult finalResult = result;
       callbackExecutor.execute(() -> {
         boolean shouldDeliver;
@@ -168,11 +176,11 @@ public final class LibraryStore {
    * Prohibited on the Android UI thread.
    */
   public CommitResult dispatchSync(LibraryCommand command) throws Exception {
-    try {
-      if (Looper.myLooper() != null && Looper.myLooper() == Looper.getMainLooper()) {
-        throw new IllegalStateException("Cannot call dispatchSync on the Android main thread");
-      }
-    } catch (Throwable ignored) {}
+    Looper main = null, current = null;
+    try { main = Looper.getMainLooper(); current = Looper.myLooper(); }
+    catch (RuntimeException unavailableInJvmTests) { }
+    if (main != null && current == main)
+      throw new IllegalStateException("Cannot call dispatchSync on the Android main thread");
 
     Future<CommitResult> future = executor.submit(() -> {
       long expectedGen = command.getExpectedGeneration();
@@ -180,7 +188,9 @@ public final class LibraryStore {
         return CommitResult.conflict(
             expectedGen, backend.getGeneration(), command.getEventId(), "Barrier reject");
       }
-      return backend.execute(command);
+      CommitResult result = backend.execute(command);
+      publishVersion();
+      return result;
     });
     return future.get();
   }
@@ -202,7 +212,7 @@ public final class LibraryStore {
       try {
         view = backend.query(request);
       } catch (Exception e) {
-        view = new ReadOnlyView(null, backend.getGeneration(), backend.getRevision());
+        view = new ReadOnlyView(null, publishedGeneration, publishedRevision);
       }
       final ReadOnlyView finalView = view;
       callbackExecutor.execute(() -> {
@@ -230,9 +240,76 @@ public final class LibraryStore {
     return sentinel.get(timeout, unit);
   }
 
-  public void shutdown() {
+  public interface StoreWork<T> { T run(StoreBackend backend) throws Exception; }
+
+  /** All database/backup work shares the command queue and generation barrier. */
+  public <T> void runExclusive(Object token, StoreWork<T> work,
+      java.util.function.BiConsumer<T, Exception> callback) {
+    runExclusive(token, false, work, callback);
+  }
+
+  /** Only an explicit import may recover an unavailable initial database. */
+  public <T> void runRecoveryExclusive(Object token, StoreWork<T> work,
+      java.util.function.BiConsumer<T, Exception> callback) {
+    runExclusive(token, true, work, callback);
+  }
+
+  private <T> void runExclusive(Object token, boolean recovery, StoreWork<T> work,
+      java.util.function.BiConsumer<T, Exception> callback) {
+    executor.execute(() -> {
+      T value = null; Exception failure = null;
+      try {
+        if (!recovery && initializationFailure != null) throw initializationFailure;
+        value = work.run(backend); publishVersion();
+        if (recovery && value instanceof CommitResult && ((CommitResult) value).isSuccess()) initializationFailure = null;
+      }
+      catch (Exception error) { failure = error; }
+      final T delivered = value; final Exception error = failure;
+      callbackExecutor.execute(() -> {
+        synchronized (tokenLock) { if (token != null && !boundTokens.contains(token)) return; }
+        callback.accept(delivered, error);
+      });
+    });
+  }
+
+  private void publishVersion() {
+    try {
+      long generation = backend.getGeneration();
+      long revision = backend.getRevision();
+      publishedGeneration = generation;
+      publishedRevision = revision;
+    } catch (RuntimeException unavailableDatabase) {
+      // Retain the last published pair so a failed open still receives its callback.
+    }
+  }
+
+  /** Constructs the detached display model entirely on the storage worker. */
+  public void loadLibrary(Object token, Consumer<CommitResult> callback) {
+    executor.execute(() -> {
+      CommitResult result;
+      try {
+        if (initializationFailure != null) throw initializationFailure;
+        com.lexinote.nativeapp.Library library = new com.lexinote.nativeapp.Library(
+            backend.loadSnapshot().getRawDocument());
+        publishVersion();
+        result = CommitResult.success(publishedGeneration, publishedRevision, "", null,
+            Collections.emptyList(), "Loaded", library);
+      } catch (Exception error) {
+        result = CommitResult.failure(CommitResult.Status.IO_ERROR, publishedGeneration,
+            publishedRevision, "", error.getMessage(), error);
+      }
+      final CommitResult delivered = result;
+      callbackExecutor.execute(() -> {
+        synchronized (tokenLock) { if (token != null && !boundTokens.contains(token)) return; }
+        callback.accept(delivered);
+      });
+    });
+  }
+
+  public synchronized void shutdown() {
+    if (executor.isShutdown()) return;
+    executor.execute(backend::close);
     executor.shutdown();
-    backend.close();
   }
 
   private static class MainHandlerExecutor implements Executor {

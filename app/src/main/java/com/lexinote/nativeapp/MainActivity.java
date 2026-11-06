@@ -24,6 +24,8 @@ public final class MainActivity extends Activity {
   Library library;
   Repository repository;
   public LibraryStore store;
+  public long dataRevision, uiEpoch;
+  long libraryRevision, libraryGeneration;
   SecureSettings secure;
   LinearLayout root, body, nav, footer;
   ScrollView scroll;
@@ -52,6 +54,7 @@ public final class MainActivity extends Activity {
   File pendingExport;
   boolean recoveryOnly;
   String loadFailure;
+  Bundle pendingStartupState;
   int lastPage = -1;
   String lastScreen = "";
   int savedScrollX = 0;
@@ -60,27 +63,26 @@ public final class MainActivity extends Activity {
   @Override
   public void onCreate(Bundle state) {
     super.onCreate(state);
+    pendingStartupState = state;
     repository = new Repository(this);
     secure = new SecureSettings(this);
     titles = new ConversationTitles(this);
     store = LibraryStore.getInstance(this);
     store.bind(this);
-    try {
-      if (store.getBackend() instanceof JsonStoreBackend) {
-        JsonStoreBackend jsonBackend = (JsonStoreBackend) store.getBackend();
-        if (jsonBackend.getInitError() != null) {
-          throw jsonBackend.getInitError();
-        }
-        library = jsonBackend.getWorkingLibrarySnapshot();
-      } else {
-        library = repository.load();
+    store.loadLibrary(this, result -> {
+      if (!alive()) return;
+      if (result.isSuccess()) { library = result.getSnapshot(); libraryRevision = result.getAppliedRevision(); libraryGeneration = result.getAppliedGeneration(); }
+      else {
+        library = new Library();
+        recoveryOnly = true;
+        loadFailure = result.getMessage();
       }
-      committed = library.snapshot();
-    } catch (Exception e) {
-      library = new Library();
-      recoveryOnly = true;
-      loadFailure = e.getMessage();
-    }
+      initializeScreen(state);
+    });
+  }
+
+  private void initializeScreen(Bundle state) {
+    pendingStartupState = null;
     query = new QueryUi(this);
     notebooks = new NotebookUi(this);
     review = new ReviewUi(this);
@@ -151,6 +153,7 @@ public final class MainActivity extends Activity {
       getOnBackInvokedDispatcher()
           .registerOnBackInvokedCallback(
               android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::handleBack);
+    review.restoreState(state);
     render();
   }
 
@@ -184,6 +187,8 @@ public final class MainActivity extends Activity {
   }
 
   void render() {
+    uiEpoch++;
+    if (review != null) { if (page == 3 && screen.equals("tabs") && "active".equals(review.phase)) review.resumeTimer(); else review.pauseTimer(); }
     if (library == null) return;
     if (query != null && query.assistantView != null) {
       query.assistantView.saveAnchor();
@@ -716,38 +721,96 @@ public final class MainActivity extends Activity {
     showDialog(b);
   }
 
-  boolean persist() {
-    if (recoveryOnly) return false;
+  /** Compatibility entry point; use persistAsync when UI behavior depends on confirmation. */
+  void persist() { persistAsync(null); }
+
+  private static final class PendingSave {
+    final Runnable mutation;
+    final java.util.function.Consumer<Boolean> callback;
+    PendingSave(Runnable mutation, java.util.function.Consumer<Boolean> callback) {
+      this.mutation = mutation; this.callback = callback;
+    }
+  }
+  private final ArrayDeque<PendingSave> pendingSaves = new ArrayDeque<>();
+  private boolean savingSnapshot;
+
+  void persistAsync(java.util.function.Consumer<Boolean> callback) {
+    enqueueSave(null, callback);
+  }
+
+  private void enqueueSave(Runnable mutation, java.util.function.Consumer<Boolean> callback) {
+    if (recoveryOnly) { if (callback != null) callback.accept(false); return; }
+    if (mutation != null) dataRevision++;
+    pendingSaves.addLast(new PendingSave(mutation, callback));
+    runNextSave();
+  }
+
+  private void runNextSave() {
+    if (savingSnapshot || pendingSaves.isEmpty()) return;
+    final PendingSave job = pendingSaves.removeFirst();
+    savingSnapshot = true;
     try {
+      if (job.mutation != null) job.mutation.run();
       final JSONObject snapshot = library.snapshot();
-      committed = snapshot;
-      if (store != null) {
-        store.dispatch(this, LibraryCommand.persistSnapshot(store.currentGeneration(), snapshot, System.currentTimeMillis()), result -> {
-          if (!result.isSuccess()) {
-            error(new IOException("后台写入失败：" + result.getMessage()));
-          }
-        });
-      } else {
-        repository.save(library);
-      }
-      return true;
+      final String sessionId = session == null ? null : session.optString("id");
+      store.dispatch(this, LibraryCommand.persistSnapshot(libraryGeneration, libraryRevision, snapshot, System.currentTimeMillis()), result -> {
+        if (result.isSuccess()) {
+          committed = snapshot; dataRevision++; libraryRevision = result.getAppliedRevision(); libraryGeneration = result.getAppliedGeneration();
+          savingSnapshot = false;
+          if (job.mutation != null) render();
+          if (job.callback != null) job.callback.accept(true);
+          runNextSave();
+        } else failQueuedSave(job, new IOException("后台写入失败：" + result.getMessage()), sessionId);
+      });
     } catch (Exception e) {
       String sessionId = session == null ? null : session.optString("id");
-      if (committed != null) {
-        library = new Library(committed);
-        session = sessionId == null ? null : library.find("conversations", sessionId);
-      }
-      error(new IOException("写入失败，已恢复上次成功保存的数据：" + e.getMessage(), e));
-      return false;
+      failQueuedSave(job, new IOException("写入失败：" + e.getMessage(), e), sessionId);
     }
+  }
+
+  private void failQueuedSave(PendingSave job, Exception cause, String sessionId) {
+    restoreAfterFailedSave(cause, sessionId, ignored -> {
+      // Waiting mutations can refer to objects from the discarded view; reject rather than replay them.
+      ArrayList<PendingSave> rejected = new ArrayList<>(pendingSaves);
+      pendingSaves.clear();
+      if (job.callback != null) job.callback.accept(false);
+      for (PendingSave waiting : rejected) if (waiting.callback != null) waiting.callback.accept(false);
+      savingSnapshot = false;
+      runNextSave();
+    });
+  }
+
+  void restoreAfterFailedSave(Exception cause, String sessionId, java.util.function.Consumer<Boolean> callback) {
+    restoreAfterFailedSave(cause, sessionId, () -> true, callback);
+  }
+
+  void restoreAfterFailedSave(Exception cause, String sessionId,
+      java.util.function.BooleanSupplier sameRequest, java.util.function.Consumer<Boolean> callback) {
+    store.loadLibrary(this, loaded -> {
+      boolean current = sameRequest.getAsBoolean();
+      if (loaded.isSuccess() && loaded.getSnapshot() != null) {
+        library = loaded.getSnapshot(); dataRevision++; libraryRevision = loaded.getAppliedRevision(); libraryGeneration = loaded.getAppliedGeneration();
+        if (current) session = sessionId == null ? null : library.find("conversations", sessionId);
+      } else {
+        // The last committed state cannot be verified; stop further writes until recovery.
+        recoveryOnly = true; loadFailure = "保存失败且无法重新读取已提交数据";
+      }
+      if (current) error(cause);
+      if (current || recoveryOnly) render();
+      if (callback != null) callback.accept(false);
+    });
+  }
+
+  void changeAsync(Runnable action, java.util.function.Consumer<Boolean> callback) {
+    enqueueSave(action, callback);
   }
 
   public void dispatch(LibraryCommand command, java.util.function.Consumer<CommitResult> callback) {
     if (store != null) {
       store.dispatch(this, command, result -> {
-        if (result.isSuccess() && result.getSnapshot() != null) {
-          this.library = result.getSnapshot();
-          render();
+        if (result.isSuccess()) {
+          dataRevision++; libraryRevision = result.getAppliedRevision(); libraryGeneration = result.getAppliedGeneration();
+          if (result.getSnapshot() != null) this.library = result.getSnapshot();
         }
         if (callback != null) {
           callback.accept(result);
@@ -756,22 +819,7 @@ public final class MainActivity extends Activity {
     }
   }
 
-  boolean change(Runnable r) {
-    JSONObject before = library.snapshot();
-    JSONObject oldSession = session == null ? null : Library.copy(session);
-    try {
-      r.run();
-      boolean saved = persist();
-      render();
-      return saved;
-    } catch (Exception e) {
-      library = new Library(before);
-      session = oldSession;
-      error(e);
-      render();
-      return false;
-    }
-  }
+  void change(Runnable action) { changeAsync(action, null); }
 
   interface Work {
     JSONObject run(AiClient client) throws Exception;
@@ -786,6 +834,15 @@ public final class MainActivity extends Activity {
   }
 
   void request(Work work, Done done, boolean modal) {
+    request(work, done, modal, true);
+  }
+
+  /** The result handler commits its own session delta. */
+  void requestSessionResult(Work work, Done done, boolean modal) {
+    request(work, done, modal, false);
+  }
+
+  private void request(Work work, Done done, boolean modal, boolean persistResult) {
     if (active != null) {
       say("正在请求，可取消后重新发送");
       return;
@@ -795,6 +852,7 @@ public final class MainActivity extends Activity {
     try {
       active = new AiClient(secure.getProvider(), secure.getApiKey());
     } catch (Exception e) {
+      rememberRequestFailure(e);
       error(e);
       return;
     }
@@ -820,9 +878,11 @@ public final class MainActivity extends Activity {
                   query.partialReply = "";
                   try {
                     done.accept(value);
-                    if (persist()) titles.schedule(session);
-                    render();
+                    if (persistResult)
+                      persistAsync(saved -> { if (saved) { if (session != null) titles.schedule(session); render(); } });
+                    else render();
                   } catch (Exception e) {
+                    rememberRequestFailure(e);
                     error(e);
                   }
                 });
@@ -833,9 +893,8 @@ public final class MainActivity extends Activity {
                   if (token != aiRequestToken || !alive()) return;
                   active = null;
                   query.partialReply = "";
-                  if (session != null && session == requestSession) {
-                    StackTraceElement[] trace = e.getStackTrace();
-                    requestFailureLocation = trace.length == 0 ? "" : trace[0].toString();
+                  rememberRequestFailure(e);
+                  if (persistResult && session != null && session == requestSession) {
                     Library.put(session, "last_error", e.getMessage());
                     library.touchSession(session, true);
                     persist();
@@ -849,6 +908,12 @@ public final class MainActivity extends Activity {
                 });
           }
         });
+  }
+
+  private void rememberRequestFailure(Exception error) {
+    StackTraceElement[] trace = error.getStackTrace();
+    requestFailureLocation = error.getClass().getSimpleName()
+        + (trace.length == 0 ? "" : " @ " + trace[0]);
   }
 
   void cancel() {
@@ -1080,6 +1145,8 @@ public final class MainActivity extends Activity {
 
   @Override
   protected void onSaveInstanceState(Bundle state) {
+    if (settingsUi == null) { if (pendingStartupState != null) state.putAll(pendingStartupState); super.onSaveInstanceState(state); return; }
+    review.saveState(state);
     settingsUi.models.saveState(state);
     super.onSaveInstanceState(state);
     state.putInt("page", page);
@@ -1132,42 +1199,60 @@ public final class MainActivity extends Activity {
     return out.toByteArray();
   }
 
-  void backupZip() {
-    final JSONObject snapshot = library.backup();
-    ProgressDialog p = ProgressDialog.show(this, "", "正在整理备份和图片…", true, false);
-    worker.execute(
-        () -> {
-          try {
-            byte[] bytes =
-                BackupArchive.encode(
-                    snapshot,
-                    uri -> {
-                      if (uri.startsWith("data:image/")) {
-                        int comma = uri.indexOf(',');
-                        if (comma < 0) throw new IOException("图片数据无效");
-                        return android.util.Base64.decode(
-                            uri.substring(comma + 1), android.util.Base64.DEFAULT);
-                      }
-                      Uri value = Uri.parse(uri);
-                      if (!"file".equals(value.getScheme()) && !"content".equals(value.getScheme()))
-                        throw new IOException("无法打包外部图片，请先重新选择图片：" + uri);
-                      try (InputStream in = getContentResolver().openInputStream(value)) {
-                        return readBounded(in);
-                      }
-                    });
-            handler.post(
-                () -> {
-                  p.dismiss();
-                  if (alive()) export("lexinote-backup.zip", "application/zip", bytes);
-                });
-          } catch (Exception e) {
-            handler.post(
-                () -> {
-                  p.dismiss();
-                  error(e);
-                });
+  void backupZip() { prepareBackup(true); }
+
+  void backupJson() { prepareBackup(false); }
+
+  private void prepareBackup(boolean zip) {
+    ProgressDialog progress = ProgressDialog.show(this, "", "正在整理备份和图片…", true, false);
+    store.runExclusive(null, backend -> {
+      File raw = File.createTempFile("backup-source-", ".json", getCacheDir());
+      try (OutputStream out = new FileOutputStream(raw)) {
+        if (backend instanceof SqliteLibraryStore) ((SqliteLibraryStore) backend).exportJson(out);
+        else out.write(backend.loadSnapshot().getRawDocument().toString().getBytes(StandardCharsets.UTF_8));
+        return raw;
+      } catch (Exception e) { raw.delete(); throw e; }
+    }, (raw, failure) -> {
+      if (failure != null) { progress.dismiss(); if (alive()) error(failure); return; }
+      if (!alive()) { raw.delete(); progress.dismiss(); return; }
+      worker.execute(() -> {
+        File staged = null;
+        try {
+          staged = File.createTempFile("export-", ".bin", getCacheDir());
+          try (InputStream in = new FileInputStream(raw); OutputStream out = new FileOutputStream(staged)) {
+            if (zip) BackupStreamCodec.encode(in, out, uri -> {
+              if (uri.startsWith("data:image/")) {
+                int comma = uri.indexOf(',');
+                if (comma < 0) throw new IOException("图片数据无效");
+                return new android.util.Base64InputStream(
+                    new ByteArrayInputStream(uri.substring(comma + 1).getBytes(StandardCharsets.US_ASCII)), android.util.Base64.DEFAULT);
+              }
+              Uri value = Uri.parse(uri);
+              if (!"file".equals(value.getScheme()) && !"content".equals(value.getScheme()))
+                throw new IOException("无法打包外部图片，请先重新选择图片");
+              InputStream imageStream = getContentResolver().openInputStream(value);
+              if (imageStream == null) throw new IOException("无法读取图片");
+              return imageStream;
+            });
+            else BackupStreamCodec.encodeJson(in, out);
           }
-        });
+          final File completed = staged;
+          handler.post(() -> {
+            progress.dismiss();
+            if (!alive()) { completed.delete(); return; }
+            pendingExport = completed;
+            Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType(zip ? "application/zip" : "application/json");
+            i.putExtra(Intent.EXTRA_TITLE, zip ? "lexinote-backup.zip" : "lexinote-backup.json");
+            startActivityForResult(i, 201);
+          });
+        } catch (Exception e) {
+          if (staged != null) staged.delete();
+          handler.post(() -> { progress.dismiss(); if (alive()) error(e); });
+        } finally { raw.delete(); }
+      });
+    });
   }
 
   void restore() {
@@ -1182,93 +1267,124 @@ public final class MainActivity extends Activity {
 
   void prepareRestore(Uri uri) {
     cancel();
-    ProgressDialog p = ProgressDialog.show(this, "", "正在校验备份…", true, false);
-    worker.execute(
-        () -> {
-          try (InputStream in = getContentResolver().openInputStream(uri)) {
-            BackupArchive.Prepared prepared = BackupArchive.decode(readBounded(in));
-            handler.post(
-                () -> {
-                  p.dismiss();
-                  if (!alive()) return;
-                  JSONObject b = prepared.backup;
-                  AlertDialog.Builder builder =
-                      new AlertDialog.Builder(this)
-                          .setTitle("确认覆盖恢复")
-                          .setMessage(
-                              "词汇 "
-                                  + b.optJSONArray("vocabularies").length()
-                                  + " · 笔记 "
-                                  + b.optJSONArray("notebooks").length()
-                                  + " · 图片 "
-                                  + prepared.assets.size()
-                                  + "\n将覆盖本机数据；供应商及密钥保留。旧 JSON 图片可能无法跨设备读取。")
-                          .setNegativeButton("取消", null)
-                          .setPositiveButton("恢复", (d, w) -> applyRestore(prepared));
-                  showDialog(builder);
-                });
-          } catch (Exception e) {
-            handler.post(
-                () -> {
-                  p.dismiss();
-                  error(e);
-                });
-          }
+    ProgressDialog progress = ProgressDialog.show(this, "", "正在校验备份…", true, false);
+    worker.execute(() -> {
+      try (InputStream in = getContentResolver().openInputStream(uri)) {
+        if (in == null) throw new IOException("无法打开所选文件");
+        BackupStreamCodec.Prepared prepared = BackupStreamCodec.decode(in, getCacheDir());
+        final int[] counts;
+        try { counts = countBackupEntries(prepared.backupJson); }
+        catch (Exception e) { prepared.close(); throw e; }
+        handler.post(() -> {
+          progress.dismiss();
+          if (!alive()) { prepared.close(); return; }
+          final boolean[] accepted = {false};
+          AlertDialog.Builder builder = new AlertDialog.Builder(this)
+              .setTitle("确认覆盖恢复")
+              .setMessage("词汇 " + counts[0] + " · 笔记 " + counts[1] + " · 图片 " + prepared.assets.size()
+                  + "\n将覆盖本机数据；供应商及密钥保留。旧 JSON 图片可能无法跨设备读取。")
+              .setNegativeButton("取消", (d, w) -> prepared.close())
+              .setOnCancelListener(d -> prepared.close())
+              .setPositiveButton("恢复", (d, w) -> { accepted[0] = true; applyRestore(prepared); });
+          AlertDialog dialog = showDialog(builder);
+          dialog.setOnDismissListener(d -> { if (!accepted[0]) prepared.close(); });
         });
+      } catch (Exception e) { handler.post(() -> { progress.dismiss(); if (alive()) error(e); }); }
+    });
   }
 
-  void applyRestore(BackupArchive.Prepared prepared) {
-    cancel();
-    titles.reset();
-    final Library before = library;
-    final int token = ++aiRequestToken;
-    ProgressDialog p = ProgressDialog.show(this, "", "正在恢复…", true, false);
-    worker.execute(
-        () -> {
+  private int[] countBackupEntries(File source) throws Exception {
+    int[] counts = new int[2];
+    try (android.util.JsonReader reader = new android.util.JsonReader(new InputStreamReader(new FileInputStream(source), StandardCharsets.UTF_8))) {
+      reader.beginObject();
+      while (reader.hasNext()) {
+        String name = reader.nextName();
+        int index = name.equals("vocabularies") ? 0 : name.equals("notebooks") ? 1 : -1;
+        if (index < 0) reader.skipValue();
+        else { reader.beginArray(); while (reader.hasNext()) { reader.skipValue(); counts[index]++; } reader.endArray(); }
+      }
+      reader.endObject();
+    }
+    return counts;
+  }
+
+  void applyRestore(BackupStreamCodec.Prepared prepared) {
+    cancel(); titles.reset();
+    final long expectedGeneration = store.currentGeneration();
+    ProgressDialog progress = ProgressDialog.show(this, "", "正在恢复…", true, false);
+    worker.execute(() -> {
+      File directory = new File(getFilesDir(), "restored/" + Library.id());
+      File materialized = null;
+      try {
+        if (!directory.mkdirs()) throw new IOException("无法创建图片恢复目录");
+        materialized = File.createTempFile("restore-", ".json", getCacheDir());
+        try (OutputStream output = new FileOutputStream(materialized)) {
+          prepared.materialize(output, (name, asset) -> {
+            File dest = new File(directory, new File(name).getName());
+            try (InputStream input = new FileInputStream(asset); FileOutputStream out = new FileOutputStream(dest)) {
+              byte[] buffer = new byte[8192]; int n;
+              while ((n = input.read(buffer)) != -1) out.write(buffer, 0, n);
+              out.getFD().sync();
+            }
+            return Uri.fromFile(dest).toString();
+          });
+        }
+        prepared.close();
+        File ready = materialized;
+        store.runRecoveryExclusive(null, backend -> {
           try {
-            File directory = new File(getFilesDir(), "restored/" + Library.id());
-            if (!directory.mkdirs()) throw new IOException("无法创建图片恢复目录");
-            JSONObject backup =
-                BackupArchive.materialize(
-                    prepared,
-                    (name, bytes) -> {
-                      File dest = new File(directory, new File(name).getName());
-                      try (FileOutputStream out = new FileOutputStream(dest)) {
-                        out.write(bytes);
-                        out.getFD().sync();
-                      }
-                      return Uri.fromFile(dest).toString();
-                    });
+            if (backend instanceof SqliteLibraryStore)
+              return ((SqliteLibraryStore) backend).importJson(ready, expectedGeneration);
+            // Legacy backend still has its original bounded in-memory JSON contract.
+            if (ready.length() > BackupArchive.MAX_JSON_BYTES) throw new IOException("当前后端尚不能安全恢复超过旧版容量的备份");
+            byte[] bytes = java.nio.file.Files.readAllBytes(ready.toPath());
+            JSONObject backup = new JSONObject(new String(bytes, StandardCharsets.UTF_8).replaceFirst("^\\uFEFF", ""));
+            Library.validate(backup);
             if (recoveryOnly) repository.preserveCorruptData();
-            Library restored = repository.restore(backup, before);
-            handler.post(
-                () -> {
-                  p.dismiss();
-                  if (token != aiRequestToken || !alive()) return;
-                  library = restored;
-                  if (store != null) {
-                    store.dispatch(MainActivity.this, LibraryCommand.importLibrary(0L, backup, System.currentTimeMillis()), r -> {
-                      // Backend is atomically updated and synchronized with new generation
-                    });
-                  }
-                  titles.reset();
-                  recoveryOnly = false;
-                  committed = library.snapshot();
-                  session = null;
-                  clearImage();
-                  review.queue.clear();
-                  notebooks.selected = null;
-                  render();
-                  say("已恢复，可在设置回到恢复前");
-                });
-          } catch (Exception e) {
-            handler.post(
-                () -> {
-                  p.dismiss();
-                  error(e);
-                });
+            return backend.restore(backup, expectedGeneration);
+          } finally { ready.delete(); }
+        }, (result, failure) -> {
+          if (failure != null || result == null || !result.isSuccess()) {
+            progress.dismiss(); deleteRestoredDirectory(directory);
+            if (alive()) error(failure != null ? failure : new IOException(result == null ? "恢复失败" : result.getMessage()));
+            return;
           }
+          // The database commit has succeeded even if the subsequent display reload fails.
+          store.loadLibrary(null, loaded -> {
+            progress.dismiss();
+            if (!alive()) return;
+            if (!loaded.isSuccess() || loaded.getSnapshot() == null) {
+              error(new IOException("恢复已提交，但重新读取失败，请重启应用：" + loaded.getMessage()));
+              return;
+            }
+            library = loaded.getSnapshot(); dataRevision++; libraryRevision = loaded.getAppliedRevision(); libraryGeneration = loaded.getAppliedGeneration();
+            titles.reset(); recoveryOnly = false; committed = null;
+            session = null; image = originalImage = null;
+            review.queue.clear(); notebooks.selected = null;
+            render(); say("已恢复，可在设置回到恢复前");
+          });
         });
+      } catch (Exception e) {
+        prepared.close(); if (materialized != null) materialized.delete(); deleteRestoredDirectory(directory);
+        handler.post(() -> { progress.dismiss(); if (alive()) error(e); });
+      }
+    });
+  }
+
+  private static void deleteRestoredDirectory(File directory) {
+    File[] files = directory.listFiles();
+    if (files != null) for (File file : files) file.delete();
+    directory.delete();
+  }
+
+  void rollbackLibrary() {
+    cancel(); titles.reset();
+    dispatch(LibraryCommand.rollbackLibrary(store.currentGeneration(), System.currentTimeMillis()), result -> {
+      if (!result.isSuccess()) { error(new IOException(result.getMessage())); return; }
+      session = null; activeVocabulary = null; committed = null;
+      review.phase = "dashboard"; notebooks.selected = null;
+      render(); say("已回退");
+    });
   }
 
   @Override
@@ -1320,7 +1436,9 @@ public final class MainActivity extends Activity {
 
   @Override
   protected void onDestroy() {
+    uiEpoch++;
     cancel();
+    if (notebooks != null) notebooks.close();
     if (settingsUi != null) settingsUi.models.close();
     if (titles != null) titles.close();
     if (store != null) {
@@ -1331,7 +1449,14 @@ public final class MainActivity extends Activity {
   }
 
   @Override
+  protected void onResume() {
+    super.onResume();
+    if (review != null && page == 3 && "tabs".equals(screen) && "active".equals(review.phase)) review.resumeTimer();
+  }
+
+  @Override
   protected void onPause() {
+    if (review != null) review.pauseTimer();
     if (query != null && query.assistantView != null && session != null) {
       query.assistantView.saveAnchor();
       library.touchSession(session, false);

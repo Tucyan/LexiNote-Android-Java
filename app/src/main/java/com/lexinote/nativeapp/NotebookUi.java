@@ -12,6 +12,14 @@ final class NotebookUi {
   static final Set<String> SYSTEM_STATUS_TAGS = new HashSet<>(Arrays.asList("已学习", "待复习", "未学习"));
 
   final MainActivity a;
+  final NotebookSearchIndex searchIndex = new NotebookSearchIndex();
+  final android.os.Handler searchHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+  final java.util.concurrent.ExecutorService searchExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
+  long searchRequest;
+  Runnable pendingSearch;
+  java.util.concurrent.Future<?> inFlightSearch;
+  boolean saveResultPending;
+  boolean searchPending;
   String selected = null, filter = "", typeFilter = "全部";
   final LinkedHashSet<String> selectedTags = new LinkedHashSet<>();
   String statusFilter = "全部"; // 全部, 待复习, 已学习
@@ -24,6 +32,8 @@ final class NotebookUi {
   String resultScope = "";
   boolean selecting = false;
   final LinkedHashSet<String> selectedVocabularyIds = new LinkedHashSet<>();
+  final Map<String, CheckBox> selectionBoxes = new HashMap<>();
+  Button selectionActionButton;
 
   NotebookUi(MainActivity a) {
     this.a = a;
@@ -130,6 +140,7 @@ final class NotebookUi {
     Set<String> refs = notebookReferences(n);
     JSONArray vs = a.library.array("vocabularies");
     int count = 0;
+    String query = NotebookSearch.norm(filter);
     for (int i = 0; i < vs.length(); i++) {
       JSONObject v = vs.optJSONObject(i);
       if (v == null) continue;
@@ -159,18 +170,21 @@ final class NotebookUi {
           if (ms == null || ms.length() <= 1) continue;
         }
       }
-      if (!NotebookSearch.matches(v, filter)) continue;
+      if (!searchIndex.matches(v, query)) continue;
       count++;
     }
     return count;
   }
 
-  List<JSONObject> visible() {
+  List<JSONObject> visible() { return visible(true); }
+
+  List<JSONObject> visible(boolean applySearch) {
     List<JSONObject> out = new ArrayList<>();
     JSONObject n = (selected == null || "nb_global_root".equals(selected))
         ? null : a.library.find("notebooks", selected);
     Set<String> refs = notebookReferences(n);
     JSONArray vs = a.library.array("vocabularies");
+    String query = NotebookSearch.norm(filter);
     for (int i = 0; i < vs.length(); i++) {
       JSONObject v = vs.optJSONObject(i);
       if (refs != null && !refs.contains(v.optString("id"))) continue;
@@ -199,7 +213,7 @@ final class NotebookUi {
           if (ms == null || ms.length() <= 1) continue;
         }
       }
-      if (!NotebookSearch.matches(v, filter)) continue;
+      if (applySearch && !searchIndex.matches(v, query)) continue;
       out.add(v);
     }
     if ("最新".equals(sortOrder)) {
@@ -278,15 +292,20 @@ final class NotebookUi {
       public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
       public void onTextChanged(CharSequence s, int start, int before, int count) {
         filter = s.toString();
-        a.render();
+        if (filter.trim().isEmpty()) return;
+        f.post(() -> {
+          if (f.getParent() != tools || filter.trim().isEmpty() || selected != null
+              || a.page != 2 || !"tabs".equals(a.screen)) return;
+          f.removeTextChangedListener(this);
+          tools.removeView(f);
+          a.body.removeAllViews();
+          renderNotebookVocabList(f);
+          f.requestFocus();
+        });
       }
       public void afterTextChanged(android.text.Editable s) {}
     });
-    f.setOnEditorActionListener((v, action, event) -> {
-      filter = f.getText().toString();
-      a.render();
-      return true;
-    });
+    f.setOnEditorActionListener((v, action, event) -> true);
 
     // Bookshelf Welcome Header
     LinearLayout shelfHeader = a.row();
@@ -655,7 +674,9 @@ final class NotebookUi {
     return card;
   }
 
-  void renderNotebookVocabList() {
+  void renderNotebookVocabList() { renderNotebookVocabList(null); }
+
+  void renderNotebookVocabList(EditText reusedSearch) {
     LinearLayout controls = a.column();
     controls.setBackgroundColor(a.card);
     a.root.addView(controls, a.root.indexOfChild(a.scroll));
@@ -724,7 +745,7 @@ final class NotebookUi {
     // 2. Search & Export Bar
     LinearLayout tools = a.row();
     tools.setPadding(a.dp(14), a.dp(4), a.dp(14), a.dp(6));
-    EditText f = a.input("搜索词汇、含义或例句…", filter, false);
+    EditText f = reusedSearch != null ? reusedSearch : a.input("搜索词汇、含义或例句…", filter, false);
     f.setTextSize(13 * a.scale);
     f.setMinHeight(0);
     f.setPadding(a.dp(10), 0, a.dp(8), 0);
@@ -744,13 +765,13 @@ final class NotebookUi {
       public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
       public void onTextChanged(CharSequence s, int start, int before, int count) {
         filter = s.toString();
-        renderResults(controls);
+        scheduleSearch(controls, export);
       }
       public void afterTextChanged(android.text.Editable s) {}
     });
     f.setOnEditorActionListener((v, action, event) -> {
       filter = f.getText().toString();
-      renderResults(controls);
+      scheduleSearch(controls, export);
       return true;
     });
 
@@ -877,8 +898,80 @@ final class NotebookUi {
     renderResults(controls);
   }
 
+  void close() {
+    searchRequest++;
+    if (pendingSearch != null) searchHandler.removeCallbacks(pendingSearch);
+    if (inFlightSearch != null) inFlightSearch.cancel(true);
+    selectionBoxes.clear();
+    selectionActionButton = null;
+    resultsBar = null;
+    searchExecutor.shutdownNow();
+  }
+
+  private void setTreeEnabled(View view, boolean enabled) {
+    view.setEnabled(enabled);
+    if (view instanceof android.view.ViewGroup) {
+      android.view.ViewGroup group = (android.view.ViewGroup) view;
+      for (int i = 0; i < group.getChildCount(); i++) setTreeEnabled(group.getChildAt(i), enabled);
+    }
+  }
+
+  private void scheduleSearch(LinearLayout controls, Button export) {
+    long request = ++searchRequest;
+    if (pendingSearch != null) searchHandler.removeCallbacks(pendingSearch);
+    if (inFlightSearch != null) inFlightSearch.cancel(true);
+    setTreeEnabled(a.body, false);
+    if (resultsBar != null) setTreeEnabled(resultsBar, false);
+    export.setEnabled(false);
+    pendingSearch = () -> {
+      String query = NotebookSearch.norm(filter);
+      long revision = a.dataRevision, epoch = a.uiEpoch;
+      Library library = a.library;
+      List<JSONObject> candidates;
+      List<NotebookSearchIndex.Projection> snapshots = new ArrayList<>();
+      android.os.Trace.beginSection("query.prepare");
+      try {
+        candidates = visible(false);
+        for (JSONObject candidate : candidates) snapshots.add(searchIndex.snapshot(candidate));
+      } finally {
+        android.os.Trace.endSection();
+      }
+      inFlightSearch = searchExecutor.submit(() -> {
+        List<Integer> matched = new ArrayList<>();
+        android.os.Trace.beginSection("query.filter");
+        try {
+          for (int i = 0; i < snapshots.size(); i++) {
+            if (Thread.currentThread().isInterrupted()) return;
+            if (snapshots.get(i).matches(query)) matched.add(i);
+          }
+        } finally {
+          android.os.Trace.endSection();
+        }
+        searchHandler.post(() -> {
+          if (request != searchRequest || epoch != a.uiEpoch || controls.getParent() == null
+              || a.page != 2 || !"tabs".equals(a.screen)) return;
+          if (revision != a.dataRevision || library != a.library) {
+            scheduleSearch(controls, export);
+            return;
+          }
+          List<JSONObject> rows = new ArrayList<>();
+          for (int index : matched) rows.add(candidates.get(index));
+          a.body.setEnabled(true);
+          export.setEnabled(true);
+          renderResults(controls, rows);
+        });
+      });
+    };
+    searchHandler.postDelayed(pendingSearch, 75);
+  }
   LinearLayout resultsBar;
   void renderResults(LinearLayout controls) {
+    renderResults(controls, visible());
+  }
+
+  void renderResults(LinearLayout controls, List<JSONObject> rows) {
+    selectionBoxes.clear();
+    selectionActionButton = null;
     a.body.removeAllViews();
     if (resultsBar != null && resultsBar.getParent() == controls) controls.removeView(resultsBar);
     JSONObject selectedNote = (selected == null || "nb_global_root".equals(selected))
@@ -890,7 +983,6 @@ final class NotebookUi {
         return;
       }
     }
-    List<JSONObject> rows = visible();
     String scope = new JSONArray(Arrays.asList(selected, filter, typeFilter, statusFilter,
         featureFilter, sortOrder, new JSONArray(selectedTags))).toString();
     if (!scope.equals(resultScope)) {
@@ -910,7 +1002,7 @@ final class NotebookUi {
               false,
               view -> {
                 for (JSONObject item : visible()) selectedVocabularyIds.add(item.optString("id"));
-                a.render();
+                updateVisibleSelection();
               }));
       selectionBar.addView(
           a.chip(
@@ -918,10 +1010,10 @@ final class NotebookUi {
               false,
               view -> {
                 selectedVocabularyIds.clear();
-                a.render();
+                updateVisibleSelection();
               }));
-      selectionBar.addView(
-          a.chip("操作 (" + selectedVocabularyIds.size() + ")", true, view -> batchMenu()));
+      selectionActionButton = a.chip("操作 (" + selectedVocabularyIds.size() + ")", true, view -> batchMenu());
+      selectionBar.addView(selectionActionButton);
     }
     selectionBar.addView(a.text("结果 " + rows.size() + " 条", 12, false));
     LinearLayout resultControls = a.column();
@@ -945,14 +1037,17 @@ final class NotebookUi {
     int end = Math.min(rows.size(), (resultPage + 1) * RESULT_PAGE_SIZE);
     for (JSONObject v : rows.subList(resultPage * RESULT_PAGE_SIZE, end)) {
       JSONObject display = null;
-      JSONObject n = (selected == null || "nb_global_root".equals(selected))
-          ? null : a.library.find("notebooks", selected);
-      if (n != null && n.optJSONObject("vocabulary_display") != null)
-        display = n.optJSONObject("vocabulary_display").optJSONObject(v.optString("id"));
-      if ("detailed".equals(viewMode)) {
-        renderVocabularyDetailedCard(v, display);
-      } else {
-        renderVocabularyCompactCard(v, display);
+      if (selectedNote != null && selectedNote.optJSONObject("vocabulary_display") != null)
+        display = selectedNote.optJSONObject("vocabulary_display").optJSONObject(v.optString("id"));
+      android.os.Trace.beginSection("card.bind");
+      try {
+        if ("detailed".equals(viewMode)) {
+          renderVocabularyDetailedCard(v, display);
+        } else {
+          renderVocabularyCompactCard(v, display);
+        }
+      } finally {
+        android.os.Trace.endSection();
       }
     }
     if (rows.isEmpty()) {
@@ -1350,8 +1445,7 @@ final class NotebookUi {
     card.setOnClickListener(
         view -> {
           if (selecting) {
-            toggleSelected(vocabulary.optString("id"));
-            a.render();
+            toggleVisibleSelection(vocabulary.optString("id"));
           } else detail(vocabulary);
         });
     card.setOnLongClickListener(
@@ -1365,18 +1459,16 @@ final class NotebookUi {
     if (selecting) {
       CheckBox selectedBox = new CheckBox(a);
       selectedBox.setChecked(selectedVocabularyIds.contains(vocabulary.optString("id")));
-      selectedBox.setOnCheckedChangeListener(
-          (button, checked) -> {
-            toggleSelected(vocabulary.optString("id"));
-            a.render();
-          });
+      String id = vocabulary.optString("id");
+      selectionBoxes.put(id, selectedBox);
+      selectedBox.setOnCheckedChangeListener((button, checked) -> setSelected(id, checked));
       top.addView(selectedBox);
     }
     LinearLayout title = a.row();
     title.setGravity(Gravity.CENTER_VERTICAL);
     TextView word = a.text(vocabulary.optString("content"), 16, true);
     word.setTextIsSelectable(false);
-    word.setOnClickListener(view -> { if (selecting) { toggleSelected(vocabulary.optString("id")); a.render(); } else detail(vocabulary); });
+    word.setOnClickListener(view -> { if (selecting) { toggleVisibleSelection(vocabulary.optString("id")); } else detail(vocabulary); });
     title.addView(word);
     String type = vocabulary.optString("type", "word").equals("phrase") ? "短语" : "单词";
     TextView typeBadge = a.text(type, 11, true);
@@ -1386,7 +1478,7 @@ final class NotebookUi {
     typeBadge.setBackground(a.shape(a.inputBg, 16, 0));
     LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(-2, -2);
     badgeLp.leftMargin = a.dp(6);
-    typeBadge.setOnClickListener(view -> { if (selecting) { toggleSelected(vocabulary.optString("id")); a.render(); } else detail(vocabulary); });
+    typeBadge.setOnClickListener(view -> { if (selecting) { toggleVisibleSelection(vocabulary.optString("id")); } else detail(vocabulary); });
     title.addView(typeBadge, badgeLp);
     JSONArray tags = vocabulary.optJSONArray("tags");
     if (tags != null) {
@@ -1492,7 +1584,7 @@ final class NotebookUi {
     }
     card.addView(footer, footerLp);
     a.passiveLabels(card);
-    View.OnClickListener open = view -> { if (selecting) { toggleSelected(vocabulary.optString("id")); a.render(); } else detail(vocabulary); };
+    View.OnClickListener open = view -> { if (selecting) { toggleVisibleSelection(vocabulary.optString("id")); } else detail(vocabulary); };
     word.setOnClickListener(open);
     typeBadge.setOnClickListener(open);
   }
@@ -1507,8 +1599,7 @@ final class NotebookUi {
     String id = vocabulary.optString("id");
     card.setOnClickListener(view -> {
       if (selecting) {
-        toggleSelected(id);
-        a.render();
+        toggleVisibleSelection(id);
       } else detail(vocabulary);
     });
     card.setOnLongClickListener(view -> {
@@ -1522,10 +1613,8 @@ final class NotebookUi {
     if (selecting) {
       CheckBox selectedBox = new CheckBox(a);
       selectedBox.setChecked(selectedVocabularyIds.contains(id));
-      selectedBox.setOnCheckedChangeListener((button, checked) -> {
-        toggleSelected(id);
-        a.render();
-      });
+      selectionBoxes.put(id, selectedBox);
+      selectedBox.setOnCheckedChangeListener((button, checked) -> setSelected(id, checked));
       top.addView(selectedBox);
     }
     TextView word = a.text(vocabulary.optString("content"), 18, true);
@@ -1826,8 +1915,23 @@ final class NotebookUi {
     a.showDialog(b);
   }
 
-  void toggleSelected(String id) {
-    if (!selectedVocabularyIds.add(id)) selectedVocabularyIds.remove(id);
+  private void setSelected(String id, boolean checked) {
+    if (checked) selectedVocabularyIds.add(id);
+    else selectedVocabularyIds.remove(id);
+    if (selectionActionButton != null)
+      selectionActionButton.setText("操作 (" + selectedVocabularyIds.size() + ")");
+  }
+
+  private void toggleVisibleSelection(String id) {
+    CheckBox box = selectionBoxes.get(id);
+    if (box != null) box.performClick();
+  }
+
+  private void updateVisibleSelection() {
+    for (Map.Entry<String, CheckBox> entry : selectionBoxes.entrySet())
+      entry.getValue().setChecked(selectedVocabularyIds.contains(entry.getKey()));
+    if (selectionActionButton != null)
+      selectionActionButton.setText("操作 (" + selectedVocabularyIds.size() + ")");
   }
 
   void pruneSelection(List<JSONObject> scope) {
@@ -1889,20 +1993,23 @@ final class NotebookUi {
   }
 
   void confirmBatch(String message, Runnable action) {
-    AlertDialog.Builder b =
-        new AlertDialog.Builder(a)
-            .setMessage(message)
-            .setNegativeButton("取消", null)
-            .setPositiveButton(
-                "确认",
-                (d, w) -> {
-                  if (a.change(action::run)) {
-                    selectedVocabularyIds.clear();
-                    selecting = false;
-                  }
-                });
-    AlertDialog d = a.showDialog(b);
-    if (message.contains("永久删除")) a.styleDestructive(d);
+    AlertDialog.Builder b = new AlertDialog.Builder(a)
+        .setMessage(message)
+        .setNegativeButton("取消", null)
+        .setPositiveButton("确认", null);
+    AlertDialog dialog = a.showDialog(b);
+    if (message.contains("永久删除")) a.styleDestructive(dialog);
+    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
+      view.setEnabled(false);
+      a.changeAsync(action, success -> {
+        if (success) {
+          selectedVocabularyIds.clear();
+          selecting = false;
+          dialog.dismiss();
+          a.render();
+        } else if (dialog.isShowing()) view.setEnabled(true);
+      });
+    });
   }
 
   void chooseBatchTargets(boolean copy) {
@@ -2050,6 +2157,8 @@ final class NotebookUi {
                   Library.put(meaning, "zh_definition", zh.getText().toString());
                   Library.put(meaning, "en_definition", en.getText().toString());
                   Library.put(meaning, "example", example.getText().toString());
+                  FieldProvenance.markPresent(result, false, "word", "type");
+                  FieldProvenance.markPresent(meaning, false, "zh_definition", "en_definition", "example");
                   Library.put(result, "meanings", new JSONArray().put(meaning));
                   saveDialog(result);
                 });
@@ -2108,43 +2217,42 @@ final class NotebookUi {
     box.setPadding(a.dp(20), a.dp(8), a.dp(20), a.dp(8));
     ScrollView scroll = new ScrollView(a);
     scroll.addView(box);
-    AlertDialog.Builder b =
-        new AlertDialog.Builder(a)
-            .setTitle("保存到多个笔记")
-            .setView(scroll)
-            .setNegativeButton("取消", null)
-            .setPositiveButton(
-                "保存",
-                (d, w) -> {
-              try {
-                List<String> ids = new ArrayList<>();
-                for (int i = 0; i < checks.size(); i++)
-                  if (checks.get(i).isChecked()) ids.add(leaves.get(i).optString("id"));
-                if (ids.isEmpty()) {
-                  a.say("至少选择一个笔记");
-                  return;
-                }
-                JSONObject display = new JSONObject(), selection = new JSONObject();
-                for (int i = 0; i < fields.length; i++)
-                  Library.put(selection, fields[i], fs.get(i).isChecked());
-                Library.put(display, "fields", selection);
-                String id = a.library.saveResult(result, ids.toArray(new String[0]), display);
-                if (a.session != null && a.session.optJSONObject("query_results") == result) {
-                  JSONObject saved = new JSONObject();
-                  Library.put(saved, "saved", true);
-                  Library.put(saved, "vocabulary_id", id);
-                  Library.put(saved, "notebook_ids", new JSONArray(ids));
-                  Library.put(a.session, "saved_content", saved);
-                  a.library.touchSession(a.session, true);
-                }
-                a.persist();
-                a.say("已保存完整词汇，共享引用到 " + ids.size() + " 个笔记");
-                a.render();
-              } catch (Exception e) {
-                a.error(e);
-              }
-            });
-    a.showDialog(b);
+    AlertDialog.Builder b = new AlertDialog.Builder(a)
+        .setTitle("保存到多个笔记")
+        .setView(scroll)
+        .setNegativeButton("取消", null)
+        .setPositiveButton("保存", null);
+    AlertDialog dialog = a.showDialog(b);
+    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
+      if (saveResultPending) return;
+      List<String> ids = new ArrayList<>();
+      for (int i = 0; i < checks.size(); i++)
+        if (checks.get(i).isChecked()) ids.add(leaves.get(i).optString("id"));
+      if (ids.isEmpty()) { a.say("至少选择一个笔记"); return; }
+      JSONObject display = new JSONObject(), selection = new JSONObject();
+      for (int i = 0; i < fields.length; i++)
+        Library.put(selection, fields[i], fs.get(i).isChecked());
+      Library.put(display, "fields", selection);
+      saveResultPending = true;
+      view.setEnabled(false);
+      a.changeAsync(() -> {
+        String id = a.library.saveResult(result, ids.toArray(new String[0]), display);
+        if (a.session != null && a.session.optJSONObject("query_results") == result) {
+          JSONObject saved = new JSONObject();
+          Library.put(saved, "saved", true);
+          Library.put(saved, "vocabulary_id", id);
+          Library.put(saved, "notebook_ids", new JSONArray(ids));
+          Library.put(a.session, "saved_content", saved);
+          a.library.touchSession(a.session, true);
+        }
+      }, success -> {
+        saveResultPending = false;
+        if (success) {
+          dialog.dismiss();
+          a.say("已保存完整词汇，共享引用到 " + ids.size() + " 个笔记");
+        } else if (dialog.isShowing()) view.setEnabled(true);
+      });
+    });
   }
 
   void saveDefault(JSONObject result) {
@@ -2154,21 +2262,15 @@ final class NotebookUi {
       a.say("请先在设置中选择默认末级笔记");
       return;
     }
-    try {
-      JSONObject fields = new JSONObject();
-      for (String f :
-          new String[] {
-            "zh_definition",
-            "en_definition",
-            "phonetic",
-            "example",
-            "source",
-            "source_images",
-            "annotations",
-            "remarks"
-          }) Library.put(fields, f, true);
-      JSONObject display = new JSONObject();
-      Library.put(display, "fields", fields);
+    if (saveResultPending) return;
+    JSONObject fields = new JSONObject();
+    for (String f : new String[] {"zh_definition", "en_definition", "phonetic", "example",
+        "source", "source_images", "annotations", "remarks"}) Library.put(fields, f, true);
+    JSONObject display = new JSONObject();
+    Library.put(display, "fields", fields);
+    String notebookName = n.optString("name");
+    saveResultPending = true;
+    a.changeAsync(() -> {
       String vocabId = a.library.saveResult(result, new String[] {id}, display);
       if (a.session != null && a.session.optJSONObject("query_results") == result) {
         JSONObject saved = new JSONObject();
@@ -2178,12 +2280,10 @@ final class NotebookUi {
         Library.put(a.session, "saved_content", saved);
         a.library.touchSession(a.session, true);
       }
-      a.persist();
-      a.say("已保存到" + n.optString("name"));
-      a.render();
-    } catch (Exception e) {
-      a.error(e);
-    }
+    }, success -> {
+      saveResultPending = false;
+      if (success) a.say("已保存到" + notebookName);
+    });
   }
 
   void renderMeanings(LinearLayout box, JSONObject v, JSONObject display, boolean full) {
@@ -2324,6 +2424,8 @@ final class NotebookUi {
                         a.library.renameVocabulary(v.optString("id"), newContent);
                         Library.put(v, "type", selectedType[0]);
                         Library.put(v, "phonetic", phoneticInput.getText().toString().trim());
+                        FieldProvenance.edited(v, "type");
+                        FieldProvenance.edited(v, "phonetic");
                         Library.put(v, "updated_at", Library.now());
                       });
                 });
@@ -2507,10 +2609,11 @@ final class NotebookUi {
         tagPill.addView(closeT);
         tagPill.setOnClickListener(
             view -> {
-              Library.removeValue(tags, tag);
-              Library.put(v, "updated_at", Library.now());
-              a.persist();
-              a.render();
+              view.setEnabled(false);
+              a.changeAsync(() -> {
+                Library.removeValue(tags, tag);
+                Library.put(v, "updated_at", Library.now());
+              }, success -> { if (!success) view.setEnabled(true); });
             });
         LinearLayout.LayoutParams pillLp = new LinearLayout.LayoutParams(-2, -2);
         pillLp.rightMargin = a.dp(6);
@@ -2563,6 +2666,10 @@ final class NotebookUi {
                     a.say("词汇必须至少归属于一个末级笔记");
                     return;
                   }
+                }
+                view.setEnabled(false);
+                a.changeAsync(() -> {
+                if (isMember) {
                   Library.removeValue(vocabIds, v.optString("id"));
                 } else {
                   if (vocabIds == null) {
@@ -2573,8 +2680,7 @@ final class NotebookUi {
                     vocabIds.put(v.optString("id"));
                   }
                 }
-                a.persist();
-                a.render();
+                }, success -> { if (!success) view.setEnabled(true); });
               });
       nbChip.setTextSize(12 * a.scale);
       nbChip.setPadding(a.dp(10), a.dp(4), a.dp(10), a.dp(4));
@@ -2875,8 +2981,10 @@ final class NotebookUi {
                           if (inputs.get(1).getText().toString().trim().isEmpty()
                               && inputs.get(2).getText().toString().trim().isEmpty())
                             throw new IllegalArgumentException("至少填写中文或英文释义");
-                          for (int i = 0; i < fields.length; i++)
+                          for (int i = 0; i < fields.length; i++) {
                             Library.put(m, fields[i], inputs.get(i).getText().toString());
+                            FieldProvenance.edited(m, fields[i]);
+                          }
                           if (original == null) {
                             Library.put(m, "id", Library.id());
                             Library.put(m, "created_at", Library.now());
@@ -3040,27 +3148,26 @@ final class NotebookUi {
                           .setTitle(n.optString("name") + " · 显示内容")
                           .setView(scroll)
                           .setNegativeButton("取消", null)
-                          .setPositiveButton(
-                              "保存",
-                              (dialog, which) ->
-                                  a.change(
-                                      () -> {
-                                        JSONObject config = new JSONObject(), newFields = new JSONObject();
-                                        for (int i = 0; i < fields.length; i++)
-                                          Library.put(newFields, fields[i], checks.get(i).isChecked());
-                                        Library.put(config, "fields", newFields);
-                                        JSONArray ids = new JSONArray();
-                                        for (int i = 0; i < meanings.size(); i++)
-                                          if (meanings.get(i).isChecked())
-                                            ids.put(ms.optJSONObject(i).optString("id"));
-                                        Library.put(config, "meaning_ids", ids);
-                                        if (n.optJSONObject("vocabulary_display") == null)
-                                          Library.put(n, "vocabulary_display", new JSONObject());
-                                        Library.put(
-                                            n.optJSONObject("vocabulary_display"),
-                                            v.optString("id"),
-                                            config);
-                                      }));
+                          .setPositiveButton("保存", (dialog, which) -> {
+                            a.change(() -> {
+                              JSONObject config = new JSONObject(), newFields = new JSONObject();
+                              for (int i = 0; i < fields.length; i++) {
+                                Library.put(newFields, fields[i], checks.get(i).isChecked());
+                              }
+                              Library.put(config, "fields", newFields);
+                              JSONArray ids = new JSONArray();
+                              for (int i = 0; i < meanings.size(); i++) {
+                                if (meanings.get(i).isChecked()) {
+                                  ids.put(ms.optJSONObject(i).optString("id"));
+                                }
+                              }
+                              Library.put(config, "meaning_ids", ids);
+                              if (n.optJSONObject("vocabulary_display") == null) {
+                                Library.put(n, "vocabulary_display", new JSONObject());
+                              }
+                              Library.put(n.optJSONObject("vocabulary_display"), v.optString("id"), config);
+                            });
+                          });
                   a.showDialog(displayB);
                 });
     a.showDialog(b);

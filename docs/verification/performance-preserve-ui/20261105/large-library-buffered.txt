@@ -1,0 +1,2 @@
+PASS: legal large SQLite/ZIP round trip; source_bytes=10139662
+Host elapsed (includes instrumentation setup): 13474 ms

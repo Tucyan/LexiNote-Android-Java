@@ -12,9 +12,12 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import org.json.*;
+import com.lexinote.nativeapp.storage.LibraryStore;
+import java.util.concurrent.TimeUnit;
 
 /** Real Android views, persistence and pointer input against reproducible offline datasets. */
 public final class ScaleInstrumentation extends Instrumentation {
+  boolean testStoreInstalled;
   MainActivity a;
   JSONObject before, metrics = new JSONObject();
   String size, mode;
@@ -45,14 +48,23 @@ public final class ScaleInstrumentation extends Instrumentation {
       try(FileOutputStream out=new FileOutputStream(new File(output,"fixture-with-plans.zip"))) {
         out.write(BackupArchive.encode(lib.backup(),uri -> new byte[0]));
       }
+      testDirectory=new File(getTargetContext().getCacheDir(),"scale-repository-"+System.nanoTime());
+      check(testDirectory.mkdirs(),"isolated repository directory");
+      Repository isolatedRepository = new Repository(testDirectory);
+      isolatedRepository.save(lib);
+      SqliteLibraryStore backend = new SqliteLibraryStore(getTargetContext(),
+          new File(testDirectory, "scale.db").getAbsolutePath());
+      backend.initialize();
+      check(backend.restore(lib.snapshot(), backend.getGeneration()).isSuccess(), "fixture import failed");
+      LibraryStore.setInstanceForTest(new LibraryStore(backend));
+      testStoreInstalled = true;
       a=(MainActivity)startActivitySync(new Intent(getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-      waitForIdleSync();
-      main(() -> { before=a.library.snapshot();
-        originalRepository=a.repository;
-        testDirectory=new File(a.getCacheDir(),"scale-repository-"+System.nanoTime());
-        check(testDirectory.mkdirs(),"isolated repository directory");
-        a.repository=new Repository(new ContextWrapper(a){@Override public File getFilesDir(){return testDirectory;}});
-        a.cancel(); a.titles.reset(); a.session=null; a.library=lib; a.committed=lib.snapshot(); a.query=new QueryUi(a); a.notebooks=new NotebookUi(a); a.review=new ReviewUi(a); a.screen="tabs"; a.page=0; a.render(); });
+      awaitStore();
+      main(() -> { check(a.library!=null && a.query!=null,"activity did not finish loading");
+        before=a.library.snapshot(); originalRepository=a.repository;
+        a.repository=isolatedRepository;
+        a.cancel(); a.titles.reset(); a.session=null; a.committed=a.library.snapshot();
+        a.screen="tabs"; a.page=0; a.render(); });
       if(mode.equals("empty-states")) {
         verify("paused plans remain visible and manageable",() -> main(() -> {
           JSONArray disabled=new JSONArray();
@@ -116,18 +128,21 @@ public final class ScaleInstrumentation extends Instrumentation {
       timed("review_dashboard",() -> { a.page=3; a.render(); });
       capture("05-review");
       verify("12 review plans visible",() -> main(() -> check(a.library.reviewPlans().list(false).length()==12,"plans missing")));
-      long written=new File(testDirectory,"library.json").lastModified();
+      awaitStore();
+      long written=a.store.currentRevision();
       SystemClock.sleep(50);
       timed("review_same_plan",() -> a.render());
-      verify("read-only dashboard avoids full snapshot writes",() -> check(new File(testDirectory,"library.json").lastModified()==written,"read-only dashboard rewrote library"));
+      awaitStore();
+      verify("read-only dashboard avoids writes",() -> check(a.store.currentRevision()==written,"read-only dashboard committed a write"));
       timed("review_next_plan",() -> { Button next=findButton(a.root,"›"); check(next!=null,"review next button"); next.performClick(); });
       capture("06-review-next");
       timed("review_start",() -> a.review.startDailyReview());
       tap("查看答案 / 翻转卡片");
       capture("06b-answer");
       long rating=SystemClock.elapsedRealtime(); tap("简单");
-      metrics.put("rating_action_to_idle_ms",SystemClock.elapsedRealtime()-rating);
-      verify("rating persists independent progress",() -> check(a.repository.load().snapshot().optJSONObject("review").optJSONArray("events").length()==1,"rating not persisted"));
+      awaitStore();
+      metrics.put("rating_action_to_persist_callback_ms",SystemClock.elapsedRealtime()-rating);
+      verify("rating persists independent progress",() -> check(backend.loadSnapshot().getRawDocument().optJSONObject("review").optJSONArray("events").length()==1,"rating not persisted"));
       capture("06c-rated");
       timed("long_assistant",() -> { a.page=0; a.session=a.library.find("conversations","scale-chat-0"); a.screen="assistant"; a.render(); });
       capture("07-long-conversation");
@@ -135,16 +150,20 @@ public final class ScaleInstrumentation extends Instrumentation {
       timed("local_query",() -> { a.screen="tabs"; a.page=0; a.session=null; a.query.draft="project budget"; a.render(); a.query.submit(); });
       verify("local query stays offline",() -> main(() -> check(a.session.optJSONObject("query_results").optBoolean("is_from_local"),"local miss")));
       capture("08-local-result");
-      long saved=SystemClock.elapsedRealtime(); a.repository.save(a.library); metrics.put("repository_save_worker_ms",SystemClock.elapsedRealtime()-saved);
+      awaitStore();
+      File separateDir=new File(getTargetContext().getCacheDir(),"scale-json-check-"+System.nanoTime());
+      check(separateDir.mkdirs(),"separate JSON test directory");
+      Repository jsonCheck=new Repository(separateDir);
+      long saved=SystemClock.elapsedRealtime(); jsonCheck.save(a.library); metrics.put("repository_save_worker_ms",SystemClock.elapsedRealtime()-saved);
       long zipped=SystemClock.elapsedRealtime(); byte[] bytes=BackupArchive.encode(a.library.backup(),uri -> new byte[0]); metrics.put("zip_roundtrip_ms",SystemClock.elapsedRealtime()-zipped);
       check(BackupArchive.decode(bytes).backup.optJSONArray("vocabularies").length()==Integer.parseInt(size),"roundtrip vocabulary loss");
       passed.add("backup ZIP roundtrip preserves vocabulary");
       verify("over-capacity write preserves prior file",() -> {
-        File file=new File(testDirectory,"library.json"); byte[] prior=java.nio.file.Files.readAllBytes(file.toPath());
+        File file=new File(separateDir,"library.json"); byte[] prior=java.nio.file.Files.readAllBytes(file.toPath());
         Library tooLarge=new Library(a.library.snapshot());
         Library.put(tooLarge.settings(),"scale_padding",new String(new char[BackupArchive.MAX_JSON_BYTES]).replace('\0','x'));
         boolean rejected=false;
-        try {a.repository.save(tooLarge);} catch(IOException expected){rejected=true;}
+        try {jsonCheck.save(tooLarge);} catch(IOException expected){rejected=true;}
         check(rejected,"oversized save accepted");
         check(Arrays.equals(prior,java.nio.file.Files.readAllBytes(file.toPath())),"oversized save changed prior data");
       });
@@ -156,11 +175,17 @@ public final class ScaleInstrumentation extends Instrumentation {
       }
     } catch(Throwable e) { failed.add("RUN: "+android.util.Log.getStackTraceString(e)); }
     finally {
-      if(a!=null && before!=null) try { main(() -> { a.cancel(); a.titles.reset(); a.session=null; a.library=new Library(before); a.repository=originalRepository; a.finish(); }); } catch(Throwable e) {failed.add("RESTORE: "+e);}
+      if(a!=null) try { awaitStore(); main(() -> { a.cancel(); a.titles.reset(); a.session=null; a.finish(); }); } catch(Throwable e) {failed.add("TEARDOWN: "+e);}
+      if (testStoreInstalled) LibraryStore.resetInstanceForTest();
       try { metrics.put("passed",new JSONArray(passed));metrics.put("failed",new JSONArray(failed)); try(FileOutputStream out=new FileOutputStream(new File(output,"metrics.json"))){out.write(metrics.toString(2).getBytes(StandardCharsets.UTF_8));} } catch(Exception e){failed.add("METRICS: "+e);}
     }
     result.putString("stream","\n"+metrics.toString()+"\nPASS "+passed.size()+" FAIL "+failed.size()+"\n");
     finish(failed.isEmpty()?Activity.RESULT_OK:Activity.RESULT_CANCELED,result);
+  }
+  void awaitStore() throws Exception {
+    LibraryStore store = LibraryStore.getInstance(getTargetContext());
+    check(store.awaitIdle(30, TimeUnit.SECONDS), "store did not become idle");
+    waitForIdleSync();
   }
   void timed(String name,Action task) throws Exception {
     final long[] duration={0}; long start=SystemClock.elapsedRealtime();

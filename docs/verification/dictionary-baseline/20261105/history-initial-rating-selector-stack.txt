@@ -1,0 +1,6 @@
+
+> 11-05 14:12:54.119  8851  8851 E AndroidRuntime: FATAL EXCEPTION: main
+  11-05 14:12:54.119  8851  8851 E AndroidRuntime: Process: com.lexinote.nativeapp, PID: 8851
+  11-05 14:12:54.119  8851  8851 E AndroidRuntime: java.lang.AssertionError: rating button missing
+  11-05 14:12:54.119  8851  8851 E AndroidRuntime: 	at com.lexinote.nativeapp.HistoryUiInstrumentation.require(HistoryUiInstrumentation.java:26)
+  11-05 14:12:54.119  8851  8851 E AndroidRuntime: 	at com.lexinote.nativeapp.HistoryUiInstrumentation.lambda$onStart$8(HistoryUiInstrumentation.java:126)

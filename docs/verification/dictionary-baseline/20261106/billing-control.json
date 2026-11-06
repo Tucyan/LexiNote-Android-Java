@@ -1,0 +1,44 @@
+{
+  "unit": "micro-yuan",
+  "publishedRateLimitRespected": true,
+  "reads": {
+    "usage": 200,
+    "balance": 200
+  },
+  "search": {
+    "http": 200,
+    "usageHttp": 200,
+    "returnedSources": 3,
+    "candidates": [
+      {
+        "provider": "DeepSeek",
+        "model": "deepseek-search",
+        "cost": 5000,
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0,
+        "traceMatched": true,
+        "success": true
+      }
+    ],
+    "usedDelta": 5000
+  },
+  "chat": {
+    "http": 400,
+    "usageHttp": 200,
+    "candidates": [
+      {
+        "provider": "火山方舟",
+        "model": "deepseek-v4.1-flash",
+        "cost": 0,
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0,
+        "traceMatched": true,
+        "success": false
+      }
+    ],
+    "usedDelta": 0
+  },
+  "combinedUsedDelta": 5000
+}

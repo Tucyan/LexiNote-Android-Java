@@ -74,6 +74,7 @@ public final class PersistenceInstrumentation extends Instrumentation {
       // 2. Launch Activity
       a = (MainActivity) startActivitySync(
           new Intent(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+      DeviceAsync.ready(this, a);
       waitForIdleSync();
 
       // 3. Isolate repository directory in ephemeral cache
@@ -204,7 +205,7 @@ public final class PersistenceInstrumentation extends Instrumentation {
     waitForIdleSync();
 
     // Trigger vocabulary creation via change() which uses asynchronous persist()
-    main(() -> {
+    DeviceAsync.change(this, a, () -> {
       JSONObject vocabDraft = new JSONObject();
       Library.put(vocabDraft, "content", "immutability");
       Library.put(vocabDraft, "type", "word");
@@ -218,10 +219,7 @@ public final class PersistenceInstrumentation extends Instrumentation {
       meanings.put(m);
       Library.put(vocabDraft, "meanings", meanings);
 
-      boolean saved = a.change(() -> {
-        a.library.saveResult(vocabDraft, new String[]{"nb_default"}, new JSONObject());
-      });
-      check(saved, "Vocabulary save failed");
+      a.library.saveResult(vocabDraft, new String[]{"nb_default"}, new JSONObject());
     });
 
     if (a.store != null) {

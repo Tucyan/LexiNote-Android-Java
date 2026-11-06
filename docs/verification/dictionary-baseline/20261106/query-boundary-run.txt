@@ -1,0 +1,3 @@
+INSTRUMENTATION_RESULT: coverage=confirmed dictionary miss -> AiClient.lookup; cancellation, invalid evidence, timeout, HTTP failure and retry with SQLite preservation
+INSTRUMENTATION_RESULT: status=passed
+INSTRUMENTATION_CODE: -1

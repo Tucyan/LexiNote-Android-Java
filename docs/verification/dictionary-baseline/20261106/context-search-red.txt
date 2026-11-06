@@ -1,0 +1,3 @@
+INSTRUMENTATION_RESULT: error=java.lang.AssertionError: search query omitted selected dictionary sense: expected go vi. 去, 走, 达到, 运转, 查阅, 消失, 结束, 放弃, 花费, 流传, 趋于, 打算, 剩下 dictionary, got go
+INSTRUMENTATION_RESULT: failed_stage=selected_dictionary_sense_search_query
+INSTRUMENTATION_CODE: 0

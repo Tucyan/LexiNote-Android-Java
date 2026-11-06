@@ -1,0 +1,14 @@
+INSTRUMENTATION_RESULT: context_explanation=In the sentence, 'book' is used as a verb meaning to reserve or arrange in advance, which matches the Chinese definition 'v. 登记, 预订'.
+INSTRUMENTATION_RESULT: dictionary_context=live model result saved with field provenance
+INSTRUMENTATION_RESULT: error=search did not support the chosen example
+INSTRUMENTATION_RESULT: failed_stage=real_search_and_model
+INSTRUMENTATION_RESULT: gateway_models_http_status=200
+INSTRUMENTATION_RESULT: model=deepseek-v4.1-flash
+INSTRUMENTATION_RESULT: retrieved_sources=3
+INSTRUMENTATION_RESULT: selected_sense=v. 登记, 预订
+INSTRUMENTATION_RESULT: sentence=I need to book a flight to Singapore for next Monday.
+INSTRUMENTATION_RESULT: validated_citations=0
+INSTRUMENTATION_RESULT: verification_meaning=
+INSTRUMENTATION_RESULT: verification_status=insufficient
+INSTRUMENTATION_RESULT: word=book
+INSTRUMENTATION_CODE: 0

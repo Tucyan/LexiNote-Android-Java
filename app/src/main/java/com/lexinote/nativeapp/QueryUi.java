@@ -7,6 +7,7 @@ import android.net.Uri;
 import android.text.*;
 import android.view.*;
 import android.widget.*;
+import com.lexinote.nativeapp.storage.contract.LibraryCommand;
 import java.util.*;
 import org.json.*;
 
@@ -27,6 +28,8 @@ final class QueryUi {
   AssistantUi assistantView;
   String partialReply = "";
   boolean organizing;
+  boolean sendPending;
+  private final Map<String, JSONObject> pendingInitialLookups = new HashMap<>();
   final Set<String> editingMeanings = new HashSet<>();
 
   QueryUi(MainActivity a) {
@@ -719,8 +722,7 @@ final class QueryUi {
             .setPositiveButton(
                 "删除",
                 (d, w) -> {
-                  a.change(() -> deleteConversation(s));
-                  if (onDeleted != null) onDeleted.run();
+                  a.changeAsync(() -> deleteConversation(s), saved -> { if (saved && onDeleted != null) onDeleted.run(); });
                 });
     AlertDialog d = a.showDialog(b);
     a.styleDestructive(d);
@@ -937,8 +939,7 @@ final class QueryUi {
       del.setContentDescription("删除" + word);
       del.setOnClickListener(
           v -> {
-            a.change(() -> a.library.delete("recent_queries", s.optString("id")));
-            fillRecent(box, dialog);
+            a.changeAsync(() -> a.library.delete("recent_queries", s.optString("id")), saved -> { if (saved) fillRecent(box, dialog); });
           });
       row.addView(del);
 
@@ -971,14 +972,13 @@ final class QueryUi {
                         .setPositiveButton(
                             "清空",
                             (d, w) -> {
-                              a.change(
+                              a.changeAsync(
                                   () -> {
                                     JSONArray current = a.library.array("recent_queries");
                                     while (current.length() > 0)
                                       a.library.delete(
                                           "recent_queries", current.optJSONObject(0).optString("id"));
-                                  });
-                              fillRecent(box, dialog);
+                                  }, saved -> { if (saved) fillRecent(box, dialog); });
                             });
                 AlertDialog clearD = a.showDialog(clearB);
                 a.styleDestructive(clearD);
@@ -1012,6 +1012,10 @@ final class QueryUi {
   }
 
   void submit() {
+    if (sendPending) {
+      a.say("请等待保存完成");
+      return;
+    }
     if (a.active != null) {
       a.say("请等待当前请求或取消");
       return;
@@ -1043,12 +1047,78 @@ final class QueryUi {
     if (local != null) {
       JSONObject r = Library.copy(local);
       Library.put(r, "word", local.optString("content"));
+      FieldProvenance.transfer(local, "content", r, "word");
       Library.put(r, "is_from_local", true);
       Library.put(r, "local_vocabulary_id", local.optString("id"));
-      finishResult(r);
-      a.persist();
-      a.render();
-    } else send(queryText + (queryContext.isEmpty() ? "" : "\n语境/要求：" + queryContext), true);
+      showLookupAndRecord(r, "");
+    } else {
+      Runnable fallback = () -> send(queryText + (queryContext.isEmpty() ? "" : "\n语境/要求：" + queryContext), true);
+      if (queryImage == null) lookupDictionary(queryText, queryContext, fallback);
+      else fallback.run();
+    }
+  }
+
+  private void lookupDictionary(String word, String context, Runnable fallback) {
+    final String id = a.session.optString("id"), screen = a.screen;
+    final int revision = a.session.optInt("revision"), page = a.page;
+    final long generation = a.store.currentGeneration();
+    a.worker.execute(() -> {
+      JSONObject found = null;
+      boolean unavailable = false;
+      try {
+        found = OfflineDictionary.lookup(a.getApplicationContext(), word);
+      } catch (Exception e) {
+        unavailable = true;
+      }
+      final JSONObject dictionary = found;
+      final boolean failed = unavailable;
+      a.handler.post(() -> {
+        if (a.isFinishing() || a.isDestroyed() || page != a.page || !screen.equals(a.screen)
+            || !currentSession(id, revision, generation)) return;
+        if (dictionary != null) showLookupAndRecord(dictionary, context);
+        else {
+          if (failed) a.say("离线词库暂不可用");
+          fallback.run();
+        }
+      });
+    });
+  }
+
+  private void showLookupAndRecord(JSONObject result, String context) {
+    finishResult(result);
+    final JSONObject visible = Library.copy(a.session);
+    final String id = visible.optString("id");
+    final int revision = visible.optInt("revision");
+    final long generation = a.store.currentGeneration();
+    pendingInitialLookups.put(id, null);
+    a.render();
+    persistSession(true, saved -> {
+      JSONObject editedSession = pendingInitialLookups.remove(id);
+      boolean edited = editedSession != null;
+      if (a.store.currentGeneration() != generation) return;
+      if (!saved && "result".equals(a.screen) && (a.session == null || id.equals(a.session.optString("id")))) {
+        a.session = visible;
+        a.say("查询结果未记入历史");
+      }
+      Runnable afterSave = () -> {
+        if (!currentSession(id, revision, generation) || !"result".equals(a.screen)) return;
+        a.render();
+        if (saved && !context.trim().isEmpty()) {
+          try {
+            if (!a.secure.getApiKey().isEmpty() && !a.secure.getProvider().optString("model_id").isEmpty())
+              explainDictionary(a.session.optJSONObject("query_results"), context);
+          } catch (Exception unavailable) {
+            // The dictionary result is already usable.
+          }
+        }
+      };
+      if (saved && edited) {
+        a.library.touchSession(currentSession(id, revision, generation) ? a.session : editedSession, true);
+        a.persistAsync(committed -> { if (committed) afterSave.run(); });
+      } else {
+        afterSave.run();
+      }
+    });
   }
 
   JSONArray messages() {
@@ -1066,6 +1136,9 @@ final class QueryUi {
     Library.put(m, "role", role);
     Library.put(m, "content", content);
     Library.put(m, "created_at", Library.now());
+    if (action != null && content.equals(action.optString("message")))
+      FieldProvenance.transfer(action, "message", m, "content");
+    else FieldProvenance.markPresent(m, false, "content");
     if (action != null) Library.put(m, "action", action);
     messages().put(m);
   }
@@ -1106,6 +1179,7 @@ final class QueryUi {
   }
 
   void sendInternal(String text, boolean fromHub, boolean append) {
+    if (sendPending) { a.say("请等待保存完成"); return; }
     if (a.active != null) {
       a.say("请等待当前请求或取消");
       return;
@@ -1114,9 +1188,13 @@ final class QueryUi {
     if (a.session == null) a.session = a.library.newSession(text);
     Library.promoteTemporary(a.session);
     final JSONObject target = a.session;
-    final String explicitTarget = draft;
+    final String explicitTarget = fromHub ? target.optString("input_text", draft) : draft;
     final Uri requestImage = fromHub && homeMode.equals("text") ? null : a.image;
     final boolean hasImage = requestImage != null;
+    final boolean directWord = fromHub && !hasImage && onQueryHome()
+        && AgentProtocol.isEnglishWordOrPhrase(explicitTarget)
+        && !AgentProtocol.normalize(explicitTarget).contains(" ");
+    final String sourceContext = target.optString("source_context");
     JSONArray previous = copyMessages();
     if (!append
         && previous.length() > 0
@@ -1138,30 +1216,105 @@ final class QueryUi {
     partialReply = "";
     Library.put(target, "pending_lookup", JSONObject.NULL);
     a.library.touchSession(target, true);
-    if (!a.persist()) return;
-    a.screen = "assistant";
-    a.request(
-        client ->
-            client.agent(
+    final String targetId = target.optString("id");
+    final int targetRevision = target.optInt("revision");
+    final long targetGeneration = a.store.currentGeneration();
+    sendPending = true;
+    persistSession(true, saved -> {
+      sendPending = false;
+      if (!saved || !currentSession(targetId, targetRevision, targetGeneration)
+          || (directWord && !onQueryHome())) return;
+      if (!directWord) a.screen = "assistant";
+      a.request(
+          client -> {
+            if (directWord) return resolveSingleWord(client, previous, text, explicitTarget, sourceContext);
+            return client.agent(
                 previous,
                 text,
                 requestImage == null ? null : ImageTools.dataUrl(a, requestImage),
                 delta ->
                     a.handler.post(
                         () -> {
-                          if (a.active != client || a.session != target) return;
+                          if (a.active != client || !currentSession(targetId, targetRevision, targetGeneration)) return;
                           partialReply += delta;
                           if (assistantView != null) assistantView.updatePartial(partialReply);
-                        })),
-        reply -> {
-          if (a.session != target) return;
-          applyReply(
-              reply,
-              reply.optJSONObject("result") != null
-                  && AgentProtocol.canApplyDirectResult(
-                      explicitTarget, reply.optJSONObject("result"), fromHub, hasImage));
-        },
-        false);
+                        }));
+          },
+          reply -> {
+            if (!currentSession(targetId, targetRevision, targetGeneration)) return;
+            applyReply(
+                reply,
+                reply.optJSONObject("result") != null
+                    && AgentProtocol.canApplyDirectResult(
+                        explicitTarget, reply.optJSONObject("result"), fromHub, hasImage));
+          },
+          directWord);
+    });
+  }
+
+  private boolean onQueryHome() {
+    return "tabs".equals(a.screen) && a.page == 0;
+  }
+
+  private JSONObject resolveSingleWord(AiClient client, JSONArray previous, String text,
+      String word, String sourceContext) throws Exception {
+    JSONObject reply = client.validateWordQuery(previous, text);
+    JSONObject proposal = reply.optJSONObject("lookup");
+    if (!"confirm_lookup".equals(reply.optString("kind")) || proposal == null
+        || !"word".equals(proposal.optString("type"))
+        || !AgentProtocol.normalize(word).equals(AgentProtocol.normalize(proposal.optString("target"))))
+      return reply;
+    return new JSONObject().put("kind", "lookup_result")
+        .put("result", client.lookup(word, sourceContext, null));
+  }
+
+  private void persistSession(boolean history, java.util.function.Consumer<Boolean> callback) {
+    final JSONObject submitted = Library.copy(a.session);
+    final String id = submitted.optString("id");
+    final int revision = submitted.optInt("revision");
+    final long generation = a.libraryGeneration;
+    LibraryCommand command = LibraryCommand.touchSession(a.libraryGeneration, id, submitted, history,
+        System.currentTimeMillis(), a.libraryRevision);
+    a.dispatch(command, result -> {
+      if (!result.isSuccess()) {
+        a.restoreAfterFailedSave(new java.io.IOException("会话记录失败：" + result.getMessage()), id,
+            () -> currentSession(id, revision, generation), callback);
+        return;
+      }
+      JSONObject delta = result.getUpdatedEntity();
+      if (result.getSnapshot() == null && delta != null && delta.optJSONObject("session") != null) {
+        JSONObject saved = delta.optJSONObject("session");
+        JSONArray conversations = a.library.array("conversations");
+        boolean replaced = false;
+        for (int i = 0; i < conversations.length(); i++) {
+          JSONObject old = conversations.optJSONObject(i);
+          if (old != null && id.equals(old.optString("id"))) {
+            try { conversations.put(i, Library.copy(saved)); } catch (org.json.JSONException e) { throw new IllegalStateException(e); }
+            replaced = true; break;
+          }
+        }
+        if (!replaced) conversations.put(Library.copy(saved));
+        JSONArray removed = delta.optJSONArray("removed_conversation_ids");
+        for (int i = conversations.length() - 1; i >= 0; i--) {
+          JSONObject row = conversations.optJSONObject(i);
+          for (int j = 0; row != null && removed != null && j < removed.length(); j++)
+            if (row.optString("id").equals(removed.optString(j))) { conversations.remove(i); break; }
+        }
+        JSONArray recent = delta.optJSONArray("recent_queries"), target = a.library.array("recent_queries");
+        if (recent != null) { while (target.length() > 0) target.remove(target.length()-1); for (int i=0; i<recent.length(); i++) target.put(Library.copy(recent.optJSONObject(i))); }
+      }
+      if (a.session != null && id.equals(a.session.optString("id")) && a.session.optInt("revision") == revision
+          && pendingInitialLookups.get(id) == null) {
+        JSONObject committed = result.getSnapshot() != null ? a.library.find("conversations", id) : delta == null ? null : delta.optJSONObject("session");
+        if (committed != null) a.session = Library.copy(committed);
+      }
+      if (callback != null) callback.accept(true);
+    });
+  }
+
+  private boolean currentSession(String id, int revision, long generation) {
+    return a.session != null && id.equals(a.session.optString("id"))
+        && a.session.optInt("revision") == revision && a.store.currentGeneration() == generation;
   }
 
   void applyReply(JSONObject original, boolean applyDirectly) {
@@ -1171,6 +1324,8 @@ final class QueryUi {
       JSONObject intent = new JSONObject();
       Library.put(intent, "target", result.optString("word"));
       Library.put(intent, "type", result.optString("type"));
+      FieldProvenance.transfer(result, "word", intent, "target");
+      FieldProvenance.transfer(result, "type", intent, "type");
       reply = new JSONObject();
       Library.put(reply, "kind", "confirm_lookup");
       Library.put(reply, "message", "将查询目标设为「" + result.optString("word") + "」？请返回首页确认。");
@@ -1206,34 +1361,38 @@ final class QueryUi {
       return;
     }
     final JSONObject target = a.session;
+    final String targetId = target.optString("id");
+    final int targetRevision = target.optInt("revision");
+    final long targetGeneration = a.store.currentGeneration();
     String word = intent.optString("target");
     if (!AgentProtocol.isEnglishWordOrPhrase(word)) {
       a.say("查询目标须为英语单词或短语");
       return;
     }
+    String confirmedContext = (intent.optString("context_quote") + "\n" + intent.optString("user_requirement")).trim();
+    Library.put(a.session, "source_context", confirmedContext);
     JSONObject local = a.library.local(word);
     if (local != null) {
       JSONObject r = Library.copy(local);
       Library.put(r, "word", local.optString("content"));
+      FieldProvenance.transfer(local, "content", r, "word");
       Library.put(r, "is_from_local", true);
       Library.put(r, "local_vocabulary_id", local.optString("id"));
-      finishResult(r);
-      a.persist();
-      a.render();
+      showLookupAndRecord(r, "");
       return;
     }
-    a.request(
+    lookupDictionary(word, confirmedContext, () -> a.request(
         client ->
             client.lookup(
                 word,
-                intent.optString("context_quote") + "\n" + intent.optString("user_requirement"),
+                confirmedContext,
                 a.imageData()),
         reply -> {
-          if (a.session != target) return;
-          Library.put(target, "pending_lookup", JSONObject.NULL);
+          if (!currentSession(targetId, targetRevision, targetGeneration)) return;
+          Library.put(a.session, "pending_lookup", JSONObject.NULL);
           message("assistant", "已确认查询：" + word, null);
           finishResult(reply);
-        });
+        }));
   }
 
   void finishResult(JSONObject r) {
@@ -1252,6 +1411,7 @@ final class QueryUi {
             String sourceImage = sessionImages.optString(j);
             if (!NotebookUi.contains(images, sourceImage)) images.put(sourceImage);
           }
+          FieldProvenance.markPresent(meaning, false, "source_images");
         }
     }
     Library.put(a.session, "query_results", r);
@@ -1299,7 +1459,8 @@ final class QueryUi {
       // A result explicitly opened in the assistant becomes independent of query history.
       Library.promoteTemporary(a.session);
       a.library.touchSession(a.session, false);
-      if (!a.persist()) return;
+      a.persistAsync(saved -> { if (saved) { assistantView = AssistantUi.show(a, this); if (!partialReply.isEmpty()) assistantView.updatePartial(partialReply); } });
+      return;
     }
     assistantView = AssistantUi.show(a, this);
     if (!partialReply.isEmpty()) assistantView.updatePartial(partialReply);
@@ -1356,7 +1517,13 @@ final class QueryUi {
     }
     Library.put(a.session, "query_results", updated);
     a.library.touchSession(a.session, true);
-    if (a.persist()) a.render();
+    String sessionId = a.session.optString("id");
+    if (pendingInitialLookups.containsKey(sessionId)) {
+      pendingInitialLookups.put(sessionId, Library.copy(a.session));
+      a.render();
+      return;
+    }
+    a.persistAsync(saved -> { if (saved) a.render(); });
   }
 
   void presentation(JSONObject meaning, boolean selected, String choice, boolean example) {
@@ -1378,14 +1545,110 @@ final class QueryUi {
     final JSONObject target = a.session;
     final JSONObject original = Library.copy(target.optJSONObject("query_results"));
     final int revision = target.optInt("revision");
+    final String targetId = target.optString("id");
+    final long generation = a.store.currentGeneration();
     a.request(
         client ->
             client.lookup(original.optString("word"), "请为此词汇提供更加丰富、深入的语境用法与高级搭配。保留原查询目标。", null),
         incoming -> {
-          if (a.session != target || target.optInt("revision") != revision) return;
-          Library.put(target, "query_results", QueryWorkflow.mergeSupplement(original, incoming));
-          a.library.touchSession(target, true);
+          if (!currentSession(targetId, revision, generation)) return;
+          Library.put(a.session, "query_results", QueryWorkflow.mergeSupplement(original, incoming));
+          a.library.touchSession(a.session, true);
         });
+  }
+
+  private void explainDictionary(JSONObject result, String context) {
+    if (a.active != null) return;
+    final String id = a.session.optString("id");
+    final int revision = a.session.optInt("revision");
+    final long generation = a.store.currentGeneration();
+    final JSONObject basis = Library.copy(result);
+    a.requestSessionResult(client -> client.dictionaryContext(basis, context), explanation -> {
+      if (!currentSession(id, revision, generation) || !"result".equals(a.screen)) return;
+      JSONObject current = a.session.getJSONObject("query_results");
+      JSONObject additional = explanation.optJSONObject("additional_meaning");
+      if (additional != null) {
+        current.getJSONArray("meanings").put(additional);
+        explanation.remove("additional_meaning");
+      }
+      Library.put(current, "dictionary_context", explanation);
+      saveUpdatedLookup();
+    }, false);
+  }
+
+  private void verifyOnline(JSONObject result) {
+    if (a.active != null) return;
+    final String id = a.session.optString("id"), word = result.optString("word");
+    final String context = a.session.optString("source_context");
+    final int revision = a.session.optInt("revision");
+    final long generation = a.store.currentGeneration();
+    final JSONObject basis = Library.copy(result);
+    a.requestSessionResult(client -> client.verifyWord(basis, context), verification -> {
+      if (!currentSession(id, revision, generation) || !"result".equals(a.screen)) return;
+      Library.put(verification, "word", word);
+      Library.put(a.session, "web_verification", verification);
+      saveUpdatedLookup();
+    }, false);
+  }
+
+  private void saveUpdatedLookup() {
+    a.library.touchSession(a.session, true);
+    persistSession(true, saved -> {
+      if (saved && "result".equals(a.screen)) a.render();
+    });
+  }
+
+  private void renderVerification(JSONObject result) {
+    JSONObject verification = a.session.optJSONObject("web_verification");
+    if (verification == null || !result.optString("word").equals(verification.optString("word"))) return;
+    LinearLayout card = a.card("联网核对");
+    String status = verification.optString("status");
+    String summary = status.equals("supported") ? "资料支持" :
+        status.equals("conflicting") ? "资料存在分歧" : "暂无法确认";
+    card.addView(a.text(summary, 14, true));
+    for (String field : new String[] {"meaning", "reason"}) {
+      String value = verification.optString(field);
+      if (!value.isEmpty()) card.addView(a.text(value, 14, false));
+    }
+    if ("supported".equals(status) && !verification.optString("meaning").isEmpty()
+        && verification.optString("attached_meaning_id").isEmpty())
+      card.addView(a.outlineButton("加入可保存释义", v -> {
+        if (a.active != null || a.session == null || a.session.optJSONObject("query_results") != result
+            || a.session.optJSONObject("web_verification") != verification
+            || !verification.optString("attached_meaning_id").isEmpty()) return;
+        JSONObject meaning = QueryWorkflow.meaningFromVerification(verification);
+        if (meaning == null) return;
+        result.optJSONArray("meanings").put(meaning);
+        Library.put(verification, "attached_meaning_id", meaning.optString("id"));
+        saveUpdatedLookup();
+        a.render();
+      }));
+    JSONArray ids = verification.optJSONArray("source_ids"), sources = verification.optJSONArray("sources");
+    if (ids == null || ids.length() == 0 || sources == null) return;
+    LinearLayout details = a.column();
+    details.setVisibility(View.GONE);
+    card.addView(a.chip("查看引用", false, v -> details.setVisibility(
+        details.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE)));
+    card.addView(details);
+    for (int i = 0; i < sources.length(); i++) {
+      JSONObject source = sources.optJSONObject(i);
+      if (source == null || !NotebookUi.contains(ids, source.optString("id"))) continue;
+      details.addView(a.outlineButton(source.optString("id") + " · " + source.optString("title"),
+          v -> openEvidence(source.optString("url"))));
+      details.addView(a.text(source.optString("snippet"), 13, false));
+    }
+  }
+
+  private void openEvidence(String url) {
+    try {
+      java.net.URI address = new java.net.URI(url);
+      String scheme = address.getScheme();
+      if (address.getHost() == null || address.getUserInfo() != null
+          || !("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme))) return;
+      a.startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(url)));
+    } catch (Exception unavailable) {
+      a.say("无法打开引用");
+    }
   }
 
   void addMeaningControls(LinearLayout card, JSONObject meaning) {
@@ -1546,8 +1809,10 @@ final class QueryUi {
       wordRow.addView(saved, savedLp);
     }
     heading.addView(wordRow);
-    if (r.optBoolean("is_from_local")) {
-      TextView local = a.text("本地词库记录", 11, true);
+    boolean dictionary = "ecdict".equals(r.optString("lookup_origin"));
+    boolean personal = r.optBoolean("is_from_local");
+    if (personal || dictionary) {
+      TextView local = a.text(personal ? "个人笔记" : "内置词库 · ECDICT", 11, true);
       local.setTextColor(a.accent);
       local.setPadding(a.dp(8), a.dp(3), a.dp(8), a.dp(3));
       local.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 12, 0));
@@ -1557,6 +1822,15 @@ final class QueryUi {
     heading.addView(a.text(r.optString("phonetic"), 16, false));
     if (!r.optString("recognized_text").isEmpty())
       heading.addView(a.text("识别文字：" + r.optString("recognized_text"), 14, false));
+    heading.addView(a.chip(a.active == null ? "联网核对" : "取消请求", false, v -> {
+      if (a.active != null) { a.cancel(); a.render(); }
+      else verifyOnline(r);
+    }));
+    JSONObject interpretation = r.optJSONObject("dictionary_context");
+    String selectedMeaning = interpretation == null ? "" : interpretation.optString("selected_meaning_id");
+    if (interpretation != null && !interpretation.optString("explanation").isEmpty())
+      a.card("语境解读").addView(a.text(interpretation.optString("explanation"), 14, false));
+    renderVerification(r);
     JSONArray ms = r.optJSONArray("meanings");
     if (a.session.has("auto_record_error"))
       a.body.addView(
@@ -1584,6 +1858,10 @@ final class QueryUi {
         LinearLayout.LayoutParams partLp = new LinearLayout.LayoutParams(-2, -2);
         partLp.leftMargin = a.dp(8);
         meaningHeader.addView(part, partLp);
+        if (m.optString("id").equals(selectedMeaning) && !selectedMeaning.isEmpty())
+          meaningHeader.addView(a.text("  当前语境义项", 11, true));
+        else if ("ai".equals(m.optString("lookup_origin")))
+          meaningHeader.addView(a.text("  补充义项", 11, true));
         c.addView(meaningHeader);
         if (organizing) addMeaningControls(c, m);
         for (String f : new String[] {"zh_definition", "en_definition"})

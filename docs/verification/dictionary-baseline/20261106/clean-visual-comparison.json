@@ -1,0 +1,91 @@
+{
+  "status_bar_mask_px": 142,
+  "channel_delta_gt": 8,
+  "threshold_percent": 0.5,
+  "calibration": {
+    "7073": {
+      "captures": 5,
+      "max_percent": 0.295
+    },
+    "candidate": {
+      "captures": 5,
+      "max_percent": 0.295
+    }
+  },
+  "pair_diff_percent": {
+    "light-normal": {
+      "01-bookshelf.png": 99.9731,
+      "02-compact-first.png": 99.7925,
+      "03-compact-last.png": 0.0,
+      "04-detailed-list.png": 0.0,
+      "05-search-results.png": 0.0,
+      "06-vocab-detail.png": 0.0,
+      "07-review-front.png": 0.0,
+      "08-review-back.png": 0.0,
+      "09-review-rated.png": 0.0,
+      "10-empty-plans.png": 0.0,
+      "11-long-conversation.png": 0.0,
+      "12-settings.png": 0.0
+    },
+    "dark-normal": {
+      "01-bookshelf.png": 0.0,
+      "02-compact-first.png": 0.0,
+      "03-compact-last.png": 0.0,
+      "04-detailed-list.png": 0.0,
+      "05-search-results.png": 0.0,
+      "06-vocab-detail.png": 0.0,
+      "07-review-front.png": 0.0,
+      "08-review-back.png": 0.0,
+      "09-review-rated.png": 0.0,
+      "10-empty-plans.png": 0.0,
+      "11-long-conversation.png": 0.0,
+      "12-settings.png": 0.0
+    },
+    "light-large": {
+      "01-bookshelf.png": 0.0,
+      "02-compact-first.png": 0.0,
+      "03-compact-last.png": 0.0,
+      "04-detailed-list.png": 0.0,
+      "05-search-results.png": 0.0,
+      "06-vocab-detail.png": 0.0,
+      "07-review-front.png": 0.0,
+      "08-review-back.png": 0.0,
+      "09-review-rated.png": 0.0,
+      "10-empty-plans.png": 0.0,
+      "11-long-conversation.png": 0.0,
+      "12-settings.png": 0.0
+    },
+    "dark-large": {
+      "01-bookshelf.png": 0.0,
+      "02-compact-first.png": 0.0,
+      "03-compact-last.png": 0.0,
+      "04-detailed-list.png": 0.0,
+      "05-search-results.png": 0.0,
+      "06-vocab-detail.png": 0.0,
+      "07-review-front.png": 0.0,
+      "08-review-back.png": 0.0,
+      "09-review-rated.png": 0.0,
+      "10-empty-plans.png": 0.0,
+      "11-long-conversation.png": 0.0,
+      "12-settings.png": 0.0
+    }
+  },
+  "runner_errors": {
+    "light-normal": {
+      "baseline": [],
+      "candidate": []
+    },
+    "dark-normal": {
+      "baseline": [],
+      "candidate": []
+    },
+    "light-large": {
+      "baseline": [],
+      "candidate": []
+    },
+    "dark-large": {
+      "baseline": [],
+      "candidate": []
+    }
+  }
+}

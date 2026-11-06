@@ -1,0 +1,91 @@
+{
+  "scale": "3000",
+  "mode": "benchmark",
+  "round": 1,
+  "sample_count": 5,
+  "warmup_count": 1,
+  "fixture_load_ms": 154,
+  "timings": {
+    "rating_input_to_first_observed_draw_ms": [
+      81.78,
+      43.05,
+      44.97,
+      44.24,
+      37.27
+    ],
+    "rating_input_to_observed_callback_upper_bound_ms": [
+      129.56,
+      78.23,
+      89.15,
+      89.17,
+      61.76
+    ],
+    "rating_input_to_idle_ms": [
+      144.67,
+      79.3,
+      90.07,
+      91.4,
+      64.92
+    ],
+    "local_query_input_to_first_observed_draw_ms": [
+      54.35,
+      71.81,
+      61.78,
+      62.42,
+      60.58
+    ],
+    "local_query_observed_callback_upper_bound_ms": [
+      56.96,
+      66.92,
+      65.88,
+      60.48,
+      64.6
+    ],
+    "local_query_idle_ms": [
+      72.4,
+      87.33,
+      78.5,
+      73.23,
+      79.45
+    ],
+    "search_input_to_first_observed_draw_ms": [
+      11.1,
+      7.83,
+      7.35,
+      17.84,
+      14.57
+    ],
+    "search_input_to_correct_result_observed_ms": [
+      132.77,
+      124.49,
+      139.86,
+      128.73,
+      114.04
+    ],
+    "review_plan_switch_ms": [
+      27.39,
+      24.15,
+      24.24,
+      39.75,
+      20.59,
+      28.99,
+      20.75,
+      188.61,
+      31.87,
+      21.83
+    ]
+  },
+  "single_events": {
+    "review_first_plans_gen_ms": 7839
+  },
+  "pure_scroll_completed": true,
+  "passed": [
+    "routine1_rating_actions_5_samples",
+    "routine2_local_queries_5_samples",
+    "routine3_search_actions_5_samples",
+    "routine4_queue_generation_12_plans",
+    "routine4_queue_read_plan_switch_zero_writes",
+    "routine5_pure_scrolling_completed"
+  ],
+  "failed": []
+}

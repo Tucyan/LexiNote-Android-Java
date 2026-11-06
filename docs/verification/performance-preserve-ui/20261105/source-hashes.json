@@ -1,0 +1,490 @@
+[
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/TokenDanceRecovery.java",
+    "Hash": "5854BD29EA2CAD676FCB378483520F9DFA10C0FCAF9888B82ECE444D21EB5253"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/TokenDanceProtocol.java",
+    "Hash": "CEFC1FB0CF010A88E01D0C9C9CCD3A04B7EC39B7AD0497872126D2F4CA695EAB"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/TokenDanceCatalog.java",
+    "Hash": "D6AA858A0693D0021E99A9A7470A652E465AA6D8EF02C402AB146D45B5D3EDF9"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/TokenDanceApi.java",
+    "Hash": "B04ED4D3634EC6889351E580BFF130035B35D162867F34A4FF30F9F87DB930AA"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/TokenDanceActivity.java",
+    "Hash": "887CD052E4D966C0D9928E8AB40D2F7D55F8300899BE319C6FF5BAA2187AD515"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/TitleSuggestionGuard.java",
+    "Hash": "EC3BC61BE8B5CBB7A182D49242FECFFCB6B847A32B012126AF963D4173C79216"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/StreamingLibraryValidator.java",
+    "Hash": "6F1FB7EE32B3E93DECDBF91F658911154E024D23CAE5E26C2CE908F97775E40F"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/StreamingLibraryImport.java",
+    "Hash": "A1B28AF1AFE1203E77C125BB35BA97D0D2332021DB44FCCE18BE2EF241B5B19D"
+  },
+  {
+    "Path": "app/src/androidTest/java/com/lexinote/nativeapp/UsageExperienceInstrumentation.java",
+    "Hash": "C62F9AA0CC59A0750C082024FFD9C625D6211BAE8B88521134D542060653DC35"
+  },
+  {
+    "Path": "app/src/androidTest/java/com/lexinote/nativeapp/StreamingBackupInstrumentation.java",
+    "Hash": "D854B2EBE51D74B536356207B82FDBCD72E08493B7A4481803A5452ED7E547AB"
+  },
+  {
+    "Path": "app/src/androidTest/java/com/lexinote/nativeapp/SmokeInstrumentation.java",
+    "Hash": "FD38C2CA8A56A111A4A0016FCBE447D5CE2CB278FB1960F791D259DC465303DA"
+  },
+  {
+    "Path": "app/src/androidTest/java/com/lexinote/nativeapp/SequentialSettingsInstrumentation.java",
+    "Hash": "0BBE6019C72F3D898D748E15244DA72E54D33CD28E2AF1DDEE5A8E4E3FD5F543"
+  },
+  {
+    "Path": "app/src/androidTest/java/com/lexinote/nativeapp/ScaleInstrumentation.java",
+    "Hash": "E0AE335032BEEEBD6B13CF3056DD75815AEEDBF23366EB5CD17708F0AF861DD4"
+  },
+  {
+    "Path": "app/src/androidTest/java/com/lexinote/nativeapp/ReviewRecreationInstrumentation.java",
+    "Hash": "DC7AE64672B09404566C689FD7A161724D23E2589BC07231100391635AC712B7"
+  },
+  {
+    "Path": "app/src/androidTest/java/com/lexinote/nativeapp/ReviewPlansInstrumentation.java",
+    "Hash": "E2A3EFED6204C18E5F5593732B8198FAB08F693D40A586AFEC668ECD9174F8BF"
+  },
+  {
+    "Path": "app/src/androidTest/java/com/lexinote/nativeapp/PersistenceInstrumentation.java",
+    "Hash": "BBBE349732F337EEAA1D30245937ABD3EF4BF549CF68B2FA9E6198B4EB9BA838"
+  },
+  {
+    "Path": "app/src/androidTest/java/com/lexinote/nativeapp/PerformanceInstrumentation.java",
+    "Hash": "CFB45CC73A8E1C54E3AA0A6FFB726FB32E126A76E4BB64C15120AFDBE66BAA03"
+  },
+  {
+    "Path": "app/src/androidTest/java/com/lexinote/nativeapp/NotebookSearchInstrumentation.java",
+    "Hash": "008FFAD30031D26CAC7C86A302C08289E616F2A57FC186AF70B75320B45C405F"
+  },
+  {
+    "Path": "app/src/androidTest/java/com/lexinote/nativeapp/ModelConfigurationInstrumentation.java",
+    "Hash": "E3D315E1322F3B5A726280606A8ACEB2EF4B7370C1EFFAA2EA81D7991969ACED"
+  },
+  {
+    "Path": "app/src/androidTest/java/com/lexinote/nativeapp/LargeLibraryInstrumentation.java",
+    "Hash": "F4A90B3665A44E8E38BEAA3B3B4EC37878CF0C9015736503DFE6FDB6A9D67132"
+  },
+  {
+    "Path": "app/src/androidTest/java/com/lexinote/nativeapp/IncrementalReviewInstrumentation.java",
+    "Hash": "1695D5B190B15E4AD8260313868ABDB555477DDC3F88796E81C69D33BEEB7565"
+  },
+  {
+    "Path": "app/src/androidTest/java/com/lexinote/nativeapp/HistoryStorageInstrumentation.java",
+    "Hash": "B50E8E251D144B7DAC7B8C4016581D35E8CD480AD6B617F2FC09E99D4F7AD641"
+  },
+  {
+    "Path": "app/src/androidTest/java/com/lexinote/nativeapp/FeatureInstrumentation.java",
+    "Hash": "C7869E2A570D8B16791F7F57C33B59599491EAD01EE666111B1268A25D733892"
+  },
+  {
+    "Path": "app/src/androidTest/java/com/lexinote/nativeapp/DeviceAsync.java",
+    "Hash": "9118AD7CB943FADDDC763F67B35F63C51BA17D58481560D761C1B999AAA6FC3C"
+  },
+  {
+    "Path": "app/src/androidTest/java/com/lexinote/nativeapp/AssistantDeviceChecks.java",
+    "Hash": "F3AFD6503207A93F360DFA219FE771410B0F778908964E2677E79EF9AC810F45"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/GenerateScaleHistoryTest.java",
+    "Hash": "D8B2861A8942A5BE5978D0065EB975BAB76AAFA21C6DAAB9101010978DE88933"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/BackupLimitsTest.java",
+    "Hash": "B19CD1AD06C65569D7E97404FE5AC3DC9F43AFBBB9F8456C159375745D17BF15"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/BackupArchiveTest.java",
+    "Hash": "192249F2FAB4DDD7D4C29C2CFA86E66F4F4CAEF9F04C0986690C836B98135C92"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/AssistantTimelineTest.java",
+    "Hash": "2C5311198375666C29F91AC919B184F13B50048239056BFD544E0FEA7080C07E"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/AiClientTest.java",
+    "Hash": "388F8E8E92E8FF4860DC93094D5175C58A0AEF14F2AEF70BA8F92FEA26D0414B"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/AgentProtocolTest.java",
+    "Hash": "08CED5C05A79D40F42CC2EA980A65E2A5FEB87123E1FC15FFF2AFC7D4415EA24"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/LibraryEditingTest.java",
+    "Hash": "59BE7096DEAEC6B90F836F55BC7B1CD91A52D4F4F6E254EA9D81BDCB7921FA19"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/LegacySessionCompatibilityTest.java",
+    "Hash": "51562F7E51A77F234462A9BA7F7A904DC8DF84486B056BBD16A58390796E58A9"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/ImageEditHistoryTest.java",
+    "Hash": "12CF918BDC5F16C2D469B9C80F24824ECB10FFDF897B87BC65D387753430FFD6"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/LibraryRestoreTest.java",
+    "Hash": "75D2CE8CA1761131397DED3E5037F99F6F6297519DA599CEB1D8C5A8135BA7A7"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/LibraryIntegrityTest.java",
+    "Hash": "AB186B5FC8F77908E459340E1C5505A970D678B681BDAFD87BB02701816F3F90"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/LibraryStoreEmpiricalStressTest.java",
+    "Hash": "772605F56870FB3A9A972BD512072EDD377762A423E87698016464218CD1A675"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/MarkdownTableParser.java",
+    "Hash": "4E89FD075C4AA6159313DF34510996572F64F71FC7D1AF55630595B8248F9C53"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/MainActivity.java",
+    "Hash": "E5AFEF68F6ED76F5A64349C6E118A4557FEF1ED251172B3F0C831C57BB4CF24E"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/LibraryDatabase.java",
+    "Hash": "CEF9CE06686E9E78D7DA35ACE2A711DF26D0692FADA8B658C936CC0D9BDEFDE9"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/Library.java",
+    "Hash": "7008CC76C0D3898ED18A44FD71ACC52412170D18E8E0E9631FF7025718CC5859"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/LegacyLibraryMigration.java",
+    "Hash": "AD2BF55F2EB784194DC24F1F767393EF3B5A336FC5E3F46E8079ABD8952EEEB5"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/JsonMessagePreview.java",
+    "Hash": "F1B1AF1610DDA951C2CC61C661C51F93572EA8147455B74B9F019B031CD4E874"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/ImageTools.java",
+    "Hash": "D1F0872171E9E568EE9C5176B277031CC4CAB17212D24E0EBAC9B274AF076853"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/ImageEditorState.java",
+    "Hash": "34AF3B4C20E0DD9E36E5CDB9E1211D6FD3A6C668E3B58532F2377D37D58196F7"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/ImageEditorResult.java",
+    "Hash": "784F33060BCFDF28C0B311528B8D3D91FD61322B085A2456B85C4C35B03ECE04"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/ImageEditorDialog.java",
+    "Hash": "04588D5F74C1014D2BB6FC080FC5BABA188D079C35B142C8076B10A19E52C9DE"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/ImageEditHistory.java",
+    "Hash": "61B44DDC4892802556D5E706AE8E31EA073E9C1436973D04A65C3B0E976B57EA"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/ImageCropView.java",
+    "Hash": "07875222F13AA64C33989AE0AEFBA93B2DF7FBC876245798036FA6BEA3110B5D"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/IconGlyphs.java",
+    "Hash": "30AD2E5195E6F3277B7544A1ADFCC3DB2247DBCE1676246F886B57A5DEDB2D0F"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/FullResolutionCamera.java",
+    "Hash": "8D07C200979E8347180D443776F5A3B722B58C3D6A56E08CE70E3079F28125AF"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/ConversationTitles.java",
+    "Hash": "5783E0C61CBCAD2C5F282AFB2EFE90DD9D04375857704C80DED4D049D9E2DB45"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/CapsuleSliderView.java",
+    "Hash": "61008D22CAA416E02B9E4C29B3073CFAE28487B3C9D7046EBBC52E395A58567A"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/CameraOutputProvider.java",
+    "Hash": "FDCFEF41F30414B15AA2F06E0B62BD299537D539EB28027DCDEC01ABE934AC09"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/BackupStreamCodec.java",
+    "Hash": "17593AC405E1DC3B2BA857A368B52B4BE666E62FA76749FA43D94B151310694E"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/BackupLimits.java",
+    "Hash": "83840F2CD414C8E54135043FEF644F476B342B5A13C32E6895195F11420DFB89"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/BackupArchive.java",
+    "Hash": "15C4663D02F339104C0868C4A4F9A73D3D84BB203244FC660627D5A93CCEF7EE"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/AssistantUi.java",
+    "Hash": "020EBFE27FF1CCDEAEB4546FD22F6BB60318C6BC089BE0A68413F96518BBD8EF"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/AssistantTimeline.java",
+    "Hash": "00F1E8C90E7DE45FBBB2AA77F57C7067F057BCC4810B16139D8BDB91CD3182A9"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/Annotations.java",
+    "Hash": "9763DD9773ABF672ECE905E0E4105E5E90F8F054F50C84209A74214079D0EF5D"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/AnnotationActionIds.java",
+    "Hash": "6251FEA4B27CE1BDEF0BEE346C6E83DA497D6FA7BAD5B713464857A486A57F91"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/AiClient.java",
+    "Hash": "43F7537CE1EF64351DC3AA1D9EA1A6399AF03EBEAA4B86F7D6B257B01E696A37"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/AgentProtocol.java",
+    "Hash": "57576CEE7670EFDE0DACF2FAD69C0F2E4446CB0C46C81B464066062273FA5221"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/LibraryStoreTest.java",
+    "Hash": "2BE6E41D4EF189E47B8EA383B7BDEF79705C32F77B3ADCD722C7C15E4B285909"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/LibrarySystemRootsTest.java",
+    "Hash": "7A666999700ED7FA9EB2907F944C663F54D2494575D42409F99806F99C5129C3"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/QueryUi.java",
+    "Hash": "DD34DA348440FE454280D34C67D9EA0D37167C3657C04C6A8C876C461D0FA9D8"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/ProviderSettingsUi.java",
+    "Hash": "3677956DCBE087726E15953E95EA1D5718B4301D285B003FE2F1540F6F41E8BD"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/ProviderProfiles.java",
+    "Hash": "900248A4481B9FDB86D446C89DA857F239F17BC6BE8EC450963A2459BB5F8B61"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/ProviderDraft.java",
+    "Hash": "6D16EA4481E19481692F6614F64C29B886F99BE4A38BC524CAB85AE8724061A9"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/NotebookUi.java",
+    "Hash": "F5614614AAE76978459A89FDEBB23000BB7B0CFA2F822EAFBA34F7173277D1B7"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/NotebookSelection.java",
+    "Hash": "C879C688B7A1B524A081496F9DD0CFD3502571B58F09B29E1BDD697D62BF7813"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/NotebookSearchIndex.java",
+    "Hash": "7976DF0F410248CA523388A4DBB86AB8A16BEC344593B9DC89CB3E687C8302B0"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/NotebookSearch.java",
+    "Hash": "C69FF2F07448B1E729D8924E186FC801337B274B739CB4C4C5294D7C2755CF7C"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/NotebookExport.java",
+    "Hash": "1DCA5AB2768D8706DCB583496E7A14C4BEAEA2B35F1AE56DC386B6C7C0420081"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/ModelsApi.java",
+    "Hash": "AEBED8FFAD73F827344718F5C680371467F0E37B1EC7325B9C35C00770C2039E"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/ModelOptions.java",
+    "Hash": "7722A2790D69E4748D685DF5FB351FB37A9005C9495B4B559DECBF03D2913922"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/MarkdownView.java",
+    "Hash": "34317C0FE50D1F52D2C8A316E3D416FCAFCAFFDEB3B8F18488D263D7109D94AD"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/MarkdownText.java",
+    "Hash": "3EB7376C182B73E1F8943CE53DD45805A411D977AD5538DBBB111F4DAF57E44A"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/LibraryTest.java",
+    "Hash": "F5D2E5657605ED0C2850CFA4AA0D6BB4CCC7DEBE1242718B30B56B77BC4E0513"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/ReviewUi.java",
+    "Hash": "B44D290524CA2609E45F4FB34BADA349F2F8196DC6ED26D01A17257867E29972"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/ReviewSessionState.java",
+    "Hash": "971CA9725045FABD5AC7350AF64793AB8C4960ADB5934D1DAC5757A4CA4DD29E"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/ReviewPlanSchema.java",
+    "Hash": "F067BF2D17F4C85B5332D592D4CFFA738A4F2806C91D843A2E1DA67E506AB331"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/ReviewPlans.java",
+    "Hash": "D3899A4F6D745B552EEA8F3703694B8BC7D74F09A62F2AC48C9D85C955EF9779"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/ReviewLogic.java",
+    "Hash": "4C9A6ACDEDF469F5C17559ED3D8032FD5B53330F7F14D7B4FE431E140696D566"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/Repository.java",
+    "Hash": "1E4D5C017765690EC26161C4C7B715C35F043F2C79E6D07F054F6AFF11868323"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/QueryWorkflow.java",
+    "Hash": "B18CB4A2E0048B8DBDA35309B7C5BCA717FC2F1029B0C107C5D4A312534E85CB"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/SessionDates.java",
+    "Hash": "55CF2CB837473E0A22923B1ED962FF5F89EF828B99B4C618F4E973412F9E98E8"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/SelectedRegion.java",
+    "Hash": "3FDEAC43767849F3DEB80F226957E88F1ABE187576B30D5441F9A3A7842FF059"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/SecureSettings.java",
+    "Hash": "FF95BA155A206E3A2DD027FC1CECFF0767586CB8BA7216E38F01869F292054C6"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/SqliteLibraryStore.java",
+    "Hash": "F0301A4E62A2AD42630C9F4113316050C5D795C7E23255A7A1495E4BF84CE9A6"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/SettingsUi.java",
+    "Hash": "9EF32194BD9E4E06BA845EAB078BF5E367BEA4B0DC514255FEE3E1051777B575"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/SseDecoder.java",
+    "Hash": "DB5014514C224FF67CC905F3B867C0711AE0684A829B442970D0D796BDA80277"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/storage/LibraryStore.java",
+    "Hash": "925A3472B456DB16180CE11D1A9A1914074B3FE0FDB6E0BB18D947217FDDEECB"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/storage/JsonStoreBackend.java",
+    "Hash": "AB972C00C93B27D51DDB2ADB5D537590343D98664BDBFF5545736C6AA71F8917"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/TokenDanceSettingsTest.java",
+    "Hash": "55C1A62655197A788CDBC98F7AD8BE5FB4389D6EC4E035077D20ADE9854D9773"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/TokenDanceProtocolTest.java",
+    "Hash": "898608EC0B67A93848476A5260540FADB037E13A5FD2D3E1732C60BF9D308375"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/TokenDanceCatalogTest.java",
+    "Hash": "08F56CC7C1E0F4CAFA3DBE55CA81C1C828096C6F5F6A50ED7F835824FC88BCD8"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/TokenDanceApiTest.java",
+    "Hash": "F59C101525AA45035F49D16C2A1C5136111D5981BEF69D1C9786DDF11A6D2D68"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/TitleSuggestionGuardTest.java",
+    "Hash": "4C5A2108A6824BDDD3CEF24429891CC684937697B8CA8E497D7B74509049A0F8"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/StorageContractTest.java",
+    "Hash": "C31A803474AA3ACE0381D8E1029716F3749C53CEB27A4FE55EC97282D4D68DA0"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/SseDecoderTest.java",
+    "Hash": "B5BCA676F019E8B3C1DB8F6A383739994114C510DCAA61F51EC73C65F25DDA47"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/SessionRetentionTest.java",
+    "Hash": "052B988B660A7DDDDD3C01E3AFE33FF6B0373F4F478196D55A47BA98CF09A298"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/SessionDatesTest.java",
+    "Hash": "7CB664D30441EE1065D7A7EB2ABCBB04AECB900E523D1492FD063D4E6333E6EC"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/SelectedImagesBackupTest.java",
+    "Hash": "7AF03EE33CDE9E4F0B1A7FCB4E0095D081026B067E812AC3A3B5208859EA03C0"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/ReviewSessionStateTest.java",
+    "Hash": "7925FC468B31730C2287FABDA6B097654A8EA2BD03653C42DD6AF8D3D4B28982"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/ReviewQueueAvailabilityTest.java",
+    "Hash": "1E7B59691A461E8573B472F621289F52C39F176E8455D9048650FEBBA3FA209A"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/ReviewPlansTest.java",
+    "Hash": "C07EAE8A222F812AC20B55492B89D541D4224373D9C7B66D26622FABBDCF9444"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/ReviewPlanPagingTest.java",
+    "Hash": "6D02AAE07DEA852FC430B69EC75CFCDB1BC2BE9EA685DA0EB78846B382D68B3F"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/ReviewLogicTest.java",
+    "Hash": "F2180C28BE6D7849F6804FEE82206C68ACF6869FB98ECCE4276F8D4FAF208662"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/QueryWorkflowTest.java",
+    "Hash": "925A6DE33E27294FB8F8B472BFB7053094FFDE24BCA8587A91DB259BE305790B"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/ProviderProfilesTest.java",
+    "Hash": "F0D60F7660C63320BAA1DBD3AF7170B5494D2CEF31CE74C13094F765A0B1CDA8"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/ProviderDraftTest.java",
+    "Hash": "E4D0687405398D433DF3E580D2CC751582522CBCC38B94C3CC25BC300FCB655F"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/NotebookSearchTest.java",
+    "Hash": "3D72B4398BC6AD12578339C10EA45792C46FD150A88C75DEB93F7A9FA8CD9331"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/NotebookSearchIndexTest.java",
+    "Hash": "91DA4A80AEF538FEF1E38360DC3847BFABD16530831A54A97D1B1CBF96BB13DF"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/NotebookFeaturesTest.java",
+    "Hash": "37F54ECC490CCF162E648F23C010EBEF689DBB33F6436531C9FD73C705F9748B"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/ModelsApiTest.java",
+    "Hash": "4518E5364A7A2121F7B2570F7CF15B52EE55F04B5DBA2320C492A733AD287FE5"
+  },
+  {
+    "Path": "app/src/test/java/com/lexinote/nativeapp/ModelOptionsTest.java",
+    "Hash": "434D065E477B760BF75AD828FAC42BE1AE0B2DE98854C915E4E794193B65CF52"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/storage/contract/StoreBackend.java",
+    "Hash": "1DB13D08AA8826A61FE97BBBAEC792D9CE52AF2EB86ABAC031E835DCB64C96DB"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/storage/contract/ReadOnlyView.java",
+    "Hash": "E9010B6547D0E7E0E69A6253762DAB89A1B0E4478BB4668A23C0CE6635F8C90D"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/storage/contract/QueryRequest.java",
+    "Hash": "D163ACCDE72DFC5FF9BDC6BC2947ECA3F1AB6DD807E89D8806F0D8FA12ADE27C"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/storage/contract/LibraryCommand.java",
+    "Hash": "D2B8C46B388AB4C62F985BEA5C90B628872A0EA2DD6BA651FE537FD4F0E6449E"
+  },
+  {
+    "Path": "app/src/main/java/com/lexinote/nativeapp/storage/contract/CommitResult.java",
+    "Hash": "5B9A55DCA16D931DC6C31391F237367BBA629B9F3B60AC391861186B450C5FF9"
+  }
+]

@@ -1,0 +1,2 @@
+INSTRUMENTATION_RESULT: error=java.lang.AssertionError: latest edit lost: visible=, persisted=
+INSTRUMENTATION_CODE: 0

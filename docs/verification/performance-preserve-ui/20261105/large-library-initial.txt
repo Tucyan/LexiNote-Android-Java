@@ -1,0 +1,2 @@
+PASS: legal large SQLite/ZIP round trip; source_bytes=10139662
+Initial unbuffered run eventually returned PASS before the stop command took effect. Several minutes were observed during file materialization; no precise duration was recorded. The intermediate interruption note was incorrect and has been replaced by this clarification.

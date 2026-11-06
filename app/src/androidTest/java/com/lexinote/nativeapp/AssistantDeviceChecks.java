@@ -144,8 +144,8 @@ public final class AssistantDeviceChecks {
           activity.session = session;
           activity.screen = "assistant";
           activity.render();
-          require(activity.persist(), "could not persist timeline fixture");
         });
+    DeviceAsync.save(instrumentation, activity, null, true);
     instrumentation.waitForIdleSync();
     ListView list = onMain(instrumentation, () -> findList(activity.root));
     require(list != null, "assistant ListView not found");
@@ -183,9 +183,9 @@ public final class AssistantDeviceChecks {
           expectedOffset.set(activity.session.optInt("assistant_anchor_offset"));
           require(!expectedId.get().isEmpty(), "anchor message ID was not saved");
           activity.library.touchSession(activity.session, true);
-          require(activity.persist(), "could not persist timeline anchor");
-          activity.render();
         });
+    DeviceAsync.save(instrumentation, activity, null, true);
+    onMain(instrumentation, activity::render);
     instrumentation.waitForIdleSync();
     ListView restored = onMain(instrumentation, () -> findList(activity.root));
     require(restored != null, "assistant ListView missing after rerender");
@@ -355,8 +355,8 @@ public final class AssistantDeviceChecks {
           JSONObject metadata = stored.optJSONObject("metadata");
           Library.put(metadata, "title", "Manual title");
           activity.library.touchSession(stored, false);
-          require(activity.persist(), "could not persist manual title fixture");
         });
+    DeviceAsync.save(instrumentation, activity, null, true);
     manual.release();
     manual.awaitDelivered();
     instrumentation.waitForIdleSync();

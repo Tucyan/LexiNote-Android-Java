@@ -77,6 +77,74 @@ public class QueryWorkflowTest {
   }
 
   @Test
+  public void supplementPreservesDictionaryFieldsAndMarksNewExample() throws Exception {
+    JSONObject dictionary = result("resilient").put("lookup_origin", "ecdict");
+    JSONObject original = dictionary.getJSONArray("meanings").getJSONObject(0);
+    original.remove("example");
+    original.put("field_meta", new JSONObject()
+        .put("zh_definition", new JSONObject().put("is_ai_generated", false)));
+    JSONObject model = result("resilient").put("phonetic", "model phonetic");
+    dictionary.put("phonetic", "dictionary phonetic");
+
+    JSONObject merged = QueryWorkflow.mergeSupplement(dictionary, model);
+
+    assertEquals("dictionary phonetic", merged.getString("phonetic"));
+    JSONObject meaning = merged.getJSONArray("meanings").getJSONObject(0);
+    assertEquals("Stay resilient.", meaning.getString("example"));
+    assertFalse(meaning.getJSONObject("field_meta").getJSONObject("zh_definition")
+        .getBoolean("is_ai_generated"));
+    assertTrue(meaning.getJSONObject("field_meta").getJSONObject("example")
+        .getBoolean("is_ai_generated"));
+  }
+
+  @Test
+  public void contextCanSelectExistingMeaningButCannotInventCandidateId() throws Exception {
+    JSONObject word = result("resilient");
+    JSONObject context = QueryWorkflow.validateDictionaryContext(word, new JSONObject()
+        .put("selected_meaning_id", "m1").put("explanation", "Context supports this sense."));
+    assertEquals("m1", context.getString("selected_meaning_id"));
+    assertTrue(context.getJSONObject("field_meta").getJSONObject("explanation")
+        .getBoolean("is_ai_generated"));
+    assertFalse(word.has("field_meta"));
+    try {
+      QueryWorkflow.validateDictionaryContext(word, new JSONObject().put("selected_meaning_id", "m2"));
+      fail("unknown dictionary sense accepted");
+    } catch (IllegalArgumentException expected) {
+      assertTrue(expected.getMessage().contains("释义"));
+    }
+  }
+
+  @Test
+  public void webConclusionUsesOnlyFetchedSourcesAndIsMarkedGenerated() throws Exception {
+    JSONArray sources = new JSONArray().put(new JSONObject().put("id", "S1")
+        .put("url", "https://example.com/dictionary"));
+    JSONObject reply = new JSONObject().put("status", "supported").put("meaning", "河岸")
+        .put("source_ids", new JSONArray().put("S1").put("S1"))
+        .put("sources", new JSONArray().put(new JSONObject().put("id", "S2")));
+    JSONObject verified = QueryWorkflow.validateWebVerification(sources, reply);
+    assertEquals(1, verified.getJSONArray("source_ids").length());
+    assertEquals("S1", verified.getJSONArray("sources").getJSONObject(0).getString("id"));
+    assertTrue(verified.getJSONObject("field_meta").getJSONObject("meaning")
+        .getBoolean("is_ai_generated"));
+    JSONObject newMeaning = QueryWorkflow.meaningFromVerification(verified);
+    Library library = new Library();
+    String savedId = library.saveResult(new JSONObject().put("word", "bank").put("type", "word")
+        .put("meanings", new JSONArray().put(newMeaning)), new String[] {"nb_default"}, new JSONObject());
+    JSONObject saved = library.find("vocabularies", savedId).getJSONArray("meanings").getJSONObject(0);
+    assertEquals("河岸", saved.getString("zh_definition"));
+    assertEquals("S1", saved.getJSONArray("web_sources").getJSONObject(0).getString("id"));
+    assertTrue(saved.getJSONObject("field_meta").getJSONObject("zh_definition")
+        .getBoolean("is_ai_generated"));
+    reply.put("source_ids", new JSONArray().put("S2"));
+    try {
+      QueryWorkflow.validateWebVerification(sources, reply);
+      fail("unfetched citation accepted");
+    } catch (IllegalArgumentException expected) {
+      assertTrue(expected.getMessage().contains("来源"));
+    }
+  }
+
+  @Test
   public void changedSupplementTargetIsRejected() throws Exception {
     try {
       QueryWorkflow.mergeSupplement(result("resilient"), result("resistant"));

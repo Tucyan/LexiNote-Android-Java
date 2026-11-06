@@ -423,6 +423,46 @@ public final class ReviewPlans {
     return Library.copy(event);
   }
 
+  /** Apply committed storage projections without recomputing a rating. */
+  public synchronized void applyCommittedRating(JSONObject delta) {
+    if (delta == null) return;
+    JSONObject event = delta.optJSONObject("event"), state = delta.optJSONObject("state"), day = delta.optJSONObject("day");
+    if (event == null || state == null || day == null) return;
+    // A replay of an already applied event must not overwrite a newer state.
+    if (find(items("events"), "id", event.optString("id")) != null) return;
+    JSONArray states = items("states");
+    for (int i = states.length() - 1; i >= 0; i--) {
+      JSONObject old = states.optJSONObject(i);
+      if (old != null && state.optString("plan_id").equals(old.optString("plan_id"))
+          && state.optString("vocab_id").equals(old.optString("vocab_id"))) states.remove(i);
+    }
+    states.put(Library.copy(state));
+    replaceProjection(items("days"), day, "plan_id", "date");
+    replaceProjection(items("events"), event, "id", null);
+  }
+
+  /** Applies only persisted daily queues returned by the incremental store. */
+  public synchronized void applyCommittedDays(JSONObject delta) {
+    JSONArray days = delta == null ? null : delta.optJSONArray("days");
+    for (int i = 0; days != null && i < days.length(); i++) {
+      JSONObject day = days.optJSONObject(i);
+      if (day != null) replaceProjection(items("days"), day, "plan_id", "date");
+    }
+  }
+
+  private static void replaceProjection(JSONArray rows, JSONObject value, String first, String second) {
+    for (int i = 0; i < rows.length(); i++) {
+      JSONObject row = rows.optJSONObject(i);
+      if (row != null && value.optString(first).equals(row.optString(first))
+          && (second == null || value.optString(second).equals(row.optString(second)))) {
+        try { rows.put(i, Library.copy(value)); }
+        catch (org.json.JSONException e) { throw new IllegalStateException(e); }
+        return;
+      }
+    }
+    rows.put(Library.copy(value));
+  }
+
   private static final String[] COUNTERS = {"attempts", "new_completed", "review_completed",
       "again", "hard", "easy", "duration_ms"};
 

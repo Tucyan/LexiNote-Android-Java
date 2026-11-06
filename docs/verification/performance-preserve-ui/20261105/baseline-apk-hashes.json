@@ -1,0 +1,10 @@
+[
+  {
+    "Path": ".planning/2026-11-04-performance/baseline-7073/app/build/outputs/apk/debug/app-debug.apk",
+    "Hash": "B05590610F5E0C3C17F51D42AE733536B4644B491CA4C5133E7CE8911C17A7A4"
+  },
+  {
+    "Path": ".planning/2026-11-04-performance/baseline-7073/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk",
+    "Hash": "7B4A600FBC48C94B22D0BB4BD94D3B32BF9620F21E192EDDDCDFB9EEF7655D52"
+  }
+]

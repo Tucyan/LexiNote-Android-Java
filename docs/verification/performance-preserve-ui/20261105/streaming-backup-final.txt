@@ -1,0 +1,2 @@
+INSTRUMENTATION_RESULT: result=streamed >8 MiB codec, asset mapping, redaction, checksum/missing-asset rejection, small unknown-field roundtrip and failed import rollback passed
+INSTRUMENTATION_CODE: -1

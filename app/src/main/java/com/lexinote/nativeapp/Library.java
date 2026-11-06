@@ -146,7 +146,10 @@ public final class Library {
     if (current == null) throw new IllegalArgumentException("词汇不存在");
     if (existing != null && !existing.optString("id").equals(id))
       throw new IllegalArgumentException("该词汇已存在，请编辑现有实体");
-    put(current, "content", word);
+    if (!word.equals(current.optString("content"))) {
+      put(current, "content", word);
+      FieldProvenance.markPresent(current, false, "content");
+    }
     put(current, "updated_at", now());
   }
 
@@ -228,8 +231,10 @@ public final class Library {
     JSONObject v = local(word);
     if (v == null) {
       v = copy(r);
+      v.remove("dictionary_context");
       put(v, "id", id());
       put(v, "content", word);
+      if (r.has("word")) FieldProvenance.transfer(r, "word", v, "content");
       put(v, "type", r.optString("type", word.contains(" ") ? "phrase" : "word"));
       put(v, "created_at", now());
       put(v, "meanings", new JSONArray());
@@ -261,8 +266,10 @@ public final class Library {
       matchedDrafts.put(i, matched);
     }
     String phonetic = r.optString("phonetic").trim();
-    if (v.optString("phonetic").trim().isEmpty() && !phonetic.isEmpty())
+    if (v.optString("phonetic").trim().isEmpty() && !phonetic.isEmpty()) {
       put(v, "phonetic", phonetic);
+      FieldProvenance.transfer(r, "phonetic", v, "phonetic");
+    }
     JSONArray incomingTags = r.optJSONArray("tags");
     if (incomingTags != null) {
       JSONArray tags = v.optJSONArray("tags");
@@ -316,6 +323,7 @@ public final class Library {
     put(s, "id", id());
     put(s, "title", text.isEmpty() ? "新会话" : text.substring(0, Math.min(40, text.length())));
     put(s, "input_text", text);
+    FieldProvenance.markPresent(s, false, "title", "input_text");
     put(s, "created_at", now());
     put(s, "updated_at", now());
     put(s, "ai_messages", new JSONArray());
@@ -325,6 +333,7 @@ public final class Library {
     JSONObject metadata = new JSONObject();
     for (String key : new String[] {"title", "created_at", "updated_at"})
       put(metadata, key, s.opt(key));
+    FieldProvenance.markPresent(metadata, false, "title");
     put(metadata, "title_source", "fallback");
     put(metadata, "title_revision", 0);
     put(metadata, "retention", "query");
@@ -343,7 +352,7 @@ public final class Library {
     put(meta, "ai_session_entered", true);
   }
 
-  private static long sessionTime(JSONObject s, boolean history) {
+  static long sessionTime(JSONObject s, boolean history) {
     JSONObject meta = s.optJSONObject("metadata");
     String[] values = history ? new String[] {s.optString("created_at")} :
         new String[] {meta == null ? "" : meta.optString("last_used_at"), s.optString("updated_at"), s.optString("created_at")};
@@ -373,7 +382,7 @@ public final class Library {
     return ordered(source, true, newestFirst);
   }
 
-  private static String retention(JSONObject s) {
+  static String retention(JSONObject s) {
     if (isSaved(s)) return "saved";
     JSONObject meta = s.optJSONObject("metadata");
     String value = meta == null ? "" : meta.optString("retention");
@@ -391,7 +400,7 @@ public final class Library {
     return messages != null && messages.length() > 0 ? "temporary" : "query";
   }
 
-  private static void normalizeRetention(JSONObject s) {
+  static void normalizeRetention(JSONObject s) {
     String kind = retention(s);
     JSONObject meta = s.optJSONObject("metadata");
     if (meta == null) {
@@ -425,18 +434,21 @@ public final class Library {
       for (int i = 0; i < items.length(); i++) {
         JSONObject item = items.optJSONObject(i);
         if (item == null) continue;
-        JSONObject meta = item.optJSONObject("metadata");
-        String kind = meta == null ? "" : meta.optString("retention");
-        // Original legacy history can contain a user message even for a local lookup.
-        if (recentIds.contains(item.optString("id")) && !isSaved(item)
-            && !kind.equals("query") && !kind.equals("temporary")
-            && (meta == null || !meta.optString("origin").equals("assistant"))) {
-          if (meta == null) { meta = new JSONObject(); put(item, "metadata", meta); }
-          put(meta, "retention", "query");
-        }
-        normalizeRetention(item);
+        normalizeSessionMetadata(item, recentIds.contains(item.optString("id")));
       }
     }
+  }
+
+  static void normalizeSessionMetadata(JSONObject item, boolean inRecent) {
+    JSONObject meta = item.optJSONObject("metadata");
+    String kind = meta == null ? "" : meta.optString("retention");
+    // Original legacy history can contain a user message even for a local lookup.
+    if (inRecent && !isSaved(item) && !kind.equals("query") && !kind.equals("temporary")
+        && (meta == null || !meta.optString("origin").equals("assistant"))) {
+      if (meta == null) { meta = new JSONObject(); put(item, "metadata", meta); }
+      put(meta, "retention", "query");
+    }
+    normalizeRetention(item);
   }
 
   public static boolean isTemporary(JSONObject s) { return retention(s).equals("temporary"); }
@@ -476,11 +488,13 @@ public final class Library {
     Iterator<String> keys = incoming.keys();
     while (keys.hasNext()) {
       String k = keys.next();
+      if (k.equals("field_meta")) continue;
       Object value = incoming.opt(k);
       if (value instanceof JSONArray) {
         JSONArray target = old.optJSONArray(k);
         if (target == null) {
           put(old, k, value);
+          FieldProvenance.transfer(incoming, k, old, k);
           continue;
         }
         JSONArray arr = (JSONArray) value;
@@ -493,7 +507,10 @@ public final class Library {
         }
       } else if (!k.equals("id")
           && !k.equals("created_at")
-          && (old.optString(k).isEmpty() || old.isNull(k))) put(old, k, value);
+          && (old.optString(k).isEmpty() || old.isNull(k))) {
+        put(old, k, value);
+        FieldProvenance.transfer(incoming, k, old, k);
+      }
     }
   }
 
@@ -614,21 +631,31 @@ public final class Library {
     return b;
   }
 
-  private static void redact(Object v) {
+  static void redact(Object v) {
     if (v instanceof JSONObject) {
       JSONObject o = (JSONObject) v;
       List<String> keys = new ArrayList<>();
       Iterator<String> it = o.keys();
       while (it.hasNext()) keys.add(it.next());
       for (String k : keys) {
-        if (k.toLowerCase(Locale.ROOT).matches(".*(api.?key|secret|authorization|token).*")
-            || k.equals("providers")) o.remove(k);
+        if (credentialField(k)) o.remove(k);
         else redact(o.opt(k));
       }
     } else if (v instanceof JSONArray) {
       JSONArray a = (JSONArray) v;
       for (int i = 0; i < a.length(); i++) redact(a.opt(i));
     }
+  }
+
+  /** Known credential keys, without treating token usage counters as secrets. */
+  static boolean credentialField(String key) {
+    String normalized = key.toLowerCase(Locale.ROOT).replaceAll("[_\\-.]", "");
+    return normalized.equals("providers") || normalized.equals("token")
+        || normalized.equals("secret") || normalized.equals("authorization")
+        || normalized.endsWith("apikey") || normalized.endsWith("accesskey")
+        || normalized.endsWith("secretkey") || normalized.endsWith("clientsecret")
+        || normalized.endsWith("accesstoken") || normalized.endsWith("refreshtoken")
+        || normalized.endsWith("idtoken") || normalized.endsWith("bearertoken");
   }
 
   public static void validate(JSONObject d) {

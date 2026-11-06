@@ -1,0 +1,7 @@
+INSTRUMENTATION_RESULT: dictionary_context=live model result saved with field provenance
+INSTRUMENTATION_RESULT: gateway_models_http_status=200
+INSTRUMENTATION_RESULT: model=deepseek-v4.1-flash
+INSTRUMENTATION_RESULT: retrieved_sources=3
+INSTRUMENTATION_RESULT: status=passed
+INSTRUMENTATION_RESULT: validated_citations=2
+INSTRUMENTATION_CODE: -1

@@ -161,6 +161,18 @@ public final class LibraryCommand {
     return new LibraryCommand(Type.SAVE_SESSION, sessionId, p, expectedGen, Library.id(), nowMs);
   }
 
+  /** Rejects a session snapshot prepared before another library commit. */
+  public static LibraryCommand touchSession(
+      long expectedGen, String sessionId, JSONObject sessionJson, boolean updateRecentQueries, long nowMs,
+      long baseRevision) {
+    JSONObject p = new JSONObject();
+    Library.put(p, "session_id", sessionId);
+    Library.put(p, "session", sessionJson == null ? new JSONObject() : Library.copy(sessionJson));
+    Library.put(p, "update_recent", updateRecentQueries);
+    Library.put(p, "base_revision", baseRevision);
+    return new LibraryCommand(Type.SAVE_SESSION, sessionId, p, expectedGen, Library.id(), nowMs);
+  }
+
   public static LibraryCommand importLibrary(long expectedGen, JSONObject backup, long nowMs) {
     JSONObject p = new JSONObject();
     Library.put(p, "backup", Library.copy(backup));
@@ -187,6 +199,13 @@ public final class LibraryCommand {
   public static LibraryCommand persistSnapshot(long expectedGen, JSONObject snapshot, long nowMs) {
     JSONObject p = new JSONObject();
     Library.put(p, "snapshot", snapshot != null ? Library.copy(snapshot) : new JSONObject());
+    return new LibraryCommand(Type.MUTATE_CUSTOM, null, p, expectedGen, Library.id(), nowMs);
+  }
+
+  public static LibraryCommand persistSnapshot(long expectedGen, long expectedRevision, JSONObject snapshot, long nowMs) {
+    JSONObject p = new JSONObject();
+    Library.put(p, "snapshot", snapshot == null ? new JSONObject() : snapshot);
+    Library.put(p, "base_revision", expectedRevision);
     return new LibraryCommand(Type.MUTATE_CUSTOM, null, p, expectedGen, Library.id(), nowMs);
   }
 

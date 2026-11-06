@@ -1,0 +1,15 @@
+INSTRUMENTATION_RESULT: cited_S1=Word of the Day: By And Large | by and large play adverb BYE-und-LAHRJ ... By and large is another way of saying "in general" or "on the whole." ... By and large means “in general” or "on the
+INSTRUMENTATION_RESULT: cited_S2=Word of the Day: By And Large | By and large means “in general” or "on the whole" in most contexts, but in sailors’ lingo of yore ... By and large, landlubbers welcomed it, first in the sense
+INSTRUMENTATION_RESULT: context_explanation='By and large' 在句中作状语，修饰整个句子，表示“总体而言、大体上”，与给出的义项“大体上，基本上”完全对应。
+INSTRUMENTATION_RESULT: dictionary_context=live model result saved with field provenance
+INSTRUMENTATION_RESULT: gateway_models_http_status=200
+INSTRUMENTATION_RESULT: model=deepseek-v4.1-flash
+INSTRUMENTATION_RESULT: retrieved_sources=3
+INSTRUMENTATION_RESULT: selected_sense=大体上, 基本上
+INSTRUMENTATION_RESULT: sentence=By and large, the changes worked well.
+INSTRUMENTATION_RESULT: status=passed
+INSTRUMENTATION_RESULT: validated_citations=2
+INSTRUMENTATION_RESULT: verification_meaning=大体上，基本上
+INSTRUMENTATION_RESULT: verification_status=supported
+INSTRUMENTATION_RESULT: word=by and large
+INSTRUMENTATION_CODE: -1

@@ -303,6 +303,19 @@ public class LibraryStoreTest {
   // Test Doubles
   // --------------------------------------------------------------------------
 
+  @Test
+  public void unavailableDatabaseStillDeliversFailureCallback() throws Exception {
+    mockBackend.unavailable = true;
+    CountDownLatch latch = new CountDownLatch(1);
+    AtomicReference<CommitResult> result = new AtomicReference<>();
+    store.dispatch(new LibraryCommand(LibraryCommand.Type.UPDATE_SETTINGS, null,
+        new JSONObject(), 1L, "unavailable", 0L), r -> { result.set(r); latch.countDown(); });
+    assertTrue("failed open must not strand the UI", latch.await(5, TimeUnit.SECONDS));
+    assertFalse(result.get().isSuccess());
+    assertEquals(1L, result.get().getAppliedGeneration());
+    assertEquals(0L, result.get().getAppliedRevision());
+  }
+
   private static class TestCallbackExecutor implements Executor {
     private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> new Thread(r, "CallbackLooperMock"));
 
@@ -329,14 +342,15 @@ public class LibraryStoreTest {
     long currentGeneration = 1L;
     long currentRevision = 0L;
     int artificialDelayMs = 0;
+    boolean unavailable;
     Runnable onExecuteHook = null;
     final List<LibraryCommand> executedCommands = Collections.synchronizedList(new ArrayList<>());
     final AtomicInteger activeExecutions = new AtomicInteger(0);
     final AtomicInteger maxConcurrentExecutions = new AtomicInteger(0);
 
     @Override public void initialize() {}
-    @Override public long getGeneration() { return currentGeneration; }
-    @Override public long getRevision() { return currentRevision; }
+    @Override public long getGeneration() { if (unavailable) throw new IllegalStateException("database unavailable"); return currentGeneration; }
+    @Override public long getRevision() { if (unavailable) throw new IllegalStateException("database unavailable"); return currentRevision; }
     @Override public ReadOnlyView loadSnapshot() { return new ReadOnlyView(currentGeneration, currentRevision, System.currentTimeMillis(), new JSONObject()); }
     @Override public ReadOnlyView query(QueryRequest r) { return loadSnapshot(); }
 

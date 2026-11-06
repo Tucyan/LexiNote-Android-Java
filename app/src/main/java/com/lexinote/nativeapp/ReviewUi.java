@@ -2,6 +2,10 @@ package com.lexinote.nativeapp;
 
 import android.app.AlertDialog;
 import android.graphics.Color;
+import android.os.Bundle;
+import android.os.SystemClock;
+import com.lexinote.nativeapp.storage.contract.LibraryCommand;
+import com.lexinote.nativeapp.storage.contract.QueryRequest;
 import android.graphics.drawable.GradientDrawable;
 import android.text.InputType;
 import android.view.Gravity;
@@ -20,6 +24,12 @@ final class ReviewUi {
   String activePlanId = null;
   boolean reverse = false, revealed = false;
   long cardStartTime = 0L;
+  final ReviewSessionState ratingState = new ReviewSessionState();
+  long ratingGeneration;
+  boolean ratingNeedsRecoveryCheck;
+  final Set<String> preparingQueues = new HashSet<>();
+  final Set<String> failedQueues = new HashSet<>();
+  String startAfterPreparation;
 
   // Preserved fields for state compatibility
   String notebook = null;
@@ -207,15 +217,14 @@ final class ReviewUi {
     JSONArray all = a.library.reviewPlans().list(false);
     Set<String> disabled = getDisabledPlanIds();
     List<PlanSortInfo> list = new ArrayList<>();
-    boolean generatedDailyQueues = false;
     for (int i = 0; i < all.length(); i++) {
       JSONObject p = all.optJSONObject(i);
       if (p == null) continue;
       String pid = p.optString("id");
       if (disabled.contains(pid)) continue;
 
-      generatedDailyQueues |= !a.library.reviewPlans().hasDailyQueue(pid, nowMillis);
-      JSONObject day = a.library.reviewPlans().dailyQueue(pid, nowMillis);
+      JSONObject day = a.library.reviewPlans().peekDailyQueue(pid, nowMillis);
+      if (day == null) { prepareQueue(pid, nowMillis); day = new JSONObject(); }
       boolean scheduled = day.optBoolean("scheduled", false);
       int newTarget = day.optInt("new_target", 0);
       int reviewTarget = day.optInt("review_target", 0);
@@ -233,8 +242,6 @@ final class ReviewUi {
       }
       list.add(new PlanSortInfo(p, priority, remaining, totalTarget, scheduled));
     }
-
-    if (generatedDailyQueues) a.persist();
 
     Collections.sort(list, (o1, o2) -> {
       if (o1.priority != o2.priority) {
@@ -612,8 +619,9 @@ final class ReviewUi {
     swipeContainer.addView(planDetailsBox);
 
     // 4. Today's Task Card
-    JSONObject day = a.library.reviewPlans().dailyQueue(activePlanId, now);
-    // Newly generated daily tasks were persisted once while collecting active plans.
+    JSONObject day = a.library.reviewPlans().peekDailyQueue(activePlanId, now);
+    boolean queueLoading = day == null;
+    if (queueLoading) { prepareQueue(activePlanId, now); day = new JSONObject(); }
 
     LinearLayout todayCard = createCardLayout(null);
     todayCard.setPadding(a.dp(16), a.dp(16), a.dp(16), a.dp(18));
@@ -629,7 +637,13 @@ final class ReviewUi {
     int remaining = queue != null ? queue.length() : 0;
     int completed = Math.max(0, totalTarget - remaining);
 
-    if (!scheduled) {
+    if (queueLoading) {
+      if (failedQueues.contains(activePlanId)) {
+        todayCard.addView(a.button("任务准备失败，点击重试", v -> {
+          failedQueues.remove(activePlanId); prepareQueue(activePlanId, System.currentTimeMillis()); a.render();
+        }));
+      } else todayCard.addView(a.text("正在准备今日任务…", 14, false));
+    } else if (!scheduled) {
       LinearLayout restRow = a.row();
       restRow.setGravity(Gravity.CENTER_VERTICAL);
       restRow.addView(a.icon("cafe-outline", 36, a.accent));
@@ -1147,6 +1161,27 @@ final class ReviewUi {
     return card;
   }
 
+  private void prepareQueue(String planId, long now) {
+    if (planId == null || preparingQueues.contains(planId) || failedQueues.contains(planId)) return;
+    preparingQueues.add(planId);
+    a.dispatch(LibraryCommand.prepareDailyQueue(a.store.currentGeneration(), planId, now), result -> {
+      preparingQueues.remove(planId);
+      if (!result.isSuccess()) {
+        failedQueues.add(planId);
+        if (planId.equals(startAfterPreparation)) startAfterPreparation = null;
+        a.render();
+        a.error(new java.io.IOException("准备复习任务失败：" + result.getMessage()));
+        return;
+      }
+      a.library.reviewPlans().applyCommittedDays(result.getUpdatedEntity());
+      if (planId.equals(startAfterPreparation)) {
+        startAfterPreparation = null;
+        if (planId.equals(activePlanId)) { startDailyReview(); return; }
+      }
+      a.render();
+    });
+  }
+
   public boolean canStartReview() {
     if (activePlanId == null) {
       List<PlanSortInfo> plans = getSortedActivePlans(System.currentTimeMillis());
@@ -1158,9 +1193,13 @@ final class ReviewUi {
 
   public void startDailyReview() {
     long now = System.currentTimeMillis();
-    boolean generatedDailyQueue = !a.library.reviewPlans().hasDailyQueue(activePlanId, now);
-    JSONObject day = a.library.reviewPlans().dailyQueue(activePlanId, now);
-    if (generatedDailyQueue) a.persist();
+    JSONObject day = a.library.reviewPlans().peekDailyQueue(activePlanId, now);
+    if (day == null) {
+      startAfterPreparation = activePlanId;
+      failedQueues.remove(activePlanId);
+      prepareQueue(activePlanId, now);
+      return;
+    }
     JSONArray queue = day.optJSONArray("queue");
     if (queue == null || queue.length() == 0) {
       a.say("今日复习任务已完成！");
@@ -1170,16 +1209,17 @@ final class ReviewUi {
     sessionSummary.reset(total);
     revealed = false;
     cardStartTime = System.currentTimeMillis();
+    ratingState.resetClock(SystemClock.elapsedRealtime());
     phase = "active";
     a.render();
   }
 
   void renderActiveSession() {
+    long now = System.currentTimeMillis();
+    JSONObject day = a.library.reviewPlans().peekDailyQueue(activePlanId, now);
+    if (day == null) { prepareQueue(activePlanId, now); return; }
     a.body.removeAllViews();
     a.body.setPadding(a.dp(16), a.dp(12), a.dp(16), a.dp(24));
-
-    long now = System.currentTimeMillis();
-    JSONObject day = a.library.reviewPlans().dailyQueue(activePlanId, now);
     JSONArray queue = day.optJSONArray("queue");
     if (queue == null || queue.length() == 0) {
       phase = "completed";
@@ -1526,10 +1566,7 @@ final class ReviewUi {
   public String currentReviewVocabId() {
     long now = System.currentTimeMillis();
     JSONObject day = a.library.reviewPlans().peekDailyQueue(activePlanId, now);
-    if (day == null) {
-      day = a.library.reviewPlans().dailyQueue(activePlanId, now);
-    }
-    if (day == null) return null;
+    if (day == null) { prepareQueue(activePlanId, now); return null; }
     JSONArray queue = day.optJSONArray("queue");
     if (queue == null || queue.length() == 0) return null;
     JSONObject task = queue.optJSONObject(0);
@@ -1544,39 +1581,150 @@ final class ReviewUi {
   }
 
   public void submitRating(String vocabId, String grade) {
-    long occurredAt = System.currentTimeMillis();
-    long duration = Math.min(86400000L, Math.max(0, occurredAt - cardStartTime));
-    String eventId = Library.id();
-
-    revealed = false;
-    cardStartTime = System.currentTimeMillis();
-    if ("再次".equals(grade)) {
-      sessionSummary.againCount++;
-    } else if ("困难".equals(grade)) {
-      sessionSummary.hardCount++;
-    } else {
-      sessionSummary.easyCount++;
+    long now = SystemClock.elapsedRealtime();
+    if (ratingNeedsRecoveryCheck) {
+      ReviewSessionState.Rating pending = ratingState.pending();
+      if (pending != null && ratingState.startRecoveryCheck(pending.planId, pending.vocabId, grade)) {
+        a.render(); reconcilePendingRating(ratingState.pending());
+      } else if (!ratingState.isSubmitting()) a.say("请重试上次未完成的评分");
+      return;
     }
-
-    boolean saved = a.change(() -> {
-      a.library.reviewPlans().record(activePlanId, vocabId, grade, eventId, duration, occurredAt);
-      JSONObject nextDay = a.library.reviewPlans().dailyQueue(activePlanId, occurredAt);
-      JSONArray nextQueue = nextDay.optJSONArray("queue");
-      if (nextQueue == null || nextQueue.length() == 0) {
-        phase = "completed";
+    boolean newRating = ratingState.pending() == null;
+    ReviewSessionState.Rating rating = ratingState.begin(activePlanId, vocabId, grade,
+        Library.id(), System.currentTimeMillis(), now);
+    if (rating == null) {
+      if (!ratingState.isSubmitting()) a.say("请重试上次未完成的评分");
+      return;
+    }
+    if (newRating) ratingGeneration = a.store.currentGeneration();
+    a.render();
+    a.dispatch(LibraryCommand.recordReview(ratingGeneration, rating.eventId, rating.planId,
+        rating.vocabId, rating.grade, rating.durationMillis, rating.occurredAt), result -> {
+      if (!result.isSuccess()) {
+        if (result.isConflict()) {
+          ratingState.succeed(SystemClock.elapsedRealtime());
+          a.restoreAfterFailedSave(new java.io.IOException("数据已恢复或变更，请重新选择复习任务"), null, saved -> {});
+        } else {
+          ratingState.fail();
+          a.say("提交评分失败，请重试");
+          a.render();
+        }
+        return;
       }
+      a.library.reviewPlans().applyCommittedRating(result.getUpdatedEntity());
+      finishRating(rating);
     });
+  }
 
-    if (!saved) {
-      a.say("提交评分失败，请重试");
+  private void finishRating(ReviewSessionState.Rating rating) {
+    if ("再次".equals(rating.grade)) sessionSummary.againCount++;
+    else if ("困难".equals(rating.grade)) sessionSummary.hardCount++;
+    else sessionSummary.easyCount++;
+    ratingState.succeed(SystemClock.elapsedRealtime());
+    revealed = false;
+    JSONObject day = a.library.reviewPlans().peekDailyQueue(rating.planId, System.currentTimeMillis());
+    JSONArray next = day == null ? null : day.optJSONArray("queue");
+    if (next != null && next.length() == 0) phase = "completed";
+    a.render();
+  }
+
+  void pauseTimer() { ratingState.pause(SystemClock.elapsedRealtime()); }
+  void resumeTimer() { ratingState.resume(SystemClock.elapsedRealtime()); }
+
+  void saveState(Bundle out) {
+    out.putInt("review_summary_total", sessionSummary.initialTotal);
+    out.putInt("review_summary_easy", sessionSummary.easyCount);
+    out.putInt("review_summary_hard", sessionSummary.hardCount);
+    out.putInt("review_summary_again", sessionSummary.againCount);
+    ReviewSessionState.Rating r = ratingState.pending();
+    if (r != null) {
+      out.putString("review_pending_plan", r.planId); out.putString("review_pending_vocab", r.vocabId);
+      out.putString("review_pending_grade", r.grade); out.putString("review_pending_id", r.eventId);
+      out.putLong("review_pending_occurred", r.occurredAt); out.putLong("review_pending_duration", r.durationMillis);
+      out.putLong("review_pending_generation", ratingGeneration);
     }
+  }
+
+  void restoreState(Bundle in) {
+    if (in == null) return;
+    sessionSummary.initialTotal = in.getInt("review_summary_total");
+    sessionSummary.easyCount = in.getInt("review_summary_easy");
+    sessionSummary.hardCount = in.getInt("review_summary_hard");
+    sessionSummary.againCount = in.getInt("review_summary_again");
+    String id = in.getString("review_pending_id");
+    if (id == null) return;
+    ReviewSessionState.Rating r = new ReviewSessionState.Rating(in.getString("review_pending_plan"),
+        in.getString("review_pending_vocab"), in.getString("review_pending_grade"), id,
+        in.getLong("review_pending_occurred"), in.getLong("review_pending_duration"));
+    ratingState.restorePending(r);
+    ratingGeneration = in.getLong("review_pending_generation");
+    ratingNeedsRecoveryCheck = true;
+    reconcilePendingRating(r);
+  }
+
+  /** Ordered after accepted commits. A read error is never treated as a missing event. */
+  private void reconcilePendingRating(ReviewSessionState.Rating r) {
+    a.store.runExclusive(a, backend -> backend.query(QueryRequest.reviewEvent(r.eventId)), (view, error) -> {
+      if (error != null || view == null) {
+        ratingState.fail();
+        a.say("无法核对上次评分，请点击相同评分重试核对");
+        a.render();
+        return;
+      }
+      if (view.getGeneration() != ratingGeneration) {
+        ratingNeedsRecoveryCheck = false;
+        ratingState.succeed(SystemClock.elapsedRealtime());
+        a.restoreAfterFailedSave(new java.io.IOException("数据已恢复或变更，请重新选择复习任务"), null, saved -> {});
+        return;
+      }
+      JSONObject event = view.getRawDocument().optJSONObject("event");
+      if (event == null) {
+        ratingNeedsRecoveryCheck = false;
+        ratingState.fail();
+        a.render();
+        return;
+      }
+      boolean matches = r.planId.equals(event.optString("plan_id")) && r.vocabId.equals(event.optString("vocab_id"))
+          && r.grade.equals(event.optString("grade")) && r.durationMillis == event.optLong("duration_ms");
+      try { matches &= java.time.Instant.parse(event.optString("occurred_at")).toEpochMilli() == r.occurredAt; }
+      catch (Exception ex) { matches = false; }
+      if (!matches) {
+        ratingState.fail();
+        a.say("评分记录不匹配，请点击相同评分重新核对");
+        a.render();
+        return;
+      }
+      a.store.loadLibrary(a, loaded -> {
+        if (!loaded.isSuccess() || loaded.getSnapshot() == null) {
+          ratingState.fail();
+          a.say("无法重新读取复习进度，请点击相同评分重试核对");
+          a.render();
+          return;
+        }
+        if (loaded.getAppliedGeneration() != ratingGeneration) {
+          ratingNeedsRecoveryCheck = false;
+          ratingState.succeed(SystemClock.elapsedRealtime());
+          a.restoreAfterFailedSave(new java.io.IOException("数据已恢复或变更，请重新选择复习任务"), null, saved -> {});
+          return;
+        }
+        a.library = loaded.getSnapshot();
+        a.libraryGeneration = loaded.getAppliedGeneration();
+        a.libraryRevision = loaded.getAppliedRevision();
+        a.dataRevision++;
+        ratingNeedsRecoveryCheck = false;
+        finishRating(r);
+      });
+    });
   }
 
   View createRatingButton(String label, String sub, int color, boolean solid, Runnable action) {
     LinearLayout btn = a.column();
     btn.setGravity(Gravity.CENTER);
     btn.setPadding(0, a.dp(6), 0, a.dp(6));
-    btn.setClickable(true);
+    boolean canRetry = !ratingNeedsRecoveryCheck || ratingState.pending() == null
+        || label.equals(ratingState.pending().grade);
+    btn.setClickable(!ratingState.isSubmitting() && canRetry);
+    btn.setEnabled(!ratingState.isSubmitting() && canRetry);
     btn.setFocusable(false);
     btn.setBackground(a.shape(solid ? color : ((color & 0x00FFFFFF) | 0x14000000), 12, color));
     btn.setOnClickListener(v -> action.run());
@@ -1977,14 +2125,12 @@ final class ReviewUi {
           final int finalRev = revLimit;
           final int[] finalWeekdays = weekdays;
 
-          boolean saved = a.change(() -> {
-            activePlanId = a.library.reviewPlans().create(
-                finalName, nbId, finalNew, finalRev, finalWeekdays,
-                ZoneId.systemDefault().getId(), importLegacy, System.currentTimeMillis());
+          final String[] created = {null};
+          a.changeAsync(() -> created[0] = a.library.reviewPlans().create(
+              finalName, nbId, finalNew, finalRev, finalWeekdays,
+              ZoneId.systemDefault().getId(), importLegacy, System.currentTimeMillis()), saved -> {
+            if (saved) { activePlanId = created[0]; a.render(); a.say("复习计划创建成功！"); }
           });
-          if (saved) {
-            a.say("复习计划创建成功！");
-          }
         })
         .show();
   }
@@ -2068,7 +2214,7 @@ final class ReviewUi {
           final int finalRev = revLimit;
           final Set<Integer> finalDays = new TreeSet<>(selectedDays);
 
-          boolean saved = a.change(() -> {
+          a.changeAsync(() -> {
             JSONObject patch = new JSONObject();
             Library.put(patch, "name", finalName);
             Library.put(patch, "daily_new_limit", finalNew);
@@ -2077,10 +2223,7 @@ final class ReviewUi {
             for (int w : finalDays) wdArr.put(w);
             Library.put(patch, "weekdays", wdArr);
             a.library.reviewPlans().update(planId, patch, System.currentTimeMillis());
-          });
-          if (saved) {
-            a.say("计划修改已保存！");
-          }
+          }, saved -> { if (saved) a.say("计划修改已保存！"); });
         })
         .show();
   }
@@ -2091,13 +2234,9 @@ final class ReviewUi {
         .setMessage("确定要归档此复习计划吗？归档后将不再生成每日复习任务，历史答题与打卡统计将完整保留。")
         .setNegativeButton("取消", null)
         .setPositiveButton("确认归档", (dialog, which) -> {
-          boolean saved = a.change(() -> {
-            a.library.reviewPlans().archive(planId, System.currentTimeMillis());
-            activePlanId = null;
+          a.changeAsync(() -> a.library.reviewPlans().archive(planId, System.currentTimeMillis()), saved -> {
+            if (saved) { activePlanId = null; a.render(); a.say("计划已成功归档"); }
           });
-          if (saved) {
-            a.say("计划已成功归档");
-          }
         })
         .show();
   }
@@ -2250,15 +2389,12 @@ final class ReviewUi {
           final int finalN = addN;
           final int finalR = addR;
 
-          boolean saved = a.change(() -> {
-            a.library.reviewPlans().extendDailyQueue(activePlanId, finalN, finalR, System.currentTimeMillis());
-            phase = "active";
-            revealed = false;
-            cardStartTime = System.currentTimeMillis();
+          a.changeAsync(() -> a.library.reviewPlans().extendDailyQueue(activePlanId, finalN, finalR, System.currentTimeMillis()), saved -> {
+            if (saved) {
+              phase = "active"; revealed = false; ratingState.resetClock(SystemClock.elapsedRealtime());
+              a.render(); a.say("已加练 " + (finalN + finalR) + " 词，开始复习！");
+            }
           });
-          if (saved) {
-            a.say("已加练 " + (finalN + finalR) + " 词，开始复习！");
-          }
         })
         .show();
   }

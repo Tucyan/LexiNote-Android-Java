@@ -1,0 +1,4 @@
+INSTRUMENTATION_RESULT: no_credential=contextual ECDICT phrase saved to default notebook with dictionary provenance
+INSTRUMENTATION_RESULT: status=passed
+INSTRUMENTATION_RESULT: verification_ui=fixed response, expandable source, generated meaning saved to default notebook with provenance and evidence
+INSTRUMENTATION_CODE: -1

@@ -1,0 +1,12 @@
+{
+  "scale": "3000_10k",
+  "mode": "benchmark",
+  "round": 1,
+  "sample_count": 1,
+  "warmup_count": 0,
+  "fixture_load_ms": 1494,
+  "passed": [],
+  "failed": [
+    "FATAL: java.lang.OutOfMemoryError: Failed to allocate a 18874376 byte allocation with 8388608 free bytes and 12MB until OOM, target footprint 196632144, growth limit 201326592\n\tat java.util.Arrays.copyOf(Arrays.java:4276)\n\tat java.lang.AbstractStringBuilder.ensureCapacityInternal(AbstractStringBuilder.java:301)\n\tat java.lang.AbstractStringBuilder.append(AbstractStringBuilder.java:853)\n\tat java.lang.StringBuilder.append(StringBuilder.java:261)\n\tat org.json.JSONStringer.string(JSONStringer.java:354)\n\tat org.json.JSONStringer.value(JSONStringer.java:261)\n\tat org.json.JSONObject.writeTo(JSONObject.java:734)\n\tat org.json.JSONStringer.value(JSONStringer.java:246)\n\tat org.json.JSONArray.writeTo(JSONArray.java:616)\n\tat org.json.JSONStringer.value(JSONStringer.java:242)\n\tat org.json.JSONObject.writeTo(JSONObject.java:734)\n\tat org.json.JSONStringer.value(JSONStringer.java:246)\n\tat org.json.JSONObject.writeTo(JSONObject.java:734)\n\tat org.json.JSONObject.toString(JSONObject.java:702)\n\tat com.lexinote.nativeapp.Library.copy(Library.java:24)\n\tat com.lexinote.nativeapp.Library.snapshot(Library.java:114)\n\tat com.lexinote.nativeapp.SqliteLibraryStore.replace(SqliteLibraryStore.java:264)\n\tat com.lexinote.nativeapp.SqliteLibraryStore.restore(SqliteLibraryStore.java:297)\n\tat com.lexinote.nativeapp.PerformanceInstrumentation.installFixtureStore(PerformanceInstrumentation.java:218)\n\tat com.lexinote.nativeapp.PerformanceInstrumentation.onStart(PerformanceInstrumentation.java:150)\n\tat android.app.Instrumentation$InstrumentationThread.run(Instrumentation.java:2637)\n"
+  ]
+}
