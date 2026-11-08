@@ -217,6 +217,14 @@ final class QueryUi {
       contextLabel.setTextColor(a.muted);
       labelRow.addView(contextLabel, new LinearLayout.LayoutParams(0, -2, 1));
 
+      TextView pasteCtx = a.text("粘贴", 11, false);
+      pasteCtx.setTextIsSelectable(false);
+      pasteCtx.setTextColor(a.accent);
+      pasteCtx.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 8, 0));
+      pasteCtx.setPadding(a.dp(7), a.dp(3), a.dp(7), a.dp(3));
+      pasteCtx.setVisibility(View.GONE);
+      labelRow.addView(pasteCtx);
+
       TextView clearCtx = a.text("清空", 11, false);
       clearCtx.setTextColor(a.muted);
       clearCtx.setPadding(a.dp(6), 0, a.dp(2), 0);
@@ -229,13 +237,66 @@ final class QueryUi {
       ctx.setBackgroundColor(android.graphics.Color.TRANSPARENT);
       ctx.setPadding(0, a.dp(4), 0, 0);
 
+      Runnable updateContextActions =
+          () -> {
+            boolean hasText = ctx.getText() != null && !ctx.getText().toString().trim().isEmpty();
+            clearCtx.setVisibility(hasText ? View.VISIBLE : View.GONE);
+            if (hasText) {
+              pasteCtx.setVisibility(View.GONE);
+            } else {
+              boolean hasClip = false;
+              try {
+                android.content.ClipboardManager clipboard =
+                    (android.content.ClipboardManager)
+                        a.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+                if (clipboard != null && clipboard.hasPrimaryClip()) {
+                  android.content.ClipData clip = clipboard.getPrimaryClip();
+                  if (clip != null && clip.getItemCount() > 0) {
+                    CharSequence cs = clip.getItemAt(0).getText();
+                    if (cs != null && !cs.toString().trim().isEmpty()) {
+                      hasClip = true;
+                    }
+                  }
+                }
+              } catch (Exception ignored) {}
+              pasteCtx.setVisibility(hasClip ? View.VISIBLE : View.GONE);
+            }
+          };
+
+      pasteCtx.setOnClickListener(
+          v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+            try {
+              android.content.ClipboardManager clipboard =
+                  (android.content.ClipboardManager)
+                      a.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+              if (clipboard != null && clipboard.hasPrimaryClip()) {
+                android.content.ClipData clip = clipboard.getPrimaryClip();
+                if (clip != null && clip.getItemCount() > 0) {
+                  CharSequence cs = clip.getItemAt(0).getText();
+                  if (cs != null) {
+                    String clipStr = cs.toString().trim();
+                    if (!clipStr.isEmpty()) {
+                      if (clipStr.length() > 5000) clipStr = clipStr.substring(0, 5000);
+                      ctx.setText(clipStr);
+                      ctx.setSelection(clipStr.length());
+                      context = clipStr;
+                      a.invalidateDraft();
+                      updateContextActions.run();
+                    }
+                  }
+                }
+              }
+            } catch (Exception ignored) {}
+          });
+
       clearCtx.setOnClickListener(
           v -> {
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
             ctx.setText("");
             context = "";
             a.invalidateDraft();
-            clearCtx.setVisibility(View.GONE);
+            updateContextActions.run();
           });
 
       track(
@@ -243,8 +304,15 @@ final class QueryUi {
           value -> {
             if (!context.equals(value)) a.invalidateDraft();
             context = value;
-            clearCtx.setVisibility(value.isEmpty() ? View.GONE : View.VISIBLE);
+            updateContextActions.run();
           });
+
+      ctx.setOnFocusChangeListener(
+          (v, hasFocus) -> {
+            if (hasFocus) updateContextActions.run();
+          });
+
+      updateContextActions.run();
       LinearLayout.LayoutParams contextLp = new LinearLayout.LayoutParams(-1, 0, 1);
       contextLp.topMargin = a.dp(8);
       contextLp.bottomMargin = a.dp(8);
@@ -267,6 +335,20 @@ final class QueryUi {
         ImageView preview = new ImageView(a);
         preview.setImageURI(a.image);
         preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        preview.setBackground(a.shape(a.inputBg, 8, a.border));
+        preview.setClipToOutline(true);
+        preview.setClickable(true);
+        preview.setFocusable(true);
+        preview.setContentDescription("图片预览，点击重新裁剪");
+        android.util.TypedValue outValue = new android.util.TypedValue();
+        if (a.getTheme().resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)) {
+          preview.setForeground(a.getDrawable(outValue.resourceId));
+        }
+        preview.setOnClickListener(
+            v -> {
+              v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+              a.cropImage();
+            });
         LinearLayout.LayoutParams previewLp = new LinearLayout.LayoutParams(-1, 0, 1);
         queryCard.addView(preview, previewLp);
 
@@ -309,7 +391,21 @@ final class QueryUi {
         ImageView preview = new ImageView(a);
         preview.setImageURI(a.image);
         preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        both.addView(preview, new LinearLayout.LayoutParams(0, a.dp(74), 1));
+        preview.setBackground(a.shape(a.inputBg, 8, a.border));
+        preview.setClipToOutline(true);
+        preview.setClickable(true);
+        preview.setFocusable(true);
+        preview.setContentDescription("图片预览，点击重新裁剪");
+        android.util.TypedValue outValue = new android.util.TypedValue();
+        if (a.getTheme().resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)) {
+          preview.setForeground(a.getDrawable(outValue.resourceId));
+        }
+        preview.setOnClickListener(
+            v -> {
+              v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+              a.cropImage();
+            });
+        both.addView(preview, new LinearLayout.LayoutParams(0, a.dp(108), 1));
 
         LinearLayout bothBtns = a.column();
         bothBtns.setGravity(Gravity.CENTER_VERTICAL);
@@ -322,6 +418,14 @@ final class QueryUi {
                 });
         cropBtn.setTextColor(a.accent);
         bothBtns.addView(cropBtn);
+        Button changeBtn =
+            a.button(
+                "更换图片",
+                v -> {
+                  v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                  a.chooseImage(false);
+                });
+        bothBtns.addView(changeBtn);
         Button removeBtn =
             a.button(
                 "移除",
@@ -394,8 +498,13 @@ final class QueryUi {
 
       TextView chip = a.text(word.trim(), 12, false);
       chip.setTextColor(a.foreground);
+      chip.setTextIsSelectable(false);
       chip.setBackground(a.shape(a.inputBg, 12, a.border));
       chip.setPadding(a.dp(10), a.dp(5), a.dp(10), a.dp(5));
+      chip.setMaxWidth(a.dp(130));
+      chip.setSingleLine(true);
+      chip.setMaxLines(1);
+      chip.setEllipsize(TextUtils.TruncateAt.END);
       chip.setOnClickListener(
           v -> {
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
@@ -768,7 +877,25 @@ final class QueryUi {
             });
     titleBtn.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
     titleBtn.setOnLongClickListener(onLongClick);
-    info.addView(titleBtn);
+    titleBtn.setSingleLine(true);
+    titleBtn.setMaxLines(1);
+    titleBtn.setEllipsize(TextUtils.TruncateAt.END);
+    titleBtn.setPadding(0, a.dp(2), a.dp(4), a.dp(2));
+    boolean isAiTitle = item.optJSONObject("metadata") != null
+        && "ai".equals(item.optJSONObject("metadata").optString("title_source"));
+    LinearLayout titleRow = a.row();
+    titleRow.setGravity(Gravity.CENTER_VERTICAL);
+    if (isAiTitle) {
+      TextView aiBadge = a.text("✦ AI", 10, true);
+      aiBadge.setTextColor(a.accent);
+      aiBadge.setPadding(a.dp(4), a.dp(1), a.dp(4), a.dp(1));
+      aiBadge.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 4, 0));
+      LinearLayout.LayoutParams aiLp = new LinearLayout.LayoutParams(-2, -2);
+      aiLp.rightMargin = a.dp(4);
+      titleRow.addView(aiBadge, aiLp);
+    }
+    titleRow.addView(titleBtn, new LinearLayout.LayoutParams(0, -2, 1));
+    info.addView(titleRow);
     TextView lastUsed = a.text("最近使用 " + sessionDate(item, "last_used_at"), 11, false);
     lastUsed.setTextColor(a.muted);
     info.addView(lastUsed);
@@ -786,8 +913,23 @@ final class QueryUi {
                 saveConversation(item);
               });
       saveBtn.setTextColor(a.accent);
-      saveBtn.setPadding(a.dp(6), 0, a.dp(6), 0);
+      saveBtn.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
+      saveBtn.setMinHeight(a.dp(32));
+      saveBtn.setMinimumHeight(a.dp(32));
       row.addView(saveBtn);
+    } else {
+      Button renameBtn =
+          a.button(
+              "重命名",
+              v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                saveConversation(item);
+              });
+      renameBtn.setTextColor(a.accent);
+      renameBtn.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
+      renameBtn.setMinHeight(a.dp(32));
+      renameBtn.setMinimumHeight(a.dp(32));
+      row.addView(renameBtn);
     }
 
     Button delBtn =
@@ -798,7 +940,9 @@ final class QueryUi {
               confirmDeleteConversation(item, null);
             });
     delBtn.setTextColor(android.graphics.Color.parseColor("#EF4444"));
-    delBtn.setPadding(a.dp(6), 0, a.dp(6), 0);
+    delBtn.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
+    delBtn.setMinHeight(a.dp(32));
+    delBtn.setMinimumHeight(a.dp(32));
     row.addView(delBtn);
 
     parent.addView(row);
@@ -833,10 +977,67 @@ final class QueryUi {
     group.addView(used);
     group.check(dateField.equals("created_at") ? createdId : usedId);
     box.addView(group);
+    // Date inputs
     EditText start = a.input("开始日期 YYYY-MM-DD", startDate, false);
     EditText end = a.input("结束日期 YYYY-MM-DD（含当天）", endDate, false);
+    start.setFocusable(false);
+    start.setFocusableInTouchMode(false);
+    start.setClickable(true);
+    start.setCursorVisible(false);
+    end.setFocusable(false);
+    end.setFocusableInTouchMode(false);
+    end.setClickable(true);
+    end.setCursorVisible(false);
+
+    start.setOnClickListener(v -> showDatePickerDialog(start));
+    end.setOnClickListener(v -> showDatePickerDialog(end));
+
+    // Preset chips row
+    LinearLayout presetRow = a.row();
+    presetRow.setPadding(0, a.dp(6), 0, a.dp(6));
+    presetRow.setGravity(Gravity.CENTER_VERTICAL);
+
+    TextView presetLabel = a.text("快捷范围：", 12, false);
+    presetLabel.setTextColor(a.muted);
+    presetRow.addView(presetLabel);
+
+    Button btnToday =
+        a.chip(
+            "今天",
+            false,
+            v -> {
+              java.time.LocalDate today = java.time.LocalDate.now();
+              start.setText(today.toString());
+              end.setText(today.toString());
+            });
+    Button btn7Days =
+        a.chip(
+            "近7天",
+            false,
+            v -> {
+              java.time.LocalDate today = java.time.LocalDate.now();
+              start.setText(today.minusDays(6).toString());
+              end.setText(today.toString());
+            });
+    Button btn30Days =
+        a.chip(
+            "近30天",
+            false,
+            v -> {
+              java.time.LocalDate today = java.time.LocalDate.now();
+              start.setText(today.minusDays(29).toString());
+              end.setText(today.toString());
+            });
+
+    presetRow.addView(btnToday);
+    presetRow.addView(btn7Days);
+    presetRow.addView(btn30Days);
+    box.addView(presetRow);
+
     box.addView(start);
-    box.addView(end);
+    LinearLayout.LayoutParams endLp = new LinearLayout.LayoutParams(-1, -2);
+    endLp.topMargin = a.dp(8);
+    box.addView(end, endLp);
     box.setPadding(a.dp(22), a.dp(10), a.dp(22), a.dp(6));
     AlertDialog.Builder b =
         new AlertDialog.Builder(a)
@@ -871,6 +1072,29 @@ final class QueryUi {
                   a.render();
                 });
     a.showDialog(b);
+  }
+
+  private void showDatePickerDialog(EditText target) {
+    java.time.LocalDate initial = java.time.LocalDate.now();
+    String current = target.getText() != null ? target.getText().toString().trim() : "";
+    if (validDate(current)) {
+      try {
+        initial = java.time.LocalDate.parse(current);
+      } catch (Exception ignored) {}
+    }
+    DatePickerDialog dpd =
+        new DatePickerDialog(
+            a,
+            (view, year, month, dayOfMonth) -> {
+              String formatted =
+                  String.format(Locale.ROOT, "%04d-%02d-%02d", year, month + 1, dayOfMonth);
+              target.setText(formatted);
+            },
+            initial.getYear(),
+            initial.getMonthValue() - 1,
+            initial.getDayOfMonth());
+    dpd.setButton(DialogInterface.BUTTON_NEUTRAL, "清除", (dialog, which) -> target.setText(""));
+    dpd.show();
   }
 
   boolean validDate(String value) {
@@ -931,8 +1155,14 @@ final class QueryUi {
 
       TextView text = a.text(" " + word, 14, false);
       text.setTextColor(a.foreground);
+      text.setTextIsSelectable(false);
       text.setSingleLine(true);
-      row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
+      text.setMaxLines(1);
+      text.setEllipsize(TextUtils.TruncateAt.END);
+      LinearLayout.LayoutParams textLp = new LinearLayout.LayoutParams(0, -2, 1);
+      textLp.rightMargin = a.dp(8);
+      textLp.setMarginEnd(a.dp(8));
+      row.addView(text, textLp);
 
       TextView del = a.icon("trash-outline", 16, a.muted);
       del.setPadding(a.dp(6), a.dp(4), a.dp(4), a.dp(4));
@@ -1602,6 +1832,10 @@ final class QueryUi {
     JSONObject verification = a.session.optJSONObject("web_verification");
     if (verification == null || !result.optString("word").equals(verification.optString("word"))) return;
     LinearLayout card = a.card("联网核对");
+    TextView aiTag = a.text("✦ AI 综合核对结论", 12, true);
+    aiTag.setTextColor(a.accent);
+    aiTag.setPadding(0, 0, 0, a.dp(4));
+    card.addView(aiTag);
     String status = verification.optString("status");
     String summary = status.equals("supported") ? "资料支持" :
         status.equals("conflicting") ? "资料存在分歧" : "暂无法确认";
@@ -1817,11 +2051,41 @@ final class QueryUi {
       local.setPadding(a.dp(8), a.dp(3), a.dp(8), a.dp(3));
       local.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 12, 0));
       heading.addView(local, new LinearLayout.LayoutParams(-2, -2));
+    } else {
+      TextView local = a.text("✦ AI 模型生成", 11, true);
+      local.setTextColor(a.accent);
+      local.setPadding(a.dp(8), a.dp(3), a.dp(8), a.dp(3));
+      local.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 12, 0));
+      heading.addView(local, new LinearLayout.LayoutParams(-2, -2));
     }
-    heading.addView(a.gap(8));
-    heading.addView(a.text(r.optString("phonetic"), 16, false));
+    String phonetic = r.optString("phonetic");
+    final String targetWord = r.optString("word", r.optString("content"));
+    if (!phonetic.isEmpty() || !targetWord.isEmpty()) {
+      heading.addView(a.gap(8));
+      LinearLayout phoneticRow = a.row();
+      phoneticRow.setGravity(Gravity.CENTER_VERTICAL);
+      if (!phonetic.isEmpty()) {
+        TextView pText = a.text(phonetic.startsWith("/") ? phonetic : "/" + phonetic + "/", 16, false);
+        pText.setTextColor(a.muted);
+        phoneticRow.addView(pText);
+      }
+      TextView speakerBtn = a.icon("volume-high-outline", 20, a.accent);
+      speakerBtn.setContentDescription("朗读发音");
+      speakerBtn.setPadding(a.dp(6), a.dp(3), a.dp(6), a.dp(3));
+      speakerBtn.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 12, 0));
+      LinearLayout.LayoutParams spLp = new LinearLayout.LayoutParams(-2, -2);
+      spLp.leftMargin = a.dp(8);
+      speakerBtn.setOnClickListener(v -> {
+        speakerBtn.animate().scaleX(1.2f).scaleY(1.2f).setDuration(120)
+            .withEndAction(() -> speakerBtn.animate().scaleX(1.0f).scaleY(1.0f).setDuration(120).start())
+            .start();
+        a.pronounce(targetWord);
+      });
+      phoneticRow.addView(speakerBtn, spLp);
+      heading.addView(phoneticRow);
+    }
     if (!r.optString("recognized_text").isEmpty())
-      heading.addView(a.text("识别文字：" + r.optString("recognized_text"), 14, false));
+      heading.addView(a.text("✦ AI 识别文字：" + r.optString("recognized_text"), 14, false));
     heading.addView(a.chip(a.active == null ? "联网核对" : "取消请求", false, v -> {
       if (a.active != null) { a.cancel(); a.render(); }
       else verifyOnline(r);
@@ -1829,7 +2093,7 @@ final class QueryUi {
     JSONObject interpretation = r.optJSONObject("dictionary_context");
     String selectedMeaning = interpretation == null ? "" : interpretation.optString("selected_meaning_id");
     if (interpretation != null && !interpretation.optString("explanation").isEmpty())
-      a.card("语境解读").addView(a.text(interpretation.optString("explanation"), 14, false));
+      a.card("✦ AI 语境解读").addView(a.text(interpretation.optString("explanation"), 14, false));
     renderVerification(r);
     JSONArray ms = r.optJSONArray("meanings");
     if (a.session.has("auto_record_error"))
@@ -1861,7 +2125,9 @@ final class QueryUi {
         if (m.optString("id").equals(selectedMeaning) && !selectedMeaning.isEmpty())
           meaningHeader.addView(a.text("  当前语境义项", 11, true));
         else if ("ai".equals(m.optString("lookup_origin")))
-          meaningHeader.addView(a.text("  补充义项", 11, true));
+          meaningHeader.addView(a.text("  ✦ AI 补充义项", 11, true));
+        else if (FieldProvenance.hasAnyGenerated(m, "zh_definition", "en_definition", "example"))
+          meaningHeader.addView(a.text("  ✦ AI生成", 11, true));
         c.addView(meaningHeader);
         if (organizing) addMeaningControls(c, m);
         for (String f : new String[] {"zh_definition", "en_definition"})
@@ -1869,7 +2135,9 @@ final class QueryUi {
             LinearLayout definition = a.column();
             definition.setPadding(a.dp(10), a.dp(10), a.dp(10), a.dp(10));
             definition.setBackground(a.shape(a.inputBg, 10, a.border));
-            definition.addView(a.text(f.equals("zh_definition") ? "中文释义" : "英文释义", 11, true));
+            boolean isAiDef = FieldProvenance.isGenerated(m, f);
+            definition.addView(a.text((f.equals("zh_definition") ? "中文释义" : "英文释义")
+                + (isAiDef ? " · AI生成" : ""), 11, true));
             TextView value = a.text(m.optString(f), 15, f.equals("zh_definition"));
             value.setLineSpacing(a.dp(3), 1);
             if (f.equals("en_definition"))
@@ -1887,7 +2155,8 @@ final class QueryUi {
           example.addView(stripe, new LinearLayout.LayoutParams(a.dp(3), -1));
           LinearLayout contents = a.column();
           contents.setPadding(a.dp(10), a.dp(10), a.dp(10), a.dp(10));
-          contents.addView(a.text("典型例句:", 11, true));
+          boolean isAiEg = FieldProvenance.isGenerated(m, "example");
+          contents.addView(a.text(isAiEg ? "典型例句 · AI生成:" : "典型例句:", 11, true));
           TextView ex = a.text("\"" + m.optString("example") + "\"", 14, false);
           ex.setTypeface(null, android.graphics.Typeface.ITALIC);
           contents.addView(ex);
@@ -1912,7 +2181,7 @@ final class QueryUi {
             c.addView(a.text("批注：" + annotations.optJSONObject(j).optString("content"), 13, false));
       }
     if (!r.optString("raw_explanation").isEmpty())
-      a.card("补充说明").addView(a.text(r.optString("raw_explanation"), 15, false));
+      a.card("✦ AI 补充说明").addView(a.text(r.optString("raw_explanation"), 15, false));
     LinearLayout actions = a.fixedFooter();
     actions.addView(
         a.button(

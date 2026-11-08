@@ -48,6 +48,12 @@ final class IconGlyphs {
     VALUES.put("color-palette-outline", 62078);
     VALUES.put("eye-outline", 62186);
     VALUES.put("menu-outline", 62363);
-    VALUES.put("close-outline", 62065);
+    VALUES.put("close-circle", 62027);
+    VALUES.put("close-circle-outline", 62028);
+    VALUES.put("close-outline", 62030);
+    VALUES.put("volume-high", 62995);
+    VALUES.put("volume-high-outline", 62996);
+    VALUES.put("volume-medium", 63001);
+    VALUES.put("volume-medium-outline", 63002);
   }
 }

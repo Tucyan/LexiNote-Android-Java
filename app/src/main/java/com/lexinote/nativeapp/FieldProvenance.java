@@ -13,6 +13,20 @@ final class FieldProvenance {
 
   private FieldProvenance() {}
 
+  static boolean isGenerated(JSONObject object, String field) {
+    if (object == null || field == null) return false;
+    JSONObject meta = metadata(object, field);
+    return meta != null && meta.optBoolean(GENERATED, false);
+  }
+
+  static boolean hasAnyGenerated(JSONObject object, String... fields) {
+    if (object == null) return false;
+    for (String field : fields) {
+      if (isGenerated(object, field)) return true;
+    }
+    return false;
+  }
+
   static void markPresent(JSONObject object, boolean generated, String... fields) {
     if (object == null) return;
     for (String field : fields) {

@@ -199,7 +199,11 @@ final class AssistantUi {
         new FrameLayout.LayoutParams(a.dp(40), a.dp(40), Gravity.BOTTOM | Gravity.RIGHT);
     latestLp.setMargins(0, 0, a.dp(16), a.dp(16));
     timeline.addView(ui.latest, latestLp);
-    ui.buildDrawer(timeline);
+    ViewGroup topHost = a.findViewById(android.R.id.content);
+    if (topHost == null && a.root.getParent() instanceof ViewGroup) {
+      topHost = (ViewGroup) a.root.getParent();
+    }
+    ui.buildDrawer(topHost != null ? topHost : timeline);
     a.root.addView(timeline, index, new LinearLayout.LayoutParams(-1, 0, 1));
     ui.composer();
     if (android.os.Build.VERSION.SDK_INT >= 29) {
@@ -215,9 +219,14 @@ final class AssistantUi {
   }
 
   private void buildDrawer(ViewGroup container) {
+    if (container == null) return;
+    View stale = container.findViewWithTag("assistant-drawer-overlay");
+    if (stale != null) container.removeView(stale);
+
     drawerWidth =
         Math.min(a.dp(310), (int) (a.getResources().getDisplayMetrics().widthPixels * 0.85f));
     drawerOverlay = new FrameLayout(a);
+    drawerOverlay.setTag("assistant-drawer-overlay");
     drawerOverlay.setVisibility(View.GONE);
 
     // Semi-transparent scrim
@@ -286,6 +295,12 @@ final class AssistantUi {
     drawerOverlay.addView(drawerPanel, panelLp);
 
     container.addView(drawerOverlay, new FrameLayout.LayoutParams(-1, -1));
+  }
+
+  void destroy() {
+    if (drawerOverlay != null && drawerOverlay.getParent() instanceof ViewGroup) {
+      ((ViewGroup) drawerOverlay.getParent()).removeView(drawerOverlay);
+    }
   }
 
   boolean isDrawerOpen() {
@@ -390,6 +405,17 @@ final class AssistantUi {
               0));
       badge.setPadding(a.dp(4), a.dp(1), a.dp(4), a.dp(1));
       metaRow.addView(badge);
+
+      if (item.optJSONObject("metadata") != null
+          && "ai".equals(item.optJSONObject("metadata").optString("title_source"))) {
+        TextView aiTitleBadge = a.text("AI命名", 10, false);
+        aiTitleBadge.setTextColor(a.accent);
+        aiTitleBadge.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 4, 0));
+        aiTitleBadge.setPadding(a.dp(4), a.dp(1), a.dp(4), a.dp(1));
+        LinearLayout.LayoutParams aiTitleLp = new LinearLayout.LayoutParams(-2, -2);
+        aiTitleLp.leftMargin = a.dp(4);
+        metaRow.addView(aiTitleBadge, aiTitleLp);
+      }
 
       TextView date = a.text(" · " + q.sessionDate(item, "last_used_at"), 11, false);
       date.setTextColor(a.subtle);
@@ -771,6 +797,13 @@ final class AssistantUi {
     }
     column.addView(row);
     q.track(composer, value -> q.follow = value);
+
+    TextView disclaimer = a.text("AI回答仅供参考，可能有误请核实", 11, false);
+    disclaimer.setTextColor(a.subtle);
+    disclaimer.setGravity(Gravity.CENTER);
+    disclaimer.setPadding(0, a.dp(6), 0, a.dp(2));
+    column.addView(disclaimer);
+
     footer.addView(column);
   }
 
@@ -941,7 +974,7 @@ final class AssistantUi {
                 "确认查询",
                 v -> {
                   v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-                  q.lookup(proposal);
+                  q.lookup(q.pending());
                 });
         btnRow.addView(confirmBtn, new LinearLayout.LayoutParams(0, -2, 1));
 

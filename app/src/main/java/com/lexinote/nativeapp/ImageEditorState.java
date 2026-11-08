@@ -11,9 +11,11 @@ import org.json.JSONObject;
 /** Immutable, serializable history snapshot; all image coordinates are normalized. */
 public final class ImageEditorState {
   public enum Tool {
+    PAN,
     RECTANGLE,
     FREEHAND,
-    MARK
+    MARK,
+    CROP
   }
 
   public static final int MAX_STROKES = 128;
@@ -23,6 +25,7 @@ public final class ImageEditorState {
   public final Tool tool;
   public final SelectedRegion selection;
   public final double zoom, panX, panY;
+  public final int fineAngle;
 
   /** Independent open polylines, each normalized against the current oriented image. */
   public final List<List<SelectedRegion.Point>> inkStrokes;
@@ -34,7 +37,7 @@ public final class ImageEditorState {
       double zoom,
       double panX,
       double panY) {
-    this(quarterTurns, tool, selection, zoom, panX, panY, Collections.emptyList());
+    this(quarterTurns, tool, selection, zoom, panX, panY, Collections.emptyList(), 0);
   }
 
   public ImageEditorState(
@@ -45,6 +48,18 @@ public final class ImageEditorState {
       double panX,
       double panY,
       List<List<SelectedRegion.Point>> inkStrokes) {
+    this(quarterTurns, tool, selection, zoom, panX, panY, inkStrokes, 0);
+  }
+
+  public ImageEditorState(
+      int quarterTurns,
+      Tool tool,
+      SelectedRegion selection,
+      double zoom,
+      double panX,
+      double panY,
+      List<List<SelectedRegion.Point>> inkStrokes,
+      int fineAngle) {
     this.quarterTurns = ((quarterTurns % 4) + 4) % 4;
     this.tool = Objects.requireNonNull(tool);
     this.selection = selection;
@@ -52,6 +67,7 @@ public final class ImageEditorState {
     this.panX = Double.isFinite(panX) ? panX : 0;
     this.panY = Double.isFinite(panY) ? panY : 0;
     this.inkStrokes = immutableInk(inkStrokes);
+    this.fineAngle = Math.max(-45, Math.min(45, fineAngle));
   }
 
   private static List<List<SelectedRegion.Point>> immutableInk(
@@ -101,7 +117,7 @@ public final class ImageEditorState {
                 ? SelectedRegion.mark(rotatePoints(rotated.points, delta))
                 : SelectedRegion.freehand(rotatePoints(rotated.points, delta));
     }
-    return new ImageEditorState(turns, tool, rotated, 1, 0, 0, ink);
+    return new ImageEditorState(turns, tool, rotated, 1, 0, 0, ink, fineAngle);
   }
 
   private static List<SelectedRegion.Point> rotatePoints(
@@ -120,19 +136,23 @@ public final class ImageEditorState {
   }
 
   public ImageEditorState withTool(Tool value) {
-    return new ImageEditorState(quarterTurns, value, selection, zoom, panX, panY, inkStrokes);
+    return new ImageEditorState(quarterTurns, value, selection, zoom, panX, panY, inkStrokes, fineAngle);
   }
 
   public ImageEditorState withSelection(SelectedRegion value) {
-    return new ImageEditorState(quarterTurns, tool, value, zoom, panX, panY, inkStrokes);
+    return new ImageEditorState(quarterTurns, tool, value, zoom, panX, panY, inkStrokes, fineAngle);
   }
 
   public ImageEditorState withViewport(double zoom, double panX, double panY) {
-    return new ImageEditorState(quarterTurns, tool, selection, zoom, panX, panY, inkStrokes);
+    return new ImageEditorState(quarterTurns, tool, selection, zoom, panX, panY, inkStrokes, fineAngle);
   }
 
   public ImageEditorState withInkStrokes(List<List<SelectedRegion.Point>> value) {
-    return new ImageEditorState(quarterTurns, tool, selection, zoom, panX, panY, value);
+    return new ImageEditorState(quarterTurns, tool, selection, zoom, panX, panY, value, fineAngle);
+  }
+
+  public ImageEditorState withFineAngle(int value) {
+    return new ImageEditorState(quarterTurns, tool, selection, zoom, panX, panY, inkStrokes, value);
   }
 
   public JSONObject toJson() {
@@ -144,6 +164,7 @@ public final class ImageEditorState {
       out.put("zoom", zoom);
       out.put("panX", panX);
       out.put("panY", panY);
+      out.put("fineAngle", fineAngle);
       out.put("selection", selection == null ? JSONObject.NULL : selection.toJson());
       JSONArray strokes = new JSONArray();
       for (List<SelectedRegion.Point> stroke : inkStrokes) {
@@ -195,7 +216,8 @@ public final class ImageEditorState {
           json.optDouble("zoom", 1),
           json.optDouble("panX", 0),
           json.optDouble("panY", 0),
-          strokes);
+          strokes,
+          json.optInt("fineAngle", 0));
     } catch (RuntimeException invalid) {
       return initial();
     }
@@ -238,11 +260,12 @@ public final class ImageEditorState {
         && Double.compare(zoom, s.zoom) == 0
         && Double.compare(panX, s.panX) == 0
         && Double.compare(panY, s.panY) == 0
+        && fineAngle == s.fineAngle
         && inkStrokes.equals(s.inkStrokes);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(quarterTurns, tool, selection, zoom, panX, panY, inkStrokes);
+    return Objects.hash(quarterTurns, tool, selection, zoom, panX, panY, fineAngle, inkStrokes);
   }
 }

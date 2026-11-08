@@ -8,6 +8,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.*;
+import android.text.TextUtils;
 import android.view.*;
 import android.widget.*;
 import java.io.*;
@@ -48,6 +49,7 @@ public final class MainActivity extends Activity {
   NotebookUi notebooks;
   ReviewUi review;
   SettingsUi settingsUi;
+  public PronunciationEngine pronunciationEngine;
   int background, foreground, muted, card, accent, inputBg, border, subtle;
   boolean isDark;
   float scale = 1;
@@ -67,6 +69,7 @@ public final class MainActivity extends Activity {
     repository = new Repository(this);
     secure = new SecureSettings(this);
     titles = new ConversationTitles(this);
+    pronunciationEngine = new SherpaPronunciationEngine(this);
     store = LibraryStore.getInstance(this);
     store.bind(this);
     store.loadLibrary(this, result -> {
@@ -192,6 +195,7 @@ public final class MainActivity extends Activity {
     if (library == null) return;
     if (query != null && query.assistantView != null) {
       query.assistantView.saveAnchor();
+      query.assistantView.destroy();
       query.assistantView = null;
     }
     palette();
@@ -313,15 +317,17 @@ public final class MainActivity extends Activity {
           });
       bar.addView(back, new LinearLayout.LayoutParams(dp(40), dp(48)));
       JSONObject result = session == null ? null : session.optJSONObject("query_results");
+      String sessionTitle = session != null ? query.title(session) : null;
       title =
           screen.equals("assistant")
-              ? session != null && query.saved(session) ? query.title(session) : "AI 助手"
+              ? (sessionTitle != null && !sessionTitle.trim().isEmpty() ? sessionTitle : "AI 助手")
               : screen.equals("vocabulary")
                   ? (activeVocabulary != null ? activeVocabulary.optString("content", "词汇详情") : "词汇详情")
                   : result == null ? "查询信息" : result.optString("word", "查询信息");
     } else title = new String[] {"LexiNote · 查询和记录", "语境猜词辅助", "笔记管理与词库", "复习中心", "设置与数据管理"}[page];
     TextView heading = text(title, 17, true);
     heading.setSingleLine(true);
+    heading.setEllipsize(TextUtils.TruncateAt.END);
     heading.setTag("page-title");
     boolean homeHeader = screen.equals("tabs") && page == 0;
     bar.addView(
@@ -609,6 +615,12 @@ public final class MainActivity extends Activity {
 
   void say(String s) {
     Toast.makeText(this, s, Toast.LENGTH_LONG).show();
+  }
+
+  public void pronounce(String word) {
+    if (pronunciationEngine != null) {
+      pronunciationEngine.pronounce(word, null, null, error -> say("发音加载失败"));
+    }
   }
 
   void styleDialog(AlertDialog dialog) {
@@ -1438,6 +1450,12 @@ public final class MainActivity extends Activity {
   protected void onDestroy() {
     uiEpoch++;
     cancel();
+    if (pronunciationEngine != null) {
+      pronunciationEngine.release();
+    }
+    if (query != null && query.assistantView != null) {
+      query.assistantView.destroy();
+    }
     if (notebooks != null) notebooks.close();
     if (settingsUi != null) settingsUi.models.close();
     if (titles != null) titles.close();
@@ -1456,6 +1474,9 @@ public final class MainActivity extends Activity {
 
   @Override
   protected void onPause() {
+    if (pronunciationEngine != null) {
+      pronunciationEngine.stop();
+    }
     if (review != null) review.pauseTimer();
     if (query != null && query.assistantView != null && session != null) {
       query.assistantView.saveAnchor();

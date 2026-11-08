@@ -1758,6 +1758,17 @@ final class NotebookUi {
         phLp.leftMargin = a.dp(6);
         mHeader.addView(ph, phLp);
       }
+      boolean hasAi = FieldProvenance.hasAnyGenerated(m, "zh_definition", "en_definition", "example")
+          || "ai".equals(m.optString("lookup_origin"));
+      if (hasAi) {
+        TextView aiBadge = a.text("✦ AI", 10, true);
+        aiBadge.setTextColor(a.accent);
+        aiBadge.setPadding(a.dp(4), a.dp(1), a.dp(4), a.dp(1));
+        aiBadge.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 4, 0));
+        LinearLayout.LayoutParams aiLp = new LinearLayout.LayoutParams(-2, -2);
+        aiLp.leftMargin = a.dp(6);
+        mHeader.addView(aiBadge, aiLp);
+      }
       mBox.addView(mHeader);
 
       String zhDef = m.optString("zh_definition").trim();
@@ -1786,7 +1797,8 @@ final class NotebookUi {
         LinearLayout.LayoutParams egLp = new LinearLayout.LayoutParams(-1, -2);
         egLp.topMargin = a.dp(6);
 
-        TextView egLabel = a.text("例句：", 11, true);
+        boolean isAiEg = FieldProvenance.isGenerated(m, "example");
+        TextView egLabel = a.text(isAiEg ? "例句 · AI生成：" : "例句：", 11, true);
         egLabel.setTextColor(a.accent);
         egBox.addView(egLabel);
 
@@ -2565,14 +2577,33 @@ final class NotebookUi {
         && v.optJSONArray("meanings").length() > 0) {
       phonetic = v.optJSONArray("meanings").optJSONObject(0).optString("phonetic");
     }
-    if (!phonetic.isEmpty()) {
-      TextView phoneticText =
-          a.text(phonetic.startsWith("/") ? phonetic : "/" + phonetic + "/", 14, false);
-      phoneticText.setTextColor(a.muted);
+    final String notebookWord = v.optString("word", v.optString("content"));
+    if (!phonetic.isEmpty() || !notebookWord.isEmpty()) {
+      LinearLayout phoneticRow = a.row();
+      phoneticRow.setGravity(Gravity.CENTER_VERTICAL);
+      if (!phonetic.isEmpty()) {
+        TextView phoneticText =
+            a.text(phonetic.startsWith("/") ? phonetic : "/" + phonetic + "/", 14, false);
+        phoneticText.setTextColor(a.muted);
+        phoneticRow.addView(phoneticText);
+      }
+      TextView speakerBtn = a.icon("volume-high-outline", 16, a.accent);
+      speakerBtn.setContentDescription("朗读发音");
+      speakerBtn.setPadding(a.dp(4), a.dp(2), a.dp(4), a.dp(2));
+      speakerBtn.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 10, 0));
+      LinearLayout.LayoutParams spLp = new LinearLayout.LayoutParams(-2, -2);
+      spLp.leftMargin = a.dp(6);
+      speakerBtn.setOnClickListener(btnView -> {
+        speakerBtn.animate().scaleX(1.2f).scaleY(1.2f).setDuration(120)
+            .withEndAction(() -> speakerBtn.animate().scaleX(1.0f).scaleY(1.0f).setDuration(120).start())
+            .start();
+        a.pronounce(notebookWord);
+      });
+      phoneticRow.addView(speakerBtn, spLp);
       LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(-1, -2);
       pLp.topMargin = a.dp(2);
       pLp.bottomMargin = a.dp(4);
-      wordCard.addView(phoneticText, pLp);
+      wordCard.addView(phoneticRow, pLp);
     }
 
     View divider1 = new View(a);
@@ -2753,6 +2784,18 @@ final class NotebookUi {
           mTop.addView(ph, phLp);
         }
 
+        boolean hasAiMeaning = FieldProvenance.hasAnyGenerated(meaning, "zh_definition", "en_definition", "example")
+            || "ai".equals(meaning.optString("lookup_origin"));
+        if (hasAiMeaning) {
+          TextView aiBadge = a.text("✦ AI生成", 11, true);
+          aiBadge.setTextColor(a.accent);
+          aiBadge.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
+          aiBadge.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 6, 0));
+          LinearLayout.LayoutParams aiLp = new LinearLayout.LayoutParams(-2, -2);
+          aiLp.leftMargin = a.dp(6);
+          mTop.addView(aiBadge, aiLp);
+        }
+
         mTop.addView(new View(a), new LinearLayout.LayoutParams(0, 1, 1));
 
         Button editM = a.button("编辑", view -> editMeaning(v, meaning));
@@ -2790,7 +2833,8 @@ final class NotebookUi {
           LinearLayout.LayoutParams egLp = new LinearLayout.LayoutParams(-1, -2);
           egLp.topMargin = a.dp(8);
 
-          TextView egLabel = a.text("例句：", 11, true);
+          boolean isAiEg = FieldProvenance.isGenerated(meaning, "example");
+          TextView egLabel = a.text(isAiEg ? "例句 · AI生成：" : "例句：", 11, true);
           egLabel.setTextColor(a.accent);
           egBox.addView(egLabel);
 

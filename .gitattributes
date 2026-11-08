@@ -5,5 +5,7 @@
 *.apk binary
 
 *.zip binary
+*.aar binary
+*.onnx binary
 *.md whitespace=-blank-at-eol
 gradlew text eol=lf

@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LexiNote 客户端内部数据状态流转</title>
+<style>
+:root{
+  --ink:#0f172a; --ink2:#334155; --muted:#64748b; --faint:#94a3b8;
+  --line:#e2e8f0; --line2:#cbd5e1;
+  --paper:#ffffff; --wash:#f6f8fb; --wash2:#eef2f7;
+  --emerald:#047857; --emerald-bg:#ecfdf5; --emerald-line:#a7f3d0;
+  --indigo:#4338ca; --indigo-bg:#eef2ff; --indigo-line:#c7d2fe;
+  --blue:#1d4ed8; --blue-bg:#eff6ff; --blue-line:#bfdbfe;
+  --amber:#b45309; --amber-bg:#fffbeb; --amber-line:#fde68a;
+  --rose:#be123c; --rose-bg:#fff1f2; --rose-line:#fecdd3;
+  --mono: ui-monospace, "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --sans: "Segoe UI", system-ui, -apple-system, "Microsoft YaHei", "PingFang SC", sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:#f4f6f9; color:var(--ink);
+  font-family:var(--sans); font-size:15.5px; line-height:1.75;
+  -webkit-font-smoothing:antialiased;
+}
+.page{max-width:1060px; margin:0 auto; padding:0 24px 96px}
+a{color:var(--blue); text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* ---------- masthead ---------- */
+.masthead{
+  margin:0 -24px 0; padding:56px 24px 44px;
+  background:
+    radial-gradient(900px 300px at 12% -10%, #d1fae5 0%, rgba(209,250,229,0) 62%),
+    radial-gradient(760px 260px at 92% 0%, #e0e7ff 0%, rgba(224,231,255,0) 60%),
+    linear-gradient(180deg,#ffffff 0%, #f7f9fc 100%);
+  border-bottom:1px solid var(--line);
+}
+.masthead .inner{max-width:1012px; margin:0 auto}
+.kicker{
+  display:inline-flex; align-items:center; gap:8px;
+  font:600 11.5px/1 var(--mono); letter-spacing:.07em; text-transform:uppercase;
+  color:var(--emerald); background:var(--emerald-bg); border:1px solid var(--emerald-line);
+  padding:7px 10px; border-radius:999px;
+}
+h1{font-size:40px; line-height:1.22; letter-spacing:-.02em; margin:20px 0 14px; font-weight:700}
+.lede{max-width:760px; margin:0; font-size:16.5px; color:var(--ink2); line-height:1.8}
+.meta{margin-top:22px; display:flex; flex-wrap:wrap; gap:10px 22px; font:12.5px var(--mono); color:var(--faint)}
+.meta b{color:var(--muted); font-weight:600}
+
+/* ---------- nav ---------- */
+nav.toc{
+  position:sticky; top:0; z-index:40; margin:0 -24px; padding:10px 24px;
+  background:rgba(244,246,249,.92); backdrop-filter:saturate(180%) blur(10px);
+  border-bottom:1px solid var(--line);
+}
+nav.toc .track{max-width:1012px; margin:0 auto; display:flex; gap:4px; overflow-x:auto; scrollbar-width:none}
+nav.toc .track::-webkit-scrollbar{display:none}
+nav.toc a{
+  flex:0 0 auto; padding:6px 10px; border-radius:8px; font-size:12.5px; color:var(--muted);
+  white-space:nowrap; border:1px solid transparent;
+}
+nav.toc a:hover{background:#fff; border-color:var(--line); color:var(--ink); text-decoration:none}
+
+/* ---------- sections ---------- */
+section{scroll-margin-top:72px; margin-top:54px}
+h2{
+  display:flex; align-items:baseline; gap:12px;
+  font-size:23px; line-height:1.35; font-weight:700; letter-spacing:-.01em;
+  margin:0 0 6px; padding-bottom:12px; border-bottom:1px solid var(--line);
+}
+h2 .num{
+  flex:0 0 auto; font:700 12px/1 var(--mono); color:var(--emerald);
+  background:var(--emerald-bg); border:1px solid var(--emerald-line);
+  padding:6px 8px; border-radius:7px; transform:translateY(-2px);
+}
+h3{font-size:16.5px; font-weight:650; margin:30px 0 10px; letter-spacing:-.005em}
+p{margin:12px 0}
+.sub{color:var(--muted); font-size:14px; margin:8px 0 0}
+
+/* ---------- generic bits ---------- */
+code,.mono{font-family:var(--mono); font-size:.88em}
+code{background:var(--wash2); border:1px solid var(--line); border-radius:5px; padding:1px 5px; color:#0f172a}
+.anchor{
+  display:inline-block; font:11.5px/1 var(--mono); color:var(--muted);
+  background:var(--wash); border:1px solid var(--line); border-radius:6px;
+  padding:4px 7px; margin:2px 4px 2px 0; white-space:nowrap;
+}
+.tag{
+  display:inline-block; font:600 11px/1 var(--mono); letter-spacing:.06em;
+  padding:4px 7px; border-radius:5px; border:1px solid var(--line2); color:var(--muted); background:#fff;
+  white-space:nowrap;
+}
+.tag.ok{color:var(--emerald); background:var(--emerald-bg); border-color:var(--emerald-line)}
+.tag.bad{color:var(--rose); background:var(--rose-bg); border-color:var(--rose-line)}
+.tag.warn{color:var(--amber); background:var(--amber-bg); border-color:var(--amber-line)}
+.tag.info{color:var(--indigo); background:var(--indigo-bg); border-color:var(--indigo-line)}
+
+.card{
+  background:var(--paper); border:1px solid var(--line); border-radius:14px;
+  padding:18px 20px; box-shadow:0 1px 2px rgba(15,23,42,.04), 0 8px 24px -18px rgba(15,23,42,.25);
+}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px}
+@media (max-width:820px){ .grid2,.grid3{grid-template-columns:1fr} h1{font-size:31px} .page{padding:0 16px 72px} .masthead{margin:0 -16px} nav.toc{margin:0 -16px; padding:8px 16px} }
+
+/* ---------- layer diagram ---------- */
+.diagram{
+  background:
+    linear-gradient(#fff,#fff) padding-box,
+    repeating-linear-gradient(135deg,#f1f5f9 0 8px,#fff 8px 16px) border-box;
+  border:1px solid var(--line); border-radius:16px; padding:22px; margin:20px 0;
+  box-shadow:0 1px 2px rgba(15,23,42,.04), 0 16px 40px -32px rgba(15,23,42,.4);
+}
+.band{
+  border:1px solid var(--line); border-radius:13px; background:#fff; overflow:hidden;
+  position:relative;
+}
+.band + .band{margin-top:0}
+.band-h{
+  display:flex; align-items:center; gap:10px; padding:9px 14px; flex-wrap:wrap;
+  border-bottom:1px solid var(--line); background:var(--slate,#f8fafc);
+}
+.band-h .lv{
+  font:700 10.5px/1 var(--mono); letter-spacing:.12em; text-transform:uppercase;
+  padding:5px 7px; border-radius:5px; border:1px solid; white-space:nowrap; flex:0 0 auto;
+}
+.band-h .name{font-size:13.5px; font-weight:650; color:var(--ink2)}
+.band-h .note{margin-left:auto; font:11.5px var(--mono); color:var(--faint)}
+.tiles{display:grid; gap:8px; grid-template-columns:repeat(auto-fit,minmax(122px,1fr)); padding:13px}
+.tile{
+  border:1px solid var(--line); border-radius:9px; padding:8px 10px; background:#fcfdfe;
+  font-size:12.5px; color:var(--ink2); line-height:1.5;
+}
+.tile b{display:block; font:600 12.5px/1.45 var(--mono); color:var(--ink); margin-bottom:2px}
+.tile span{color:var(--muted); font-size:11.5px}
+
+.b-ui .lv{color:var(--blue); border-color:var(--blue-line); background:var(--blue-bg)}
+.b-dom .lv{color:var(--indigo); border-color:var(--indigo-line); background:var(--indigo-bg)}
+.b-sch .lv{color:var(--emerald); border-color:var(--emerald-line); background:var(--emerald-bg)}
+.b-be .lv{color:#0e7490; border-color:#a5f3fc; background:#ecfeff}
+.b-disk .lv{color:var(--amber); border-color:var(--amber-line); background:var(--amber-bg)}
+
+.rail{position:relative; height:52px; margin-left:34px}
+.rail::before{content:""; position:absolute; left:0; top:0; bottom:8px; border-left:2px dashed var(--line2)}
+.rail::after{
+  content:""; position:absolute; left:-5px; bottom:0; width:0; height:0;
+  border-left:5px solid transparent; border-right:5px solid transparent; border-top:9px solid var(--line2);
+}
+.rail span{
+  position:absolute; left:16px; top:11px; font:11.5px var(--mono); color:var(--muted);
+  background:#fff; padding:1px 6px; border-radius:4px;
+}
+
+/* ---------- steps ---------- */
+ol.steps{list-style:none; margin:20px 0 0; padding:0 0 0 44px; position:relative}
+ol.steps::before{content:""; position:absolute; left:15px; top:14px; bottom:22px; width:2px; background:linear-gradient(180deg,var(--emerald-line),var(--line))}
+ol.steps>li{position:relative; margin:0 0 12px}
+ol.steps>li::before{
+  counter-increment:st; content:counter(st);
+  position:absolute; left:-44px; top:2px; width:30px; height:30px; border-radius:50%;
+  display:grid; place-items:center; font:700 12px var(--mono); color:var(--emerald);
+  background:#fff; border:1px solid var(--emerald-line); box-shadow:0 0 0 4px #f6fbf8;
+}
+ol.steps{counter-reset:st}
+.step{
+  border:1px solid var(--line); border-left:3px solid var(--emerald-line);
+  background:#fff; border-radius:0 11px 11px 0; padding:11px 14px;
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+.step:hover{border-color:var(--line2); box-shadow:0 6px 18px -14px rgba(15,23,42,.5)}
+.step .who{font:600 12px var(--mono); color:var(--emerald); letter-spacing:.02em}
+.step p{margin:4px 0 0; font-size:14px; color:var(--ink2); line-height:1.72}
+
+/* ---------- chain ---------- */
+.chain{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:18px 0}
+.node{
+  flex:1 1 150px; min-width:132px; border:1px solid var(--line); border-radius:11px;
+  background:#fff; padding:11px 12px; text-align:left;
+}
+.node .k{font:600 12px var(--mono); color:var(--ink); display:block}
+.node .v{font-size:11.5px; color:var(--muted); display:block; margin-top:2px}
+.node.accent{border-color:var(--emerald-line); background:var(--emerald-bg)}
+.node.accent .k{color:var(--emerald)}
+.node.warn{border-color:var(--amber-line); background:var(--amber-bg)}
+.node.warn .k{color:var(--amber)}
+.node.bad{border-color:var(--rose-line); background:var(--rose-bg)}
+.node.bad .k{color:var(--rose)}
+.node.ghost{border-style:dashed; background:#fcfdfe}
+.link{
+  flex:0 0 84px; display:grid; place-items:center; position:relative;
+  font:11px var(--mono); color:var(--faint);
+}
+.link::before{content:""; position:absolute; left:0; right:0; top:50%; height:1.5px; background:#b9c5d4}
+.link::after{
+  content:""; position:absolute; right:0; top:calc(50% - 5px);
+  border-top:5px solid transparent; border-bottom:5px solid transparent; border-left:7px solid #b9c5d4;
+}
+.link em{
+  position:relative; z-index:2; font-style:normal; white-space:nowrap;
+  background:#fff; border:1px solid var(--line); border-radius:999px;
+  padding:1px 7px; font:10px/1.6 var(--mono); color:var(--muted);
+  max-width:100%; overflow:hidden;
+}
+.chain .node{flex:1 1 130px; min-width:118px}
+@media (max-width:820px){
+  .chain{flex-direction:column}
+  .link{flex:0 0 34px; height:34px; display:block}
+  .link::before{left:26px; right:auto; top:0; bottom:0; width:1.5px; height:auto}
+  .link::after{left:22px; top:auto; bottom:0; right:auto; border-left:4px solid transparent; border-right:4px solid transparent; border-top:6px solid var(--line2); border-bottom:0}
+  .link em{position:absolute; left:44px; top:6px; max-width:none}
+}
+
+/* ---------- outcomes ---------- */
+.outcomes{display:grid; gap:8px; margin:18px 0}
+.oc{
+  display:grid; grid-template-columns:1fr 36px 1.05fr; align-items:center;
+  border:1px solid var(--line); border-radius:11px; background:#fff; padding:10px 15px;
+}
+.oc-l b{display:block; font-size:13px; font-weight:650; line-height:1.5}
+.oc-l span{display:block; font-size:11.8px; color:var(--muted); line-height:1.55}
+.oc-a{text-align:center; color:var(--faint); font:12px var(--mono)}
+.oc-r{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.oc-n{font-size:11.8px; color:var(--muted)}
+@media (max-width:820px){
+  .oc{grid-template-columns:1fr; gap:6px}
+  .oc-a{text-align:left}
+}
+
+/* ---------- table ---------- */
+.tablewrap{overflow-x:auto; border:1px solid var(--line); border-radius:12px; background:#fff; margin:18px 0}
+table{border-collapse:collapse; width:100%; min-width:640px; font-size:13.5px}
+th,td{padding:10px 13px; text-align:left; vertical-align:top; border-bottom:1px solid var(--line)}
+th{background:var(--wash); font:600 12px var(--mono); color:var(--muted); letter-spacing:.03em; white-space:nowrap}
+tr:last-child td{border-bottom:none}
+td code{font-size:12px}
+table.t-status{min-width:760px}
+table.t-status th:nth-child(1),table.t-status td:nth-child(1){width:198px; white-space:nowrap}
+table.t-status th:nth-child(3),table.t-status td:nth-child(3){width:152px}
+table.t-status th:nth-child(4),table.t-status td:nth-child(4){width:104px}
+table.t-status th:nth-child(5),table.t-status td:nth-child(5){width:96px; white-space:nowrap}
+table.t-eph th:nth-child(2),table.t-eph td:nth-child(2){width:216px}
+
+/* ---------- callout ---------- */
+.callout{
+  border:1px solid var(--line); border-left:3px solid var(--amber);
+  background:linear-gradient(90deg,var(--amber-bg),#fff 42%);
+  border-radius:0 11px 11px 0; padding:12px 16px; margin:16px 0; font-size:14px; color:var(--ink2);
+}
+.callout.good{border-left-color:var(--emerald); background:linear-gradient(90deg,var(--emerald-bg),#fff 42%)}
+.callout.info{border-left-color:var(--indigo); background:linear-gradient(90deg,var(--indigo-bg),#fff 42%)}
+.callout b{color:var(--ink)}
+.callout .lbl{
+  display:block; font:600 11px var(--mono); letter-spacing:.05em;
+  color:var(--amber); margin-bottom:3px;
+}
+.callout.good .lbl{color:var(--emerald)}
+.callout.info .lbl{color:var(--indigo)}
+
+/* ---------- mini summary cards ---------- */
+.pillars{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:22px 0 0}
+@media (max-width:820px){ .pillars{grid-template-columns:1fr} }
+.pillar{background:#fff; border:1px solid var(--line); border-radius:13px; padding:15px 16px}
+.pillar .n{font:700 11px var(--mono); color:var(--emerald); letter-spacing:.03em}
+.pillar h4{margin:6px 0 5px; font-size:14.5px; font-weight:650}
+.pillar p{margin:0; font-size:12.8px; color:var(--muted); line-height:1.65}
+
+/* ---------- tree ---------- */
+pre.tree{
+  margin:16px 0 0; padding:16px 18px; overflow-x:auto;
+  background:#0f172a; color:#e2e8f0; border-radius:12px;
+  font:12.5px/1.85 var(--mono); border:1px solid #1e293b;
+}
+pre.tree .c{color:#64748b}
+pre.tree .k{color:#7dd3fc}
+pre.tree .s{color:#a7f3d0}
+pre.tree .w{color:#fcd34d}
+pre.tree .r{color:#fca5a5}
+
+/* ---------- risk list ---------- */
+ul.risk{list-style:none; padding:0; margin:16px 0 0}
+ul.risk li{
+  position:relative; padding:12px 14px 12px 44px; margin-bottom:9px;
+  background:#fff; border:1px solid var(--line); border-radius:10px; font-size:13.8px; color:var(--ink2);
+}
+ul.risk li::before{
+  content:"!"; position:absolute; left:14px; top:13px; width:19px; height:19px; border-radius:50%;
+  display:grid; place-items:center; font:700 11px var(--mono);
+  color:var(--amber); background:var(--amber-bg); border:1px solid var(--amber-line);
+}
+ul.risk li b{color:var(--ink)}
+
+hr.sep{border:none; border-top:1px solid var(--line); margin:36px 0}
+footer{margin-top:56px; padding-top:20px; border-top:1px solid var(--line); color:var(--faint); font-size:12.5px}
+footer .mono{color:var(--muted)}
+
+@media print{
+  body{background:#fff}
+  nav.toc{display:none}
+  .masthead{background:#fff; border-bottom:1px solid #ddd}
+  .card,.diagram,.step,.node{break-inside:avoid}
+  section{break-inside:auto}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="masthead">
+  <div class="inner">
+    <span class="kicker">LexiNote · Android 原生客户端</span>
+    <h1>客户端内部数据状态流转</h1>
+    <p class="lede">
+      一次「保存」在代码里究竟走了多远：从界面层的一份 JSON 内存副本，到单线程调度器，再到 AtomicFile 原子落盘；
+      中途的世代屏障、幂等事件、失败回滚与恢复路径是如何把并发和崩溃挡在数据之外的。
+    </p>
+    <div class="meta">
+      <span><b>分析对象</b> com.lexinote.nativeapp</span>
+      <span><b>方式</b> 源码静态阅读（未运行设备）</span>
+      <span><b>日期</b> 2026-11-03</span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="track">
+    <a href="#overview">概览</a>
+    <a href="#layers">分层全景</a>
+    <a href="#write">写入链路</a>
+    <a href="#read">读取链路</a>
+    <a href="#commit">提交结果</a>
+    <a href="#concurrency">并发控制</a>
+    <a href="#boot">启动与恢复</a>
+    <a href="#backup">备份与回退</a>
+    <a href="#session">会话生命周期</a>
+    <a href="#query">查询状态机</a>
+    <a href="#review">复习队列</a>
+    <a href="#model">数据模型</a>
+    <a href="#risk">风险清单</a>
+  </div>
+</nav>
+
+<!-- ============================================================ -->
+<section id="overview">
+  <h2><span class="num">00</span>一句话概览</h2>
+  <p>
+    这个客户端没有后端服务，也没有使用 Room/SQLite。整份用户数据是<b>一个 JSON 文档</b>（<code>library.json</code>），
+    内存里同时存在<b>两份副本</b>：界面层的一份（<code>MainActivity.library</code>）和后端工作副本
+    （<code>JsonStoreBackend.workingCopy</code>）。两者只在「提交」这一刻通过一份整文档快照对齐。
+  </p>
+
+  <div class="pillars">
+    <div class="pillar">
+      <span class="n">01 · 单一文档</span>
+      <h4>全量快照，而非增量行</h4>
+      <p>词汇、笔记、会话、复习计划全在同一个 JSON 里。每次写入都是「整份文档替换」，没有局部 UPDATE。</p>
+    </div>
+    <div class="pillar">
+      <span class="n">02 · 单线程串行</span>
+      <h4>所有写排队执行</h4>
+      <p><code>LibraryStore</code> 只有一条名为 <code>LexiNote-StoreWorker</code> 的工作线程，FIFO 执行，天然无并发写。</p>
+    </div>
+    <div class="pillar">
+      <span class="n">03 · 世代屏障</span>
+      <h4>恢复即换纪元</h4>
+      <p>每次备份恢复或回退都把 <code>generation</code> 加一，在途的旧命令因世代不符被整条丢弃。</p>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <span class="lbl">读图约定</span>
+    实线箭头表示<b>正常路径</b>；虚线框表示<b>已声明但当前未生效</b>的分支；
+    <span class="tag ok">绿</span> 表示提交成功，<span class="tag warn">黄</span> 表示可恢复的拒绝，
+    <span class="tag bad">红</span> 表示数据未被写入的失败。
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="layers">
+  <h2><span class="num">01</span>分层全景：五个层次与两份副本</h2>
+  <p class="sub">从上到下依次是界面、领域、调度、后端、磁盘。注意左侧那条贯穿的注释：读操作不经过调度器。</p>
+
+  <div class="diagram">
+
+    <div class="band b-ui">
+      <div class="band-h">
+        <span class="lv">L1 · UI</span>
+        <span class="name">界面层（Android 主线程）</span>
+        <span class="note">持有 library 可写副本</span>
+      </div>
+      <div class="tiles">
+        <div class="tile"><b>MainActivity</b><span>生命周期 / 导航 / persist()</span></div>
+        <div class="tile"><b>QueryUi</b><span>查词、助手、结果</span></div>
+        <div class="tile"><b>NotebookUi</b><span>笔记树、引用、批注</span></div>
+        <div class="tile"><b>ReviewUi</b><span>复习计划与答题</span></div>
+        <div class="tile"><b>SettingsUi</b><span>设置、供应商、备份</span></div>
+      </div>
+    </div>
+
+    <div class="rail"><span>读：直接读内存对象，零 IO；写：<b>change()</b> → <b>persist()</b></span></div>
+
+    <div class="band b-dom">
+      <div class="band-h">
+        <span class="lv">L2 · DOMAIN</span>
+        <span class="name">领域层（纯 Java，可单测）</span>
+        <span class="note">不依赖 Android</span>
+      </div>
+      <div class="tiles">
+        <div class="tile"><b>Library</b><span>JSON 文档 + 不变量校验</span></div>
+        <div class="tile"><b>ReviewPlans</b><span>复习计划 / 队列 / 事件</span></div>
+        <div class="tile"><b>QueryWorkflow</b><span>查询结果纯转移函数</span></div>
+        <div class="tile"><b>LibraryCommand</b><span>不可变命令 + eventId</span></div>
+        <div class="tile"><b>ReviewLogic</b><span>间隔算法 / 掌握度</span></div>
+      </div>
+    </div>
+
+    <div class="rail"><span>提交一份 <b>LibraryCommand</b>（带 expectedGeneration）</span></div>
+
+    <div class="band b-sch">
+      <div class="band-h">
+        <span class="lv">L3 · DISPATCH</span>
+        <span class="name">调度层：LibraryStore</span>
+        <span class="note">单线程 FIFO · 结果回主线程</span>
+      </div>
+      <div class="tiles">
+        <div class="tile"><b>dispatch()</b><span>异步提交 + token 绑定</span></div>
+        <div class="tile"><b>query()</b><span>结构化读（与写同队列）</span></div>
+        <div class="tile"><b>unbind()</b><span>销毁后丢弃回调</span></div>
+        <div class="tile"><b>awaitIdle()</b><span>测试用的队列栅栏</span></div>
+        <div class="tile"><b>currentGeneration()</b><span>读取当前世代与版本</span></div>
+      </div>
+    </div>
+
+    <div class="rail"><span>StoreBackend 接口（可替换为未来的 SQLite 实现）</span></div>
+
+    <div class="band b-be">
+      <div class="band-h">
+        <span class="lv">L4 · BACKEND</span>
+        <span class="name">后端层：JsonStoreBackend</span>
+        <span class="note">workingCopy + generation + revision</span>
+      </div>
+      <div class="tiles">
+        <div class="tile"><b>execute()</b><span>命令分发 / 失败回滚</span></div>
+        <div class="tile"><b>applyTransaction()</b><span>批量原子事务</span></div>
+        <div class="tile"><b>restore()</b><span>generation + 1</span></div>
+        <div class="tile"><b>rollback()</b><span>generation + 1</span></div>
+        <div class="tile"><b>query()</b><span>只读查询 → ReadOnlyView</span></div>
+      </div>
+    </div>
+
+    <div class="rail"><span>Repository.save() / load()</span></div>
+
+    <div class="band b-disk">
+      <div class="band-h">
+        <span class="lv">L5 · DISK</span>
+        <span class="name">磁盘层</span>
+        <span class="note">两份独立存储域</span>
+      </div>
+      <div class="tiles">
+        <div class="tile"><b>library.json</b><span>AtomicFile 原子替换</span></div>
+        <div class="tile"><b>before-restore.json</b><span>恢复前快照，用于回退</span></div>
+        <div class="tile"><b>library-corrupt-*.json</b><span>损坏文本的取证副本</span></div>
+        <div class="tile"><b>provider_private</b><span>SharedPreferences + Keystore</span></div>
+        <div class="tile"><b>files/restored/</b><span>恢复时落地的图片目录</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="callout">
+    <span class="lbl">关键结构</span>
+    <b>文档域</b>（<code>library.json</code>）承载全部业务数据，会被完整备份；
+    <b>凭据域</b>（<code>provider_private</code>）用 Android Keystore 的 AES-GCM 单独加密，
+    <b>永远不进备份、不写进 library.json</b>。这两条链路互不影响——恢复备份不会带走或泄露 API Key。
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="write">
+  <h2><span class="num">02</span>写入主链路：一次保存的 11 步</h2>
+  <p>
+    绝大多数用户操作（新增词汇、改笔记名、记一次复习评分）都走同一条路：<b>先在内存里改，再把整份文档提交</b>。
+    下面以「点保存把查询结果存入笔记」为例，按真实调用顺序展开。
+  </p>
+
+  <ol class="steps">
+    <li>
+      <div class="step">
+        <div class="who">QueryUi · 领域方法调用</div>
+        <p>界面直接在 <code>a.library</code> 上调用 <code>saveResult(...)</code>。此刻只改内存，磁盘毫无变化。</p>
+      </div>
+    </li>
+    <li>
+      <div class="step">
+        <div class="who">MainActivity.change(Runnable) · 保护壳</div>
+        <p>先把当前文档 <code>snapshot()</code> 存进局部变量 <code>before</code>；一旦修改块抛异常，就用它把 <code>library</code> 整体换回去，界面立即恢复原状。</p>
+      </div>
+    </li>
+    <li>
+      <div class="step">
+        <div class="who">MainActivity.persist() · 取快照</div>
+        <p><code>library.snapshot()</code> 做一次 JSON 深拷贝；同时把 <code>committed</code> 指向这份新快照（含义是「最后一次<b>提交出去</b>的版本」，不是「最后一次落盘成功」）。</p>
+      </div>
+    </li>
+    <li>
+      <div class="step">
+        <div class="who">LibraryCommand.persistSnapshot(gen, snapshot, now)</div>
+        <p>包装成类型为 <code>MUTATE_CUSTOM</code> 的不可变命令：payload 里装着整份 <code>snapshot</code>，同时携带 <code>expectedGeneration</code>、<code>eventId</code>、<code>timestamp</code>。payload 在构造时就已深拷贝，之后 UI 再改内存也不会影响这次提交。</p>
+      </div>
+    </li>
+    <li>
+      <div class="step">
+        <div class="who">LibraryStore.dispatch(token, command, callback)</div>
+        <p>把 Activity 当作生命周期令牌登记，然后把任务丢进唯一的 <code>LexiNote-StoreWorker</code> 线程队列。调用立即返回，主线程不阻塞。</p>
+      </div>
+    </li>
+    <li>
+      <div class="step">
+        <div class="who">调度层 · 世代闸门</div>
+        <p>工作线程取出任务后先比对：<code>expectedGen &gt; 0 &amp;&amp; expectedGen != backend.getGeneration()</code> 就直接返回 <span class="tag warn">GENERATION_CONFLICT</span>，根本不进后端。这挡住的是「恢复备份期间排队等待的旧写入」。</p>
+      </div>
+    </li>
+    <li>
+      <div class="step">
+        <div class="who">JsonStoreBackend.execute() · 二次校验 + 留底</div>
+        <p>后端不信任上游，自己再校验一次世代，然后 <code>beforeSnapshot = workingCopy.snapshot()</code> 留一份事务前副本。整个方法是 <code>synchronized</code> 的，且只可能被工作线程调用。</p>
+      </div>
+    </li>
+    <li>
+      <div class="step">
+        <div class="who">MUTATE_CUSTOM 分支 · 整文档替换</div>
+        <p><code>workingCopy = new Library(payload.optJSONObject("snapshot"))</code>。构造函数里会跑 <code>validate()</code> 并补齐系统笔记（<code>nb_default</code>、<code>nb_global_root</code>）、重建全局索引、规范会话元数据。</p>
+      </div>
+    </li>
+    <li>
+      <div class="step">
+        <div class="who">Repository.save() · 原子写盘</div>
+        <p>先 <code>Library.validate()</code> 校验整份文档，再序列化成 UTF-8 字节；超过 <code>min(4 MB, 堆/32)</code> 直接抛「笔记文本超过当前设备容量」。正常路径走 <code>AtomicFile.startWrite / finishWrite</code>；宿主 JVM 或 AtomicFile 不可用时回落到 <code>.new → .bak</code> 重命名方案。</p>
+      </div>
+    </li>
+    <li>
+      <div class="step">
+        <div class="who">提交成功 · revision + 1</div>
+        <p><code>revision++</code>，返回 <span class="tag ok">SUCCESS</span>，并把落盘后的新快照塞进 <code>CommitResult</code> 一起带回。</p>
+      </div>
+    </li>
+    <li>
+      <div class="step">
+        <div class="who">回调 · 回到主线程</div>
+        <p>投递前检查令牌是否仍然绑定：Activity 已 <code>unbind</code> 就静默丢弃（防内存泄漏与陈旧 UI）。仍然绑定则执行 <code>library = result.getSnapshot(); render();</code>，界面以<b>磁盘回读后的权威快照</b>重绘。</p>
+      </div>
+    </li>
+  </ol>
+
+  <div class="callout">
+    <span class="lbl">为什么不直接写文件</span>
+    第 2 步到第 5 步全在主线程完成，只有序列化与 IO 落到工作线程。主线程因此不会因为几 MB 的 JSON 卡住；
+    代价是「提交」与「落盘」之间有窗口期，见 <a href="#risk">风险清单</a> 第 1 条。
+  </div>
+
+  <h3>同一份命令的四种去向</h3>
+  <div class="outcomes">
+    <div class="oc">
+      <div class="oc-l"><b>命令执行完毕，落盘成功</b><span>领域方法返回，<code>repository.save()</code> 原子替换成功</span></div>
+      <div class="oc-a">→</div>
+      <div class="oc-r"><span class="tag ok">SUCCESS</span><span class="oc-n">revision + 1，新快照回投界面</span></div>
+    </div>
+    <div class="oc">
+      <div class="oc-l"><b>这个动作已经被记录过</b><span>eventId 命中且五元组一致；或当日队列已存在</span></div>
+      <div class="oc-a">→</div>
+      <div class="oc-r"><span class="tag ok">IDEMPOTENT_IGNORED</span><span class="oc-n">不写盘、不动 revision</span></div>
+    </div>
+    <div class="oc">
+      <div class="oc-l"><b>提交时已跨世代</b><span>期间发生过恢复或回退，命令携带的 gen 已作废</span></div>
+      <div class="oc-a">→</div>
+      <div class="oc-r"><span class="tag warn">GENERATION_CONFLICT</span><span class="oc-n">整条丢弃，后端不执行</span></div>
+    </div>
+    <div class="oc">
+      <div class="oc-l"><b>校验、容量或 IO 出问题</b><span>领域规则不满足、文档超 4 MB、文件系统异常</span></div>
+      <div class="oc-a">→</div>
+      <div class="oc-r"><span class="tag bad">VALIDATION_FAILED</span><span class="tag bad">CAPACITY_EXCEEDED</span><span class="tag bad">IO_ERROR</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="read">
+  <h2><span class="num">03</span>读取链路：内存优先，查询兜底</h2>
+  <p>
+    读有两条完全不同的路径，理解它们的差别是理解整个状态模型的关键。
+  </p>
+
+  <div class="grid2" style="margin-top:18px">
+    <div class="card">
+      <span class="tag info">路径 A · 主路径</span>
+      <h3 style="margin-top:8px">直接读内存副本</h3>
+      <p style="font-size:14px">
+        <code>render()</code> 完全基于 <code>MainActivity.library</code> 这个可变对象构建视图。
+        没有等待、没有回调、没有失败分支。这也是为什么界面代码可以写成同步风格。
+      </p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:0">
+        代价：读到的可能是「已提交但尚未落盘」的状态，也可能与后端 <code>workingCopy</code> 短暂不一致。
+      </p>
+    </div>
+    <div class="card">
+      <span class="tag">路径 B · 预留路径</span>
+      <h3 style="margin-top:8px">结构化查询 ReadOnlyView</h3>
+      <p style="font-size:14px">
+        <code>store.query(request, cb)</code> 进入同一条工作线程队列，因此<b>必然看到此前所有已完成的写</b>。
+        返回的 <code>ReadOnlyView</code> 每个 getter 都做深拷贝，UI 拿到的是隔离快照。
+      </p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:0">
+        现状：界面尚未使用它；<code>PLAN_STATISTICS</code> 与 <code>SESSIONS</code> 会落到 <code>default</code> 分支返回整份快照。
+      </p>
+    </div>
+  </div>
+
+  <h3>查询类型与真实行为</h3>
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>QueryRequest.Type</th><th>后端实现</th><th>返回内容</th><th>状态</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>FULL_SNAPSHOT</code></td><td>走 <code>loadSnapshot()</code></td><td>整份文档 + gen/rev</td><td><span class="tag ok">已实现</span></td></tr>
+        <tr><td><code>VOCABULARY_BY_ID</code></td><td>线性查找后只装一条</td><td><code>{vocabularies:[…]}</code></td><td><span class="tag ok">已实现</span></td></tr>
+        <tr><td><code>NOTEBOOK_BY_ID</code></td><td>线性查找后只装一条</td><td><code>{notebooks:[…]}</code></td><td><span class="tag ok">已实现</span></td></tr>
+        <tr><td><code>SETTINGS</code></td><td>直接取 settings 节点</td><td><code>{settings:{…}}</code></td><td><span class="tag ok">已实现</span></td></tr>
+        <tr><td><code>DAILY_QUEUE</code></td><td><code>reviewPlans().peekDailyQueue()</code>，只读不改</td><td><code>{daily_queue:{…}}</code></td><td><span class="tag ok">已实现</span></td></tr>
+        <tr><td><code>PLAN_STATISTICS</code></td><td>落到 <code>default</code></td><td>整份快照</td><td><span class="tag warn">未增量</span></td></tr>
+        <tr><td><code>SESSIONS</code></td><td>落到 <code>default</code></td><td>整份快照</td><td><span class="tag warn">未增量</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout info">
+    <span class="lbl">设计意图</span>
+    <code>StoreBackend</code> 是一个 SPI。当前的 <code>JsonStoreBackend</code> 只是过渡实现——注释里写明未来会换成
+    <code>SqliteLibraryStore</code> 做增量事务。正因为查询走的是这套接口，界面层不需要为「整文档」和「按行查」的差异做任何改动。
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="commit">
+  <h2><span class="num">04</span>提交结果状态机：CommitResult 的八种结局</h2>
+  <p class="sub">声明在契约里的是八种。实际代码会产出的只有六种，剩下两种是接口预留。</p>
+
+  <div class="tablewrap">
+    <table class="t-status">
+      <thead>
+        <tr><th>Status</th><th>触发条件</th><th>后端内存</th><th>磁盘</th><th>实际产生</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="tag ok">SUCCESS</span></td>
+          <td>命令执行完且 <code>repository.save()</code> 成功</td>
+          <td>提交新值，<code>revision + 1</code></td>
+          <td>已原子替换</td>
+          <td><span class="tag ok">是</span></td>
+        </tr>
+        <tr>
+          <td><span class="tag ok">IDEMPOTENT_IGNORED</span></td>
+          <td><code>RECORD_REVIEW</code> 命中同 eventId 且五元组一致；<code>PREPARE_DAILY_QUEUE</code> 当日队列已存在</td>
+          <td>不变</td>
+          <td>不写</td>
+          <td><span class="tag ok">是</span></td>
+        </tr>
+        <tr>
+          <td><span class="tag warn">GENERATION_CONFLICT</span></td>
+          <td><code>expectedGen &gt; 0</code> 且不等于当前 generation</td>
+          <td>不变</td>
+          <td>不写</td>
+          <td><span class="tag ok">是</span></td>
+        </tr>
+        <tr>
+          <td><span class="tag bad">VALIDATION_FAILED</span></td>
+          <td>名称空、父笔记不存在、事件 ID 复用、评分非法、文档结构非法等 <code>IllegalArgumentException</code></td>
+          <td>回滚到 beforeSnapshot</td>
+          <td>不写</td>
+          <td><span class="tag ok">是</span></td>
+        </tr>
+        <tr>
+          <td><span class="tag bad">CAPACITY_EXCEEDED</span></td>
+          <td>序列化后超过 JSON 上限，异常消息含「最高4 MB」或「超过当前设备容量」</td>
+          <td>回滚</td>
+          <td>旧文档保留</td>
+          <td><span class="tag ok">是</span></td>
+        </tr>
+        <tr>
+          <td><span class="tag bad">IO_ERROR</span></td>
+          <td>文件系统异常、序列化异常，或调度层捕获的任何未预期异常</td>
+          <td>回滚</td>
+          <td>可能停留在旧版本</td>
+          <td><span class="tag ok">是</span></td>
+        </tr>
+        <tr>
+          <td><span class="tag">ENTITY_NOT_FOUND</span></td>
+          <td>语义上用于「引用的实体不存在」</td>
+          <td>—</td>
+          <td>—</td>
+          <td><span class="tag warn">否，未使用</span></td>
+        </tr>
+        <tr>
+          <td><span class="tag">DISPOSED</span></td>
+          <td>语义上表示「令牌已解绑，结果无处投递」</td>
+          <td>—</td>
+          <td>—</td>
+          <td><span class="tag warn">否，改为静默丢弃</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>失败时的回滚范围</h3>
+  <div class="chain">
+    <div class="node"><span class="k">beforeSnapshot</span><span class="v">execute() 入口处留底</span></div>
+    <div class="link"><em>异常</em></div>
+    <div class="node warn"><span class="k">workingCopy 换回</span><span class="v">后端内存恢复一致</span></div>
+    <div class="link"><em>注意</em></div>
+    <div class="node bad"><span class="k">UI 内存不回滚</span><span class="v">library 仍持新快照，只弹错误框</span></div>
+  </div>
+  <p style="font-size:13.5px;color:var(--muted);margin-top:4px">
+    同步路径（<code>change()</code> 内部抛异常）会回滚 UI 内存；但第 11 步的<b>异步</b>失败只触发
+    <code>error(new IOException("后台写入失败：" + …))</code>，不会把 <code>library</code> 换回 <code>committed</code>。
+  </p>
+
+  <div class="callout">
+    <span class="lbl">一致性缺口</span>
+    一次后台写入失败后，后端持有的是旧文档，界面持有的是新文档。直到下一次成功提交（整文档替换）才会重新对齐；
+    在此之前任何基于界面的读取都会显示「未落盘的内容」。
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="concurrency">
+  <h2><span class="num">05</span>并发控制：四道闸门</h2>
+  <p class="sub">这套模型没有锁竞争，靠的是「串行 + 版本 + 令牌 + 请求代号」四层防护。</p>
+
+  <div class="grid2">
+    <div class="card">
+      <span class="tag ok">闸门 1</span>
+      <h3 style="margin-top:8px">单线程队列</h3>
+      <p style="font-size:14px">
+        <code>Executors.newSingleThreadExecutor</code>，线程名 <code>LexiNote-StoreWorker</code>。
+        提交按 FIFO 顺序执行，<code>execute()</code> 与 <code>applyTransaction()</code> 都只在它上面跑。
+      </p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:0">
+        推论：读查询排在同一队列里，所以「先写后读」一定看得见写入结果。
+      </p>
+    </div>
+    <div class="card">
+      <span class="tag warn">闸门 2</span>
+      <h3 style="margin-top:8px">世代屏障 generation</h3>
+      <p style="font-size:14px">
+        初值 1。仅在 <code>restore()</code>、<code>rollback()</code>、迁移时自增。
+        命令携带 <code>expectedGeneration</code>，不符即丢弃；传 <code>0</code> 表示主动跳过检查。
+      </p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:0">
+        实现在调度层与后端层各有一份，形成双重校验。
+      </p>
+    </div>
+    <div class="card">
+      <span class="tag">闸门 3</span>
+      <h3 style="margin-top:8px">版本 revision</h3>
+      <p style="font-size:14px">
+        每次成功提交 + 1；幂等忽略不加；恢复与回退后归零。
+        它把「同一世代内的第几次提交」变成可比较的数字，供界面判断结果是否过期。
+      </p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:0">
+        <code>TitleSuggestionGuard</code> 要求五个条件同时成立才采纳异步标题：会话仍存在、未被手动命名、
+        <code>revision</code> 未变、<code>epoch</code> 未变、当前标题仍为空。
+      </p>
+    </div>
+    <div class="card">
+      <span class="tag">闸门 4</span>
+      <h3 style="margin-top:8px">生命周期令牌 token</h3>
+      <p style="font-size:14px">
+        <code>onCreate</code> 里 <code>bind(this)</code>，<code>onDestroy</code> 里 <code>unbind(this)</code>。
+        令牌集合用 <code>WeakHashMap</code> 支撑，解绑后的回调在投递前被拦下。
+      </p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:0">
+        旋转屏幕销毁重建时，属于旧 Activity 的回调不会打到新实例上。
+      </p>
+    </div>
+  </div>
+
+  <h3>界面层还有一层「请求代号」</h3>
+  <p>
+    网络请求与存储提交是两件事，界面另有一套逻辑防止迟到的回复覆盖新状态：
+  </p>
+  <div class="chain">
+    <div class="node"><span class="k">aiRequestToken++</span><span class="v">每次发起请求自增</span></div>
+    <div class="link"><em>回调时</em></div>
+    <div class="node"><span class="k">token != 当前值</span><span class="v">判定为过期，直接 return</span></div>
+    <div class="link"><em>同时</em></div>
+    <div class="node"><span class="k">session != target</span><span class="v">用户已切换会话，丢弃</span></div>
+    <div class="link"><em>以及</em></div>
+    <div class="node ghost"><span class="k">revision 变了</span><span class="v">AI 补充结果作废</span></div>
+  </div>
+  <p style="font-size:13.5px;color:var(--muted)">
+    流式增量（SSE）的每个分片还要额外核对 <code>a.active == client</code>，避免已取消的请求继续往界面打字。
+  </p>
+</section>
+
+<!-- ============================================================ -->
+<section id="boot">
+  <h2><span class="num">06</span>启动与损坏恢复：三条分支</h2>
+  <p class="sub">应用启动时先决定「这次能正常用，还是只能进恢复模式」。</p>
+
+  <div class="diagram">
+    <div class="chain" style="margin-top:0">
+      <div class="node"><span class="k">LibraryStore.getInstance</span><span class="v">进程级单例，构造 JsonStoreBackend</span></div>
+      <div class="link"><em>initialize</em></div>
+      <div class="node"><span class="k">Repository.load()</span><span class="v">AtomicFile.openRead → 解析 JSON</span></div>
+      <div class="link"><em>结果</em></div>
+      <div class="node accent"><span class="k">ready</span><span class="v">gen=1, rev=0，workingCopy 就绪</span></div>
+    </div>
+
+    <div class="rail" style="margin-left:0;height:34px"><span>三条出口，取决于磁盘状态</span></div>
+
+    <div class="grid3">
+      <div class="card" style="padding:14px 16px">
+        <span class="tag ok">分支 A · 正常</span>
+        <p style="font-size:13.5px;margin:8px 0 0">
+          读取成功。Activity 通过 <code>getWorkingLibrarySnapshot()</code> 拿到一份深拷贝作为界面副本，同时把
+          <code>committed</code> 指向同一份内容。
+        </p>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <span class="tag">分支 B · 首次启动</span>
+        <p style="font-size:13.5px;margin:8px 0 0">
+          文件与 <code>.bak</code> 都不存在时返回一个空 <code>Library</code>：写入 version、四个空数组、空 settings，
+          并自动补出两个系统笔记。
+        </p>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <span class="tag bad">分支 C · 读取失败</span>
+        <p style="font-size:13.5px;margin:8px 0 0">
+          解析异常被记录到 <code>initError</code> 并向外抛。Activity 捕获后置 <code>recoveryOnly = true</code>，
+          只渲染一个「恢复本地数据」页。
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <span class="lbl">恢复模式下发生了什么</span>
+    界面不加载任何业务页面，<code>persist()</code> 直接返回 <code>false</code>——<b>此时不可能覆盖损坏的文件</b>。
+    用户选择备份后，先 <code>repository.preserveCorruptData()</code> 把原始字节另存为
+    <code>library-corrupt-&lt;时间戳&gt;.json</code>，再执行恢复。
+  </div>
+
+  <h3>为什么能容忍半截文件</h3>
+  <p>
+    三层保险叠在一起：<code>AtomicFile</code> 用「写临时文件 → fsync → rename」保证替换原子性；
+    宿主 JVM 回落路径额外保留 <code>.bak</code>；<code>Repository.load()</code> 发现主文件读不出来时会尝试把
+    <code>.bak</code> 提升回主文件。任一层成功，用户就看到完整文档而不是半截 JSON。
+  </p>
+
+  <h3>重启后会丢什么：第三类状态</h3>
+  <p>
+    并非所有状态都进 <code>library.json</code>。界面自身的状态既不在文档里，也不进快照，
+    只靠 <code>onSaveInstanceState</code> 撑过一次配置变更（如旋转屏幕）。
+  </p>
+  <div class="tablewrap">
+    <table class="t-eph">
+      <thead><tr><th>状态</th><th>存放处</th><th>能活多久</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>page</code> / <code>screen</code> / <code>session</code> / <code>activeVocabulary</code> / <code>homeMode</code></td>
+          <td>内存 + <code>Bundle</code></td>
+          <td>旋转存活；进程被杀即丢失，回到首个标签页</td>
+        </tr>
+        <tr>
+          <td><code>draft</code> / <code>context</code> / <code>follow</code> / <code>guessTarget</code></td>
+          <td>内存 + <code>Bundle</code></td>
+          <td>未提交的输入不落盘；提交后才写进会话的 <code>input_text</code></td>
+        </tr>
+        <tr>
+          <td><code>image</code> / <code>pendingCamera</code> / <code>imageEditorState</code> / <code>imageRegion</code></td>
+          <td>内存 + <code>Bundle</code></td>
+          <td><code>Bundle</code> 里只存 URI 字符串；图片本体在文件系统，选区与编辑历史随会话提交才持久化</td>
+        </tr>
+        <tr>
+          <td><code>review.phase</code> / <code>batchSize</code> / <code>selectedTags</code> / <code>activePlanId</code></td>
+          <td>内存 + <code>Bundle</code></td>
+          <td>「复习到一半」的位置不落盘，但已提交的评分事件是持久的</td>
+        </tr>
+        <tr>
+          <td><code>aiRequestToken</code> / <code>active(AiClient)</code> / <code>partialReply</code></td>
+          <td>仅内存</td>
+          <td>销毁即取消，流式回复中断；重进会话只能看到已写入 <code>ai_messages</code> 的部分</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout info">
+    <span class="lbl">边界</span>
+    这条分界线是刻意画的：<b>只有「用户已经确认的语义」才进文档</b>，输入到一半的草稿、光标位置、
+    正在流式输出的半句话都属于界面自己的事。因此杀掉进程永远不会产生半条业务数据，代价是未提交的输入留不住。
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="backup">
+  <h2><span class="num">07</span>备份、恢复与回退：世代如何跃迁</h2>
+  <p>
+    这是唯一会改变 <code>generation</code> 的用户操作，也是整个模型里最值得单独画图的一段。
+  </p>
+
+  <h3>导出</h3>
+  <div class="chain">
+    <div class="node"><span class="k">library.backup()</span><span class="v">快照 + 图片引用收集</span></div>
+    <div class="link"><em>encode</em></div>
+    <div class="node"><span class="k">CRC32 + assets/N.ext</span><span class="v">图片重映射为 lexinote-asset:</span></div>
+    <div class="link"><em>限额</em></div>
+    <div class="node"><span class="k">ZIP v2.2</span><span class="v">min(16MB, 堆/16)</span></div>
+    <div class="link"><em>SAF</em></div>
+    <div class="node accent"><span class="k">用户选目录</span><span class="v">不申请全盘存储权限</span></div>
+  </div>
+  <p style="font-size:13.5px;color:var(--muted)">
+    导出过程只读不写，不改变 generation/revision；API Key 在另一个存储域，因此天然不在归档里。
+  </p>
+
+  <h3>恢复（含失败兜底）</h3>
+  <ol class="steps">
+    <li>
+      <div class="step">
+        <div class="who">选择文件 → 后台解析</div>
+        <p>校验 CRC32、拒绝异常路径、限制图片数量（≤1998）与总字节；文本超过 4 MB 直接拒绝，已有数据保持不动。</p>
+      </div>
+    </li>
+    <li>
+      <div class="step">
+        <div class="who">确认覆盖 → materialize 图片</div>
+        <p>把归档里的图片逐个写到 <code>files/restored/&lt;uuid&gt;/</code>，并把 JSON 里的引用改写成本机 <code>file://</code> 地址。</p>
+      </div>
+    </li>
+    <li>
+      <div class="step">
+        <div class="who">Repository.restore(backup, current)</div>
+        <p>先把<b>当前文档</b>写进 <code>before-restore.json</code>，再 <code>save()</code> 新文档。这一步是「回退」能成立的全部前提。</p>
+      </div>
+    </li>
+    <li>
+      <div class="step">
+        <div class="who">替换界面内存 + 清空易失状态</div>
+        <p><code>library = restored</code>，同时清掉 <code>session</code>、图片编辑态、复习队列、笔记选中项与标题缓存，再整体重绘。</p>
+      </div>
+    </li>
+    <li>
+      <div class="step">
+        <div class="who">dispatch(importLibrary(0L, backup))</div>
+        <p>后端也执行一次 <code>restore()</code>：记住 <code>preRestoreBackup</code>，换上新文档，<code>generation + 1</code>，<code>revision = 0</code>。传 <code>0L</code> 表示故意跳过世代检查。</p>
+      </div>
+    </li>
+  </ol>
+
+  <div class="callout">
+    <span class="lbl">世代跃迁的意义</span>
+    假设恢复开始时队列里还躺着一条旧写入（拿着 gen=1）。恢复把它推到 gen=2 之后，那条命令的
+    <code>expectedGeneration</code> 就对不上了，被 <span class="tag warn">GENERATION_CONFLICT</span> 拦下——
+    <b>旧数据不会在恢复完成后偷偷覆盖新数据</b>。
+  </div>
+
+  <h3>回退</h3>
+  <div class="chain">
+    <div class="node"><span class="k">rollbackLibrary(gen)</span><span class="v">用户点「回到恢复前」</span></div>
+    <div class="link"><em>后端</em></div>
+    <div class="node"><span class="k">preRestoreBackup</span><span class="v">内存里有就直接用</span></div>
+    <div class="link"><em>否则</em></div>
+    <div class="node ghost"><span class="k">repository.rollback()</span><span class="v">从 before-restore.json 读回</span></div>
+    <div class="link"><em>然后</em></div>
+    <div class="node accent"><span class="k">gen + 1, rev = 0</span><span class="v">再次整体换纪元</span></div>
+  </div>
+  <p style="font-size:13.5px;color:var(--muted)">
+    注意回退只换整体代，不做逐条补偿——因为写入单位本来就是整份文档，没有「部分回滚」的概念。
+  </p>
+</section>
+
+<!-- ============================================================ -->
+<section id="session">
+  <h2><span class="num">08</span>会话数据生命周期：三种留存等级</h2>
+  <p>
+    会话是唯一有「自动淘汰」规则的数据类型。淘汰不是定时任务，而是<b>每次写入会话时顺手重算</b>：
+    <code>touchSession()</code> 末尾会重建整个 <code>conversations</code> 数组。
+  </p>
+
+  <div class="chain">
+    <div class="node accent"><span class="k">query</span><span class="v">查词会话 · 只在最近 10 条内保留</span></div>
+    <div class="link"><em>进入 AI 对话</em></div>
+    <div class="node warn"><span class="k">temporary</span><span class="v">临时会话 · 最多 5 条</span></div>
+    <div class="link"><em>用户点保存</em></div>
+    <div class="node"><span class="k">saved</span><span class="v">永久 · 不受任何上限约束</span></div>
+  </div>
+
+  <div class="grid3" style="margin-top:16px">
+    <div class="card" style="padding:14px 16px">
+      <span class="tag ok">保留公式</span>
+      <p style="font-size:13px;margin:8px 0 0">
+        保留 = <code>saved</code> ∪（按 <code>last_used_at</code> 倒序的前 5 条 <code>temporary</code>）∪（id 出现在
+        <code>recent_queries</code> 里的 <code>query</code>）。其余全部丢弃。
+      </p>
+    </div>
+    <div class="card" style="padding:14px 16px">
+      <span class="tag">最近查询</span>
+      <p style="font-size:13px;margin:8px 0 0">
+        <code>recent_queries</code> 按 <code>created_at</code> 倒序裁到 10 条。
+        删除一条最近查询会立刻触发 <code>pruneQuerySessions()</code>，把失去索引的 query 会话一并清掉。
+      </p>
+    </div>
+    <div class="card" style="padding:14px 16px">
+      <span class="tag">升级不可逆</span>
+      <p style="font-size:13px;margin:8px 0 0">
+        <code>promoteTemporary()</code> 会把非 saved 会话标成 <code>temporary</code> 并打上
+        <code>ai_session_entered</code>；<code>saved</code> 一旦成立，后续调用直接返回，不会降级。
+      </p>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <span class="lbl">为什么空会话不挤占名额</span>
+    打开一个空白助手输入框时，代码只把 <code>metadata.origin</code> 改成 <code>assistant</code>，
+    <b>不调用</b> <code>promoteTemporary</code>。这样「点一下助手再退出」不会淘汰掉正在用的临时会话——
+    这正是 2026-10-28 那轮使用体验审查里修掉的问题之一。
+  </div>
+
+  <h3>会话文档里都存了什么</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>字段组</th><th>键</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr><td>身份</td><td><code>id</code> / <code>title</code> / <code>created_at</code> / <code>updated_at</code></td><td>列表排序与标题点击</td></tr>
+        <tr><td>输入</td><td><code>input_text</code> / <code>source_context</code> / <code>query_type</code></td><td>草稿恢复、文本/图片/图文区分</td></tr>
+        <tr><td>图片</td><td><code>input_images</code> / <code>native_selected_images</code> / <code>selected_regions</code> / <code>image_editor_state</code></td><td>原图、选区、编辑历史分别持久化</td></tr>
+        <tr><td>对话</td><td><code>ai_messages[]</code></td><td>role / content / action / created_at</td></tr>
+        <tr><td>结果</td><td><code>query_results</code> / <code>saved_content</code> / <code>auto_record_key</code></td><td>词条草稿与「已入库」标记</td></tr>
+        <tr><td>确认</td><td><code>pending_lookup</code> / <code>session_state</code> / <code>revision</code></td><td>待确认目标及其失效判定</td></tr>
+        <tr><td>留存</td><td><code>metadata.retention</code> / <code>origin</code> / <code>title_source</code> / <code>last_used_at</code></td><td>淘汰算法与标题保护</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="query">
+  <h2><span class="num">09</span>查询结果状态机：从草稿到入库</h2>
+  <p class="sub">这是单条会话内部最容易看错的一段，因为它同时受「本地命中」「AI 是否直接给结果」「自动记录开关」三个条件影响。</p>
+
+  <div class="diagram">
+    <div class="chain" style="margin-top:0">
+      <div class="node"><span class="k">draft</span><span class="v">input_text + 可选图片</span></div>
+      <div class="link"><em>submit()</em></div>
+      <div class="node accent"><span class="k">本地命中</span><span class="v">library.local(word)</span></div>
+      <div class="link"><em>命中</em></div>
+      <div class="node"><span class="k">finishResult</span><span class="v">query_results / session_state=ready</span></div>
+      <div class="link"><em>auto_record</em></div>
+      <div class="node accent"><span class="k">saved_content</span><span class="v">saved=true + vocabulary_id</span></div>
+    </div>
+
+    <div class="rail" style="margin-left:0;height:38px"><span>未命中时走网络，结果分三种落点</span></div>
+
+    <div class="grid3">
+      <div class="card" style="padding:14px 16px">
+        <span class="tag ok">直接应用</span>
+        <p style="font-size:13px;margin:8px 0 0">
+          <code>kind = lookup_result</code> 且 <code>canApplyDirectResult()</code> 为真 →
+          直接 <code>finishResult()</code>，进入结果页。
+        </p>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <span class="tag warn">降级确认</span>
+        <p style="font-size:13px;margin:8px 0 0">
+          不允许直接应用时，把结果改写成 <code>confirm_lookup</code>，提示用户回首页确认，
+          写入 <code>pending_lookup</code>。
+        </p>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <span class="tag">纯对话</span>
+        <p style="font-size:13px;margin:8px 0 0">
+          其他 <code>kind</code> 只追加一条 assistant 消息，留在助手页，不产生
+          <code>query_results</code>。
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <h3>pending_lookup 为什么会「失效」</h3>
+  <p>
+    提案对象里存了写入当时的 <code>session.revision</code>。<code>pending()</code> 读取时会比对：
+    一旦会话 revision 变过（用户又发了一轮、或结果被编辑），提案立即被视为过期，
+    <code>lookup()</code> 会提示「查询目标已失效，请重新提交」。
+  </p>
+  <div class="chain">
+    <div class="node"><span class="k">写提案</span><span class="v">revision = 当前值</span></div>
+    <div class="link"><em>期间</em></div>
+    <div class="node warn"><span class="k">revision 改变</span><span class="v">新一轮对话 / 编辑结果</span></div>
+    <div class="link"><em>读取</em></div>
+    <div class="node bad"><span class="k">pending() 返回 null</span><span class="v">按钮失效，需重新走流程</span></div>
+  </div>
+
+  <h3>自动记录的四道前置条件</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>条件</th><th>原因</th></tr></thead>
+      <tbody>
+        <tr><td><code>settings.auto_record_extra_info = true</code></td><td>用户显式开启</td></tr>
+        <tr><td><code>session_state = "ready"</code> 且无 <code>pending_lookup</code></td><td>结果已定稿，没有待确认目标</td></tr>
+        <tr><td><code>query_results</code> 存在、非本地命中、尚未 <code>saved</code></td><td>只对新鲜 AI 结果生效</td></tr>
+        <tr><td><code>resultKey(session)</code> ≠ <code>auto_record_key</code></td><td>同一份结果不重复入库（幂等键）</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:13.5px;color:var(--muted)">
+    失败时不会脏写：<code>autoRecord()</code> 在调用前先 <code>snapshot()</code>，捕获异常后把
+    <code>library</code> 换回这份快照，再把错误消息写进 <code>auto_record_error</code>。
+  </p>
+</section>
+
+<!-- ============================================================ -->
+<section id="review">
+  <h2><span class="num">10</span>复习计划：计划 → 每日队列 → 答题事件</h2>
+  <p>
+    复习是唯一有「按日期切片」的数据结构，也因此引入了时区与幂等的额外复杂度。
+  </p>
+
+  <div class="diagram">
+    <div class="chain" style="margin-top:0">
+      <div class="node"><span class="k">plan</span><span class="v">绑定笔记 + 周频率 + 配额</span></div>
+      <div class="link"><em>dailyQueue</em></div>
+      <div class="node accent"><span class="k">day</span><span class="v">按 zone_id 切分本地日期</span></div>
+      <div class="link"><em>组题</em></div>
+      <div class="node"><span class="k">tasks[]</span><span class="v">先到期复习，再新词</span></div>
+      <div class="link"><em>record</em></div>
+      <div class="node"><span class="k">event</span><span class="v">一次评分一条，eventId 幂等</span></div>
+    </div>
+  </div>
+
+  <h3>队列的三种视图</h3>
+  <div class="grid3" style="margin-top:14px">
+    <div class="card" style="padding:14px 16px">
+      <span class="tag ok">peekDailyQueue</span>
+      <p style="font-size:13px;margin:8px 0 0">
+        纯读，绝不改 <code>days</code>，也绝不触发写盘。返回时把 <code>tasks</code> 换成过滤后的
+        <code>queue</code>：去掉 <code>completed = true</code> 与已移出笔记本的词。
+      </p>
+    </div>
+    <div class="card" style="padding:14px 16px">
+      <span class="tag">prepareDailyQueue</span>
+      <p style="font-size:13px;margin:8px 0 0">
+        写命令。当天已有队列就返回 <code>false</code>，后端因此产出
+        <span class="tag ok">IDEMPOTENT_IGNORED</span>——同日重复调用不会重新领配额。
+      </p>
+    </div>
+    <div class="card" style="padding:14px 16px">
+      <span class="tag warn">extendDailyQueue</span>
+      <p style="font-size:13px;margin:8px 0 0">
+        追加额外卡片，同时抬高 <code>new_target</code> / <code>review_target</code> 与当日配额，
+        并把 <code>scheduled</code> 强制置真。
+      </p>
+    </div>
+  </div>
+
+  <h3>一次评分如何改变状态</h3>
+  <div class="chain">
+    <div class="node"><span class="k">再次</span><span class="v">算法更新调度，但不计完成</span></div>
+    <div class="link"><em>于是</em></div>
+    <div class="node warn"><span class="k">task 移到队尾</span><span class="v">attempts + 1，completed 仍为 false</span></div>
+    <div class="link"><em>对比</em></div>
+    <div class="node accent"><span class="k">困难 / 简单</span><span class="v">completed = true，首次完成时写 learned_at</span></div>
+  </div>
+
+  <div class="callout">
+    <span class="lbl">幂等契约</span>
+    <code>record()</code> 的注释写得很明确：eventId 标识<b>一次</b>评分动作，持久化失败时应当用同一个 id 和同样的
+    参数重试。后端会先查 <code>events</code>：命中且五元组（plan、vocab、grade、duration、occurred_at）一致 →
+    返回 <code>IDEMPOTENT_IGNORED</code>；命中但参数不同 → 直接判 <code>VALIDATION_FAILED</code>，防止 id 被复用去刷进度。
+  </div>
+
+  <h3>「再次」为什么不会污染掌握度</h3>
+  <p>
+    <code>learned_at</code> 只在 <code>completed == true</code> 且此前为空时写入。
+    只答「再次」的词，次日仍会被当作新词处理，不会因为「碰过一次」就跳过学习阶段；
+    同时它已经写入了一条真实的 <code>event</code>，统计里能看到这次尝试，但进度条不会虚高。
+  </p>
+</section>
+
+<!-- ============================================================ -->
+<section id="model">
+  <h2><span class="num">11</span>数据模型：一个 JSON 文档的全貌</h2>
+  <p class="sub">字段名保持与 Expo 原版一致，这是备份能互通的前提。</p>
+
+<pre class="tree">library.json
+├─ <span class="k">version</span>: <span class="s">"1.1"</span>                     <span class="c">// 兼容 1.0 / 1.1 / 2.0 / 2.1 / 2.2</span>
+├─ <span class="k">vocabularies</span>[]                      <span class="c">// 词汇实体：全库唯一，按 content 去重</span>
+│   ├─ id / content / type / phonetic
+│   ├─ <span class="k">meanings</span>[]                      <span class="c">// 释义：可多条，字段级可显示/可编辑</span>
+│   │   ├─ id / part_of_speech
+│   │   ├─ zh_definition / en_definition / example / source / remarks
+│   │   ├─ <span class="k">source_images</span>[]            <span class="c">// 图片 URI，备份时会被重映射</span>
+│   │   ├─ <span class="k">annotations</span>[]               <span class="c">// 字段内划词批注</span>
+│   │   └─ selected / definition_choice / save_zh / save_en / save_example
+│   ├─ tags[] / created_at / updated_at
+│   └─ <span class="w">review_count / review_grade / review_due …</span>  <span class="c">// 旧版遗留字段，新逻辑读 states</span>
+│
+├─ <span class="k">notebooks</span>[]                         <span class="c">// 树形笔记，含两个系统节点</span>
+│   ├─ <span class="r">nb_default</span>      is_default      <span class="c">// 默认笔记，不可删</span>
+│   ├─ <span class="r">nb_global_root</span>  is_global_root  <span class="c">// 全部词汇视图，vocabulary_ids 每次重建</span>
+│   ├─ id / name / parent_id / children_type
+│   ├─ child_notebook_ids[]              <span class="c">// 有子笔记时不得再放词汇</span>
+│   ├─ vocabulary_ids[]                  <span class="c">// 对词汇实体的引用，不是副本</span>
+│   └─ <span class="k">vocabulary_display</span>{vocabId → {meaning_ids[], meaning_fields{}}}  <span class="c">// 每笔记独立显示</span>
+│
+├─ <span class="k">recent_queries</span>[]                    <span class="c">// 最近 10 条，按 created_at 倒序</span>
+├─ <span class="k">conversations</span>[]                      <span class="c">// 全部会话，见第 08 节淘汰公式</span>
+│
+├─ <span class="k">settings</span>{}
+│   ├─ theme_mode / font_size / accent_color
+│   ├─ default_notebook_id / default_fields_to_save{}
+│   └─ auto_record_extra_info
+│
+└─ <span class="k">review</span>{ schema_version: 1 }
+    ├─ <span class="k">plans</span>[]     id / notebook_id / daily_new_limit / daily_review_limit
+    │            weekdays[] / zone_id / archived / legacy_imported
+    ├─ <span class="k">states</span>[]    plan_id + vocab_id 唯一；review_count / review_grade / review_due
+    │            review_mastery_level / review_efactor / review_interval_days / learned_at
+    ├─ <span class="k">days</span>[]      plan_id + date 唯一；scheduled / new_target / review_target
+    │            <span class="k">tasks</span>[]{ vocab_id, kind: new|review, completed, attempts }
+    └─ <span class="k">events</span>[]    id (=eventId) / plan_id / vocab_id / date / grade / completed / duration_ms</pre>
+
+  <div class="callout">
+    <span class="lbl">两个容易混淆的点</span>
+    <b>引用不是副本</b>：把词汇「复制」到另一个笔记，实际是往 <code>vocabulary_ids</code> 再塞一个 id，
+    词汇实体只有一份；改一处，所有引用同步可见。<br>
+    <b>显示是每笔记独立的</b>：<code>vocabulary_display</code> 按笔记存 <code>meaning_ids</code>，
+    所以同一个词在不同笔记里可以显示不同释义。
+  </div>
+
+  <h3>凭据域的独立结构</h3>
+<pre class="tree">SharedPreferences: provider_private
+├─ <span class="k">providers</span> : JSON 数组（<span class="s">sanitize()</span> 后的元数据，不含明文 Key）
+├─ <span class="k">active_provider_id</span> : string
+└─ 每个 provider 的密钥槽：
+   └─ <span class="k">Keystore</span> alias <span class="s">"lexinote.api.v1"</span> → AES/GCM 加密后 Base64
+      <span class="c">// 设备绑定；不进备份；换机需重填</span></pre>
+
+  <div class="callout info">
+    <span class="lbl">另见</span>
+    实体关系与各数据自身的状态机已单独绘制，见
+    <a href="data-diagrams.html">数据图谱：ER 与状态机</a>（2 张 ER 图 + 4 张状态图）。
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="risk">
+  <h2><span class="num">12</span>不变量与风险清单</h2>
+  <p class="sub">以下六条都能在代码里指出具体位置，按影响面排序。</p>
+
+  <ul class="risk">
+    <li>
+      <b>提交成功 ≠ 落盘成功（异步窗口）。</b>
+      <code>persist()</code> 在 <code>committed = snapshot</code> 之后才异步派发，而 <code>committed</code>
+      的语义是「最后提交出去的版本」。如果此时进程被杀，界面曾显示过的内容可能并未写入磁盘。
+    </li>
+    <li>
+      <b>异步失败后两端内存不一致。</b>
+      <code>JsonStoreBackend</code> 会把 <code>workingCopy</code> 回滚到 <code>beforeSnapshot</code>，
+      但 <code>MainActivity.library</code> 仍是新快照，只弹了一个错误框。要等下一次成功提交才会重新对齐。
+    </li>
+    <li>
+      <b>恢复路径绕过了单线程队列。</b>
+      <code>MainActivity.restore()</code> 先在主线程侧直接调用 <code>repository.restore()</code> 写盘，
+      随后才向 store 派发 <code>importLibrary(0L, …)</code>。同时传 <code>0L</code> 主动跳过世代检查——
+      若此刻队列里还有在途写入，理论上存在覆盖窗口。
+    </li>
+    <li>
+      <b>整文档写入的代价随数据量线性增长。</b>
+      每次提交都要 <code>snapshot()</code> 深拷贝、<code>validate()</code> 全量校验、序列化整份 JSON 再原子替换。
+      1000/3000 条量级的验收里已经观察到评分约 1.1 秒与滚动掉帧，与这条路径直接相关。
+    </li>
+    <li>
+      <b>两个状态字段的实际产出少于声明。</b>
+      <code>ENTITY_NOT_FOUND</code> 与 <code>DISPOSED</code> 从未被构造：实体缺失统一表现为
+      <code>VALIDATION_FAILED</code>，令牌失效则直接不投递回调。调用方若按枚举穷举处理会多出死分支。
+    </li>
+    <li>
+      <b>查询接口尚未真正用起来。</b>
+      <code>PLAN_STATISTICS</code> 与 <code>SESSIONS</code> 会落到 <code>default</code> 返回整份快照，
+      界面也仍以内存直读为主。这套 SPI 目前更像为未来 SQLite 迁移预留的接口，而不是当下的性能手段。
+    </li>
+  </ul>
+
+  <hr class="sep">
+
+  <h3>一句话记住这个模型</h3>
+  <div class="card" style="border-left:3px solid var(--emerald)">
+    <p style="margin:0;font-size:15px;line-height:1.85">
+      界面改的是<b>自己那份 JSON</b>，提交时把整份文档交给<b>唯一一条工作线程</b>，
+      线程用<b>世代号</b>判断这份提交是不是已经过期，过期就丢、合法就整份替换并<b>原子写盘</b>；
+      写完把权威快照丢回主线程，界面照着重画。
+    </p>
+  </div>
+</section>
+
+<footer>
+  <p>
+    本文由源码静态阅读整理，未运行应用、未改动任何代码。行号对应
+    <span class="mono">app/src/main/java/com/lexinote/nativeapp/</span> 当前工作区版本，后续重构可能漂移。
+  </p>
+  <p class="mono" style="font-size:11.5px;line-height:2">
+    MainActivity.java:61,186,719,745,759 · LibraryStore.java:29,116,191 ·
+    JsonStoreBackend.java:39,140,503,549,570 · Repository.java:34,63,111,132,141 ·
+    Library.java:209,314,338,444,507 · ReviewPlans.java:233,239,310,379 ·
+    QueryUi.java:1014,1108,1167,1202,1327 · SecureSettings.java:20 · BackupArchive.java:25
+  </p>
+</footer>
+
+</div>
+</body>
+</html>

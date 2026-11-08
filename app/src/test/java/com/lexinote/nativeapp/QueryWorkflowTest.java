@@ -197,4 +197,23 @@ public class QueryWorkflowTest {
       assertTrue(expected.getMessage().contains("释义"));
     }
   }
+
+  @Test
+  public void provenanceIsGeneratedAndHasAnyGenerated() throws Exception {
+    JSONObject meaning = new JSONObject();
+    meaning.put("zh_definition", "苹果");
+    meaning.put("example", "An apple a day.");
+    FieldProvenance.markPresent(meaning, true, "zh_definition");
+    FieldProvenance.markPresent(meaning, false, "example");
+
+    assertTrue(FieldProvenance.isGenerated(meaning, "zh_definition"));
+    assertFalse(FieldProvenance.isGenerated(meaning, "example"));
+    assertFalse(FieldProvenance.isGenerated(meaning, "en_definition"));
+    assertFalse(FieldProvenance.isGenerated(null, "zh_definition"));
+    assertFalse(FieldProvenance.isGenerated(meaning, null));
+
+    assertTrue(FieldProvenance.hasAnyGenerated(meaning, "zh_definition", "example"));
+    assertFalse(FieldProvenance.hasAnyGenerated(meaning, "example", "en_definition"));
+    assertFalse(FieldProvenance.hasAnyGenerated(null, "zh_definition"));
+  }
 }
