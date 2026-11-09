@@ -24,16 +24,22 @@ final class NotebookUi {
   final LinkedHashSet<String> selectedTags = new LinkedHashSet<>();
   String statusFilter = "全部"; // 全部, 待复习, 已学习
   String featureFilter = "全部"; // 全部, 有批注, 多释义
-  String sortOrder = "最新"; // 最新, 最早, A-Z, Z-A
+  String sortOrder = "默认"; // 默认, 最新, 最早, A-Z, Z-A, 随机, 生词优先
+  String definitionMode = "zh"; // zh, en, hidden
+  final Set<String> revealedVocabularyIds = new HashSet<>();
   String viewMode = "compact"; // compact, detailed
   String activeCollectionId = null;
-  static final int RESULT_PAGE_SIZE = 40;
-  int resultPage = 0;
+  static final int LOAD_BATCH_SIZE = 40;
+  int visibleLimit = 40;
+  boolean isLoadingMore = false;
   String resultScope = "";
   boolean selecting = false;
   final LinkedHashSet<String> selectedVocabularyIds = new LinkedHashSet<>();
   final Map<String, CheckBox> selectionBoxes = new HashMap<>();
   Button selectionActionButton;
+  FastScrollIndexBar fastScrollBar;
+  LinearLayout currentControls;
+  List<JSONObject> currentRenderedRows;
 
   NotebookUi(MainActivity a) {
     this.a = a;
@@ -45,7 +51,7 @@ final class NotebookUi {
     count += selectedTags.size();
     if (!"全部".equals(statusFilter)) count++;
     if (!"全部".equals(featureFilter)) count++;
-    if (!"最新".equals(sortOrder)) count++;
+    if (!"默认".equals(sortOrder)) count++;
     return count;
   }
 
@@ -54,7 +60,7 @@ final class NotebookUi {
     selectedTags.clear();
     statusFilter = "全部";
     featureFilter = "全部";
-    sortOrder = "最新";
+    sortOrder = "默认";
   }
 
   boolean hasAnnotations(JSONObject v) {
@@ -234,6 +240,31 @@ final class NotebookUi {
     } else if ("Z-A".equals(sortOrder)) {
       Collections.sort(out, (v1, v2) ->
         v2.optString("content", "").compareToIgnoreCase(v1.optString("content", "")));
+    } else if ("随机".equals(sortOrder)) {
+      Collections.shuffle(out, new Random(42));
+    } else if ("生词优先".equals(sortOrder)) {
+      Collections.sort(out, (v1, v2) -> {
+        boolean due1 = isDue(v1), due2 = isDue(v2);
+        if (due1 != due2) return due1 ? -1 : 1;
+        boolean m1 = isMastered(v1), m2 = isMastered(v2);
+        if (m1 != m2) return m1 ? 1 : -1;
+        String t1 = v1.optString("created_at", v1.optString("updated_at", ""));
+        String t2 = v2.optString("created_at", v2.optString("updated_at", ""));
+        return t2.compareTo(t1);
+      });
+    } else {
+      JSONObject currentNote = (selected == null || "nb_global_root".equals(selected))
+          ? null : a.library.find("notebooks", selected);
+      if (currentNote != null && currentNote.optJSONArray("vocabulary_ids") != null) {
+        JSONArray vIds = currentNote.optJSONArray("vocabulary_ids");
+        Map<String, Integer> idPos = new HashMap<>();
+        for (int i = 0; i < vIds.length(); i++) idPos.put(vIds.optString(i), i);
+        Collections.sort(out, (v1, v2) -> {
+          int p1 = idPos.getOrDefault(v1.optString("id"), Integer.MAX_VALUE);
+          int p2 = idPos.getOrDefault(v2.optString("id"), Integer.MAX_VALUE);
+          return Integer.compare(p1, p2);
+        });
+      }
     }
     return out;
   }
@@ -679,7 +710,7 @@ final class NotebookUi {
   void renderNotebookVocabList(EditText reusedSearch) {
     LinearLayout controls = a.column();
     controls.setBackgroundColor(a.card);
-    a.root.addView(controls, a.root.indexOfChild(a.scroll));
+    a.root.addView(controls, a.root.indexOfChild(a.contentContainer != null ? a.contentContainer : a.scroll));
     a.body.setPadding(a.dp(14), 0, a.dp(14), a.dp(32));
 
     JSONObject selectedNote = (selected == null || "nb_global_root".equals(selected))
@@ -807,6 +838,8 @@ final class NotebookUi {
     }
 
     // 4. Advanced Filter Bar & View Mode Toggle
+    HorizontalScrollView filterBarScroll = new HorizontalScrollView(a);
+    filterBarScroll.setHorizontalScrollBarEnabled(false);
     LinearLayout filterBar = a.row();
     filterBar.setGravity(Gravity.CENTER_VERTICAL);
     filterBar.setPadding(a.dp(14), a.dp(4), a.dp(14), a.dp(6));
@@ -820,6 +853,34 @@ final class NotebookUi {
     LinearLayout.LayoutParams fsLp = new LinearLayout.LayoutParams(-2, a.dp(30));
     fsLp.rightMargin = a.dp(6);
     filterBar.addView(filterSheetBtn, fsLp);
+
+    // 排序按钮 (紧邻筛选右侧)
+    Button sortBtn = a.chip("⇅ " + sortOrderDisplay() + " ▾", !"默认".equals(sortOrder), v -> showSortDialog(controls));
+    sortBtn.setTextSize(11 * a.scale);
+    sortBtn.setPadding(a.dp(8), 0, a.dp(8), 0);
+    LinearLayout.LayoutParams sortLp = new LinearLayout.LayoutParams(-2, a.dp(30));
+    sortLp.rightMargin = a.dp(6);
+    filterBar.addView(sortBtn, sortLp);
+
+    // 释义项按钮 (紧邻排序右侧)
+    Button defBtn = a.chip("👁 " + defModeDisplay() + " ▾", !"zh".equals(definitionMode), v -> showDefinitionModeDialog(controls));
+    defBtn.setTextSize(11 * a.scale);
+    defBtn.setPadding(a.dp(8), 0, a.dp(8), 0);
+    LinearLayout.LayoutParams defLp = new LinearLayout.LayoutParams(-2, a.dp(30));
+    defLp.rightMargin = a.dp(6);
+    filterBar.addView(defBtn, defLp);
+
+    // View Mode Switcher
+    boolean isDetailed = "detailed".equals(viewMode);
+    Button modeBtn = a.chip(isDetailed ? "⊞ 平铺详细" : "≡ 紧凑模式", isDetailed, v -> {
+      viewMode = isDetailed ? "compact" : "detailed";
+      a.render();
+    });
+    modeBtn.setTextSize(11 * a.scale);
+    modeBtn.setPadding(a.dp(8), 0, a.dp(8), 0);
+    LinearLayout.LayoutParams mbLp = new LinearLayout.LayoutParams(-2, a.dp(30));
+    mbLp.rightMargin = a.dp(6);
+    filterBar.addView(modeBtn, mbLp);
 
     HorizontalScrollView activeChipsScroll = new HorizontalScrollView(a);
     activeChipsScroll.setHorizontalScrollBarEnabled(false);
@@ -861,8 +922,8 @@ final class NotebookUi {
       lp.rightMargin = a.dp(4);
       activeChips.addView(c, lp);
     }
-    if (!"最新".equals(sortOrder)) {
-      Button c = a.chip("排序: " + sortOrder + " ✕", true, v -> { sortOrder = "最新"; a.render(); });
+    if (!"默认".equals(sortOrder)) {
+      Button c = a.chip("排序: " + sortOrderDisplay() + " ✕", true, v -> { sortOrder = "默认"; a.render(); });
       c.setTextSize(10 * a.scale);
       c.setPadding(a.dp(6), 0, a.dp(6), 0);
       LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, a.dp(26));
@@ -880,20 +941,8 @@ final class NotebookUi {
     }
     activeChipsScroll.addView(activeChips);
     filterBar.addView(activeChipsScroll, new LinearLayout.LayoutParams(0, -2, 1));
-
-    // View Mode Switcher
-    boolean isDetailed = "detailed".equals(viewMode);
-    Button modeBtn = a.chip(isDetailed ? "⊞ 平铺详细" : "≡ 紧凑模式", isDetailed, v -> {
-      viewMode = isDetailed ? "compact" : "detailed";
-      a.render();
-    });
-    modeBtn.setTextSize(11 * a.scale);
-    modeBtn.setPadding(a.dp(8), 0, a.dp(8), 0);
-    LinearLayout.LayoutParams mbLp = new LinearLayout.LayoutParams(-2, a.dp(30));
-    mbLp.leftMargin = a.dp(6);
-    filterBar.addView(modeBtn, mbLp);
-
-    controls.addView(filterBar);
+    filterBarScroll.addView(filterBar);
+    controls.addView(filterBarScroll);
 
     renderResults(controls);
   }
@@ -970,6 +1019,8 @@ final class NotebookUi {
   }
 
   void renderResults(LinearLayout controls, List<JSONObject> rows) {
+    this.currentControls = controls;
+    this.currentRenderedRows = rows;
     selectionBoxes.clear();
     selectionActionButton = null;
     a.body.removeAllViews();
@@ -984,14 +1035,12 @@ final class NotebookUi {
       }
     }
     String scope = new JSONArray(Arrays.asList(selected, filter, typeFilter, statusFilter,
-        featureFilter, sortOrder, new JSONArray(selectedTags))).toString();
+        featureFilter, sortOrder, definitionMode, new JSONArray(selectedTags))).toString();
     if (!scope.equals(resultScope)) {
       resultScope = scope;
-      resultPage = 0;
+      visibleLimit = LOAD_BATCH_SIZE;
       a.scroll.post(() -> a.scroll.scrollTo(0, 0));
     }
-    int pages = Math.max(1, (rows.size() + RESULT_PAGE_SIZE - 1) / RESULT_PAGE_SIZE);
-    resultPage = Math.max(0, Math.min(resultPage, pages - 1));
     pruneSelection(rows);
     LinearLayout selectionBar = a.row();
     selectionBar.setPadding(a.dp(14), a.dp(4), a.dp(14), a.dp(4));
@@ -1015,27 +1064,22 @@ final class NotebookUi {
       selectionActionButton = a.chip("操作 (" + selectedVocabularyIds.size() + ")", true, view -> batchMenu());
       selectionBar.addView(selectionActionButton);
     }
-    selectionBar.addView(a.text("结果 " + rows.size() + " 条", 12, false));
+    TextView resultCountTv = a.text("结果 " + rows.size() + " 条", 12, false);
+    if (selecting) {
+      LinearLayout.LayoutParams resLp = new LinearLayout.LayoutParams(-2, -2);
+      resLp.leftMargin = a.dp(8);
+      selectionBar.addView(resultCountTv, resLp);
+    } else {
+      selectionBar.addView(resultCountTv);
+    }
     LinearLayout resultControls = a.column();
     resultControls.addView(selectionBar);
     resultsBar = resultControls;
     controls.addView(resultControls);
-    if (pages > 1) {
-      LinearLayout pager = a.row();
-      pager.setGravity(Gravity.CENTER_VERTICAL);
-      pager.setPadding(a.dp(10), 0, a.dp(10), a.dp(4));
-      addResultPageButton(pager, "首页", 0, resultPage > 0, controls);
-      addResultPageButton(pager, "上一页", resultPage - 1, resultPage > 0, controls);
-      TextView position = a.text("第 " + (resultPage + 1) + " / " + pages + " 页", 11, false);
-      position.setGravity(Gravity.CENTER);
-      pager.addView(position, new LinearLayout.LayoutParams(0, -2, 1));
-      addResultPageButton(pager, "下一页", resultPage + 1, resultPage + 1 < pages, controls);
-      addResultPageButton(pager, "末页", pages - 1, resultPage + 1 < pages, controls);
-      resultControls.addView(pager);
-    }
 
-    int end = Math.min(rows.size(), (resultPage + 1) * RESULT_PAGE_SIZE);
-    for (JSONObject v : rows.subList(resultPage * RESULT_PAGE_SIZE, end)) {
+    int limit = Math.min(rows.size(), visibleLimit);
+    for (int i = 0; i < limit; i++) {
+      JSONObject v = rows.get(i);
       JSONObject display = null;
       if (selectedNote != null && selectedNote.optJSONObject("vocabulary_display") != null)
         display = selectedNote.optJSONObject("vocabulary_display").optJSONObject(v.optString("id"));
@@ -1050,6 +1094,68 @@ final class NotebookUi {
         android.os.Trace.endSection();
       }
     }
+
+    if (limit < rows.size()) {
+      LinearLayout loadMoreBox = a.column();
+      loadMoreBox.setGravity(Gravity.CENTER);
+      loadMoreBox.setPadding(0, a.dp(14), 0, a.dp(20));
+      TextView loadHint = a.text("已加载 " + limit + " / 共 " + rows.size() + " 词 · 上滑自动加载", 12, false);
+      loadHint.setTextColor(a.muted);
+      loadMoreBox.addView(loadHint);
+      Button loadMoreBtn = a.chip("加载更多 (+40)", false, v -> {
+        visibleLimit = Math.min(rows.size(), visibleLimit + LOAD_BATCH_SIZE);
+        renderResults(controls, rows);
+      });
+      loadMoreBtn.setTextSize(11 * a.scale);
+      loadMoreBtn.setPadding(a.dp(12), 0, a.dp(12), 0);
+      LinearLayout.LayoutParams lmBtnLp = new LinearLayout.LayoutParams(-2, a.dp(30));
+      lmBtnLp.topMargin = a.dp(6);
+      loadMoreBox.addView(loadMoreBtn, lmBtnLp);
+      a.body.addView(loadMoreBox);
+    } else if (!rows.isEmpty()) {
+      TextView doneHint = a.text("— 已显示全部 " + rows.size() + " 个词汇 —", 11, false);
+      doneHint.setTextColor(a.subtle);
+      doneHint.setGravity(Gravity.CENTER);
+      doneHint.setPadding(0, a.dp(14), 0, a.dp(24));
+      a.body.addView(doneHint);
+    }
+
+    // Scroll listener for auto-loading and updating fast-scroller thumb
+    a.scroll.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) -> {
+      int totalHeight = a.body.getHeight();
+      int viewportHeight = a.scroll.getHeight();
+      if (fastScrollBar != null) {
+        fastScrollBar.onScrollProgress(scrollY, Math.max(1, totalHeight - viewportHeight));
+      }
+      if (limit < rows.size() && !isLoadingMore) {
+        int threshold = totalHeight - viewportHeight - a.dp(350);
+        if (scrollY >= threshold && threshold > 0) {
+          isLoadingMore = true;
+          visibleLimit = Math.min(rows.size(), visibleLimit + LOAD_BATCH_SIZE);
+          renderResults(controls, rows);
+          isLoadingMore = false;
+        }
+      }
+    });
+
+    // Fast-scroll index bar on right edge
+    if (a.contentContainer != null) {
+      if (fastScrollBar == null || fastScrollBar.getParent() != a.contentContainer) {
+        if (fastScrollBar != null && fastScrollBar.getParent() != null) {
+          ((ViewGroup) fastScrollBar.getParent()).removeView(fastScrollBar);
+        }
+        fastScrollBar = new FastScrollIndexBar(a);
+        FrameLayout.LayoutParams barLp = new FrameLayout.LayoutParams(a.dp(28), -1, Gravity.END | Gravity.TOP);
+        barLp.topMargin = a.dp(6);
+        barLp.bottomMargin = a.dp(6);
+        a.contentContainer.addView(fastScrollBar, barLp);
+        fastScrollBar.attachBubble(a.contentContainer);
+      }
+      fastScrollBar.setData(rows, sortOrder, (targetIndex, label) -> {
+        jumpToVocabularyIndex(controls, rows, targetIndex);
+      });
+    }
+
     if (rows.isEmpty()) {
       LinearLayout empty = a.column();
       empty.setGravity(Gravity.CENTER);
@@ -1068,20 +1174,89 @@ final class NotebookUi {
     }
   }
 
-  private void addResultPageButton(LinearLayout pager, String label, int target,
-      boolean enabled, LinearLayout controls) {
-    Button button = a.chip(label, false, view -> {
-      resultPage = target;
-      renderResults(controls);
-      a.scroll.post(() -> a.scroll.scrollTo(0, 0));
+  void jumpToVocabularyIndex(LinearLayout controls, List<JSONObject> rows, int targetIndex) {
+    if (targetIndex < 0 || targetIndex >= rows.size()) return;
+    if (targetIndex >= visibleLimit) {
+      visibleLimit = Math.min(rows.size(), targetIndex + LOAD_BATCH_SIZE);
+      renderResults(controls, rows);
+    }
+    a.scroll.post(() -> {
+      if (targetIndex < a.body.getChildCount()) {
+        View targetChild = a.body.getChildAt(targetIndex);
+        if (targetChild != null) {
+          a.scroll.scrollTo(0, targetChild.getTop());
+        }
+      }
     });
-    button.setTextSize(11 * a.scale);
-    button.setMinWidth(0);
-    button.setMinimumWidth(0);
-    button.setPadding(a.dp(7), 0, a.dp(7), 0);
-    button.setEnabled(enabled);
-    button.setAlpha(enabled ? 1f : .4f);
-    pager.addView(button, new LinearLayout.LayoutParams(-2, a.dp(36)));
+  }
+
+  String sortOrderDisplay() {
+    switch (sortOrder) {
+      case "最新": return "最新";
+      case "最早": return "最早";
+      case "A-Z": return "A-Z";
+      case "Z-A": return "Z-A";
+      case "随机": return "随机";
+      case "生词优先": return "生词优先";
+      default: return "默认";
+    }
+  }
+
+  String defModeDisplay() {
+    switch (definitionMode) {
+      case "en": return "英文释义";
+      case "hidden": return "隐藏释义";
+      default: return "中文释义";
+    }
+  }
+
+  void showSortDialog(LinearLayout controls) {
+    String[] items = new String[] {
+      "默认排序 (笔记原有顺序)",
+      "按时间降序 (最新添加)",
+      "按时间升序 (最早添加)",
+      "按字母升序 (A - Z)",
+      "按字母降序 (Z - A)",
+      "随机乱序 (打乱背词)",
+      "生词优先 (待复习在先)"
+    };
+    final String[] keys = new String[] {"默认", "最新", "最早", "A-Z", "Z-A", "随机", "生词优先"};
+    int cur = 0;
+    for (int i = 0; i < keys.length; i++) {
+      if (keys[i].equals(sortOrder)) { cur = i; break; }
+    }
+    AlertDialog.Builder builder = new AlertDialog.Builder(a)
+        .setTitle("选择排序方式")
+        .setSingleChoiceItems(items, cur, (dialog, which) -> {
+          sortOrder = keys[which];
+          dialog.dismiss();
+          a.render();
+        })
+        .setNegativeButton("取消", null);
+    a.showDialog(builder);
+  }
+
+  void showDefinitionModeDialog(LinearLayout controls) {
+    String[] items = new String[] {
+      "中文释义 (中文优先)",
+      "英文释义 (英文优先)",
+      "隐藏释义 (自测背词)"
+    };
+    final String[] keys = new String[] {"zh", "en", "hidden"};
+    int cur = 0;
+    for (int i = 0; i < keys.length; i++) {
+      if (keys[i].equals(definitionMode)) { cur = i; break; }
+    }
+    AlertDialog.Builder builder = new AlertDialog.Builder(a)
+        .setTitle("释义显示模式")
+        .setSingleChoiceItems(items, cur, (dialog, which) -> {
+          definitionMode = keys[which];
+          revealedVocabularyIds.clear();
+          dialog.dismiss();
+          a.render();
+        })
+        .setNegativeButton("取消", null);
+    a.showDialog(builder);
   }
 
   void showFilterSheet() {
@@ -1202,11 +1377,13 @@ final class NotebookUi {
 
     // 4. 排序规则
     sheet.addView(a.text("排序规则", 13, true));
+    HorizontalScrollView sortScroll = new HorizontalScrollView(a);
+    sortScroll.setHorizontalScrollBarEnabled(false);
     LinearLayout sortRow = a.row();
     sortRow.setPadding(0, a.dp(6), 0, a.dp(10));
     List<Button> sortChips = new ArrayList<>();
-    for (String opt : new String[] {"最新", "最早", "A-Z", "Z-A"}) {
-      String label = "最新".equals(opt) ? "最新添加" : "最早".equals(opt) ? "最早添加" : "A-Z".equals(opt) ? "字母 A-Z" : "字母 Z-A";
+    for (String opt : new String[] {"默认", "最新", "最早", "A-Z", "Z-A", "随机", "生词优先"}) {
+      String label = "默认".equals(opt) ? "默认排序" : ("最新".equals(opt) ? "最新添加" : ("最早".equals(opt) ? "最早添加" : ("A-Z".equals(opt) ? "字母 A-Z" : ("Z-A".equals(opt) ? "字母 Z-A" : ("随机".equals(opt) ? "随机乱序" : "生词优先")))));
       Button chip = a.chip(label, tempSort[0].equals(opt), null);
       chip.setTag(opt);
       chip.setTextSize(12 * a.scale);
@@ -1224,7 +1401,8 @@ final class NotebookUi {
       lp.rightMargin = a.dp(6);
       sortRow.addView(chip, lp);
     }
-    sheet.addView(sortRow);
+    sortScroll.addView(sortRow);
+    sheet.addView(sortScroll);
 
     // 5. 标签分类 (按当前笔记本上下文动态统计 + 频次降序 + 流式自适应多选)
     JSONObject currentNb = (selected == null || "nb_global_root".equals(selected))
@@ -1370,7 +1548,7 @@ final class NotebookUi {
       tempType[0] = "全部";
       tempStatus[0] = "全部";
       tempFeature[0] = "全部";
-      tempSort[0] = "最新";
+      tempSort[0] = "默认";
       tempTags.clear();
       tagSearch.setText("");
       for (Button b : typeChips) {
@@ -1389,7 +1567,7 @@ final class NotebookUi {
         b.setBackground(a.shape(sel ? a.accent : a.inputBg, 16, sel ? a.accent : a.border));
       }
       for (Button b : sortChips) {
-        boolean sel = "最新".equals(b.getTag());
+        boolean sel = "默认".equals(b.getTag());
         b.setTextColor(sel ? Color.WHITE : a.foreground);
         b.setBackground(a.shape(sel ? a.accent : a.inputBg, 16, sel ? a.accent : a.border));
       }
@@ -1442,10 +1620,14 @@ final class NotebookUi {
     LinearLayout.LayoutParams cardLp = (LinearLayout.LayoutParams) card.getLayoutParams();
     cardLp.bottomMargin = a.dp(8);
     card.setLayoutParams(cardLp);
+    String vocabId = vocabulary.optString("id");
     card.setOnClickListener(
         view -> {
           if (selecting) {
-            toggleVisibleSelection(vocabulary.optString("id"));
+            toggleVisibleSelection(vocabId);
+          } else if ("hidden".equals(definitionMode) && !revealedVocabularyIds.contains(vocabId)) {
+            revealedVocabularyIds.add(vocabId);
+            a.render();
           } else detail(vocabulary);
         });
     card.setOnLongClickListener(
@@ -1462,7 +1644,9 @@ final class NotebookUi {
       String id = vocabulary.optString("id");
       selectionBoxes.put(id, selectedBox);
       selectedBox.setOnCheckedChangeListener((button, checked) -> setSelected(id, checked));
-      top.addView(selectedBox);
+      LinearLayout.LayoutParams boxLp = new LinearLayout.LayoutParams(-2, -2);
+      boxLp.rightMargin = a.dp(8);
+      top.addView(selectedBox, boxLp);
     }
     LinearLayout title = a.row();
     title.setGravity(Gravity.CENTER_VERTICAL);
@@ -1474,8 +1658,8 @@ final class NotebookUi {
     TextView typeBadge = a.text(type, 11, true);
     typeBadge.setTextIsSelectable(false);
     typeBadge.setTextColor(a.muted);
-    typeBadge.setPadding(a.dp(7), a.dp(3), a.dp(7), a.dp(3));
-    typeBadge.setBackground(a.shape(a.inputBg, 16, 0));
+    typeBadge.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
+    typeBadge.setBackground(a.shape(a.inputBg, 12, 0));
     LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(-2, -2);
     badgeLp.leftMargin = a.dp(6);
     typeBadge.setOnClickListener(view -> { if (selecting) { toggleVisibleSelection(vocabulary.optString("id")); } else detail(vocabulary); });
@@ -1549,17 +1733,41 @@ final class NotebookUi {
             line.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         line.append("  ");
       }
-      String definition = displayField(fields, local, "zh_definition") ? first.optString("zh_definition").trim() : "";
-      if (definition.isEmpty() && displayField(fields, local, "en_definition"))
-        definition = first.optString("en_definition").trim();
-      line.append(definition);
-      TextView summary = a.text("", 13, false);
-      summary.setText(line);
-      summary.setSingleLine(true);
-      summary.setEllipsize(android.text.TextUtils.TruncateAt.END);
-      LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-      lp.topMargin = a.dp(4);
-      card.addView(summary, lp);
+
+      boolean isHidden = "hidden".equals(definitionMode) && !revealedVocabularyIds.contains(vocabId);
+      if (isHidden) {
+        TextView revealPrompt = a.text("✦ 释义已隐藏 · 点击显示", 12, false);
+        revealPrompt.setTextColor(a.accent);
+        revealPrompt.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
+        revealPrompt.setBackground(a.shape((a.accent & 0x00FFFFFF) | 0x1A000000, 6, 0));
+        revealPrompt.setOnClickListener(v -> {
+          revealedVocabularyIds.add(vocabId);
+          a.render();
+        });
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+        lp.topMargin = a.dp(4);
+        card.addView(revealPrompt, lp);
+      } else {
+        String zh = displayField(fields, local, "zh_definition") ? first.optString("zh_definition").trim() : "";
+        String en = displayField(fields, local, "en_definition") ? first.optString("en_definition").trim() : "";
+        if ("en".equals(definitionMode)) {
+          if (!en.isEmpty()) {
+            line.append(en);
+            if (!zh.isEmpty()) line.append(" (").append(zh).append(")");
+          } else {
+            line.append(zh);
+          }
+        } else {
+          line.append(!zh.isEmpty() ? zh : en);
+        }
+        TextView summary = a.text("", 13, false);
+        summary.setText(line);
+        summary.setSingleLine(true);
+        summary.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.topMargin = a.dp(4);
+        card.addView(summary, lp);
+      }
     }
     LinearLayout footer = a.row();
     footer.setGravity(Gravity.CENTER_VERTICAL);
@@ -1600,6 +1808,9 @@ final class NotebookUi {
     card.setOnClickListener(view -> {
       if (selecting) {
         toggleVisibleSelection(id);
+      } else if ("hidden".equals(definitionMode) && !revealedVocabularyIds.contains(id)) {
+        revealedVocabularyIds.add(id);
+        a.render();
       } else detail(vocabulary);
     });
     card.setOnLongClickListener(view -> {
@@ -1615,7 +1826,9 @@ final class NotebookUi {
       selectedBox.setChecked(selectedVocabularyIds.contains(id));
       selectionBoxes.put(id, selectedBox);
       selectedBox.setOnCheckedChangeListener((button, checked) -> setSelected(id, checked));
-      top.addView(selectedBox);
+      LinearLayout.LayoutParams boxLp = new LinearLayout.LayoutParams(-2, -2);
+      boxLp.rightMargin = a.dp(8);
+      top.addView(selectedBox, boxLp);
     }
     TextView word = a.text(vocabulary.optString("content"), 18, true);
     word.setTextColor(a.foreground);
@@ -1625,8 +1838,8 @@ final class NotebookUi {
     TextView typeBadge = a.text(type, 11, true);
     typeBadge.setTextIsSelectable(false);
     typeBadge.setTextColor(a.accent);
-    typeBadge.setPadding(a.dp(7), a.dp(3), a.dp(7), a.dp(3));
-    typeBadge.setBackground(a.shape((a.accent & 0x00FFFFFF) | 0x1A000000, 16, 0));
+    typeBadge.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
+    typeBadge.setBackground(a.shape((a.accent & 0x00FFFFFF) | 0x1A000000, 12, 0));
     LinearLayout.LayoutParams typeLp = new LinearLayout.LayoutParams(-2, -2);
     typeLp.leftMargin = a.dp(6);
     typeLp.rightMargin = a.dp(8);
@@ -1719,120 +1932,157 @@ final class NotebookUi {
     JSONArray meanings = vocabulary.optJSONArray("meanings");
     int visibleMeaningIndex = 0;
     int totalAnnotations = 0;
-    for (int i = 0; meanings != null && i < meanings.length(); i++) {
-      JSONObject m = meanings.optJSONObject(i);
-      if (m == null) continue;
-      String mId = m.optString("id");
-      if (visibleIds != null && !contains(visibleIds, mId)) continue;
-      visibleMeaningIndex++;
-      JSONObject local = perMeaning == null ? null : perMeaning.optJSONObject(mId);
+    String vocabId = vocabulary.optString("id");
+    boolean isHidden = "hidden".equals(definitionMode) && !revealedVocabularyIds.contains(vocabId);
+    if (isHidden) {
+      LinearLayout hideBox = a.row();
+      hideBox.setGravity(Gravity.CENTER_VERTICAL);
+      hideBox.setPadding(a.dp(12), a.dp(12), a.dp(12), a.dp(12));
+      hideBox.setBackground(a.shape(a.inputBg, 8, a.border));
+      hideBox.addView(a.icon("eye-off-outline", 18, a.accent));
+      TextView hideText = a.text("  ✦ 释义与例句已隐藏 (自测背词模式) · 点击显示", 13, true);
+      hideText.setTextColor(a.accent);
+      hideBox.addView(hideText);
+      hideBox.setOnClickListener(v -> {
+        revealedVocabularyIds.add(vocabId);
+        a.render();
+      });
+      LinearLayout.LayoutParams hLp = new LinearLayout.LayoutParams(-1, -2);
+      hLp.topMargin = a.dp(6);
+      hLp.bottomMargin = a.dp(8);
+      card.addView(hideBox, hLp);
+    } else {
+      for (int i = 0; meanings != null && i < meanings.length(); i++) {
+        JSONObject m = meanings.optJSONObject(i);
+        if (m == null) continue;
+        String mId = m.optString("id");
+        if (visibleIds != null && !contains(visibleIds, mId)) continue;
+        visibleMeaningIndex++;
+        JSONObject local = perMeaning == null ? null : perMeaning.optJSONObject(mId);
 
-      LinearLayout mBox = a.column();
-      mBox.setPadding(0, a.dp(4), 0, a.dp(6));
+        LinearLayout mBox = a.column();
+        mBox.setPadding(0, a.dp(4), 0, a.dp(6));
 
-      LinearLayout mHeader = a.row();
-      mHeader.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout mHeader = a.row();
+        mHeader.setGravity(Gravity.CENTER_VERTICAL);
 
-      TextView idxBubble = a.text(String.valueOf(visibleMeaningIndex), 11, true);
-      idxBubble.setTextColor(a.accent);
-      idxBubble.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
-      idxBubble.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 8, 0));
-      mHeader.addView(idxBubble);
+        TextView idxBubble = a.text(String.valueOf(visibleMeaningIndex), 11, true);
+        idxBubble.setTextColor(a.accent);
+        idxBubble.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
+        idxBubble.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 8, 0));
+        mHeader.addView(idxBubble);
 
-      String pos = m.optString("part_of_speech").trim();
-      if (!pos.isEmpty() && displayField(fields, local, "pos")) {
-        TextView posBadge = a.text(pos, 11, true);
-        posBadge.setTextColor(a.accent);
-        posBadge.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
-        posBadge.setBackground(a.shape(a.inputBg, 6, a.border));
-        LinearLayout.LayoutParams posLp = new LinearLayout.LayoutParams(-2, -2);
-        posLp.leftMargin = a.dp(6);
-        mHeader.addView(posBadge, posLp);
-      }
+        String pos = m.optString("part_of_speech").trim();
+        if (!pos.isEmpty() && displayField(fields, local, "pos")) {
+          TextView posBadge = a.text(pos, 11, true);
+          posBadge.setTextColor(a.accent);
+          posBadge.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
+          posBadge.setBackground(a.shape(a.inputBg, 6, a.border));
+          LinearLayout.LayoutParams posLp = new LinearLayout.LayoutParams(-2, -2);
+          posLp.leftMargin = a.dp(6);
+          mHeader.addView(posBadge, posLp);
+        }
 
-      String mPhonetic = m.optString("phonetic").trim();
-      if (!mPhonetic.isEmpty() && displayField(fields, local, "phonetic")) {
-        TextView ph = a.text(mPhonetic, 11, false);
-        ph.setTextColor(a.muted);
-        LinearLayout.LayoutParams phLp = new LinearLayout.LayoutParams(-2, -2);
-        phLp.leftMargin = a.dp(6);
-        mHeader.addView(ph, phLp);
-      }
-      boolean hasAi = FieldProvenance.hasAnyGenerated(m, "zh_definition", "en_definition", "example")
-          || "ai".equals(m.optString("lookup_origin"));
-      if (hasAi) {
-        TextView aiBadge = a.text("✦ AI", 10, true);
-        aiBadge.setTextColor(a.accent);
-        aiBadge.setPadding(a.dp(4), a.dp(1), a.dp(4), a.dp(1));
-        aiBadge.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 4, 0));
-        LinearLayout.LayoutParams aiLp = new LinearLayout.LayoutParams(-2, -2);
-        aiLp.leftMargin = a.dp(6);
-        mHeader.addView(aiBadge, aiLp);
-      }
-      mBox.addView(mHeader);
+        String mPhonetic = m.optString("phonetic").trim();
+        if (!mPhonetic.isEmpty() && displayField(fields, local, "phonetic")) {
+          TextView ph = a.text(mPhonetic, 11, false);
+          ph.setTextColor(a.muted);
+          LinearLayout.LayoutParams phLp = new LinearLayout.LayoutParams(-2, -2);
+          phLp.leftMargin = a.dp(6);
+          mHeader.addView(ph, phLp);
+        }
+        boolean hasAi = FieldProvenance.hasAnyGenerated(m, "zh_definition", "en_definition", "example")
+            || "ai".equals(m.optString("lookup_origin"));
+        if (hasAi) {
+          TextView aiBadge = a.text("✦ AI", 10, true);
+          aiBadge.setTextColor(a.accent);
+          aiBadge.setPadding(a.dp(4), a.dp(1), a.dp(4), a.dp(1));
+          aiBadge.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 4, 0));
+          LinearLayout.LayoutParams aiLp = new LinearLayout.LayoutParams(-2, -2);
+          aiLp.leftMargin = a.dp(6);
+          mHeader.addView(aiBadge, aiLp);
+        }
+        mBox.addView(mHeader);
 
-      String zhDef = m.optString("zh_definition").trim();
-      if (!zhDef.isEmpty() && displayField(fields, local, "zh_definition")) {
-        TextView zhTv = a.text(zhDef, 14, true);
-        zhTv.setTextColor(a.foreground);
-        LinearLayout.LayoutParams zhLp = new LinearLayout.LayoutParams(-1, -2);
-        zhLp.topMargin = a.dp(4);
-        mBox.addView(zhTv, zhLp);
-      }
-
-      String enDef = m.optString("en_definition").trim();
-      if (!enDef.isEmpty() && displayField(fields, local, "en_definition")) {
-        TextView enTv = a.text(enDef, 13, false);
-        enTv.setTextColor(a.muted);
-        LinearLayout.LayoutParams enLp = new LinearLayout.LayoutParams(-1, -2);
-        enLp.topMargin = a.dp(2);
-        mBox.addView(enTv, enLp);
-      }
-
-      String eg = m.optString("example").trim();
-      if (!eg.isEmpty() && displayField(fields, local, "example")) {
-        LinearLayout egBox = a.column();
-        egBox.setPadding(a.dp(8), a.dp(6), a.dp(8), a.dp(6));
-        egBox.setBackground(a.shape(a.inputBg, 6, a.border));
-        LinearLayout.LayoutParams egLp = new LinearLayout.LayoutParams(-1, -2);
-        egLp.topMargin = a.dp(6);
-
-        boolean isAiEg = FieldProvenance.isGenerated(m, "example");
-        TextView egLabel = a.text(isAiEg ? "例句 · AI生成：" : "例句：", 11, true);
-        egLabel.setTextColor(a.accent);
-        egBox.addView(egLabel);
-
-        TextView egTv = a.text(eg, 12, false);
-        egTv.setTextColor(a.foreground);
-        egBox.addView(egTv);
-        mBox.addView(egBox, egLp);
-      }
-
-      if (displayField(fields, local, "annotations")) {
-        JSONArray notes = m.optJSONArray("annotations");
-        if (notes != null && notes.length() > 0) {
-          totalAnnotations += notes.length();
-          for (int j = 0; j < notes.length(); j++) {
-            JSONObject note = notes.optJSONObject(j);
-            if (note == null) continue;
-            LinearLayout noteBox = a.row();
-            noteBox.setGravity(Gravity.CENTER_VERTICAL);
-            noteBox.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
-            noteBox.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x14000000, 6, 0));
-            LinearLayout.LayoutParams noteLp = new LinearLayout.LayoutParams(-1, -2);
-            noteLp.topMargin = a.dp(4);
-
-            String target = note.optString("target_text");
-            String content = note.optString("content");
-            TextView noteTv = a.text((target.isEmpty() ? "" : "「" + target + "」 ") + content, 12, false);
-            noteTv.setTextColor(a.foreground);
-            noteBox.addView(noteTv);
-            mBox.addView(noteBox, noteLp);
+        String zhDef = m.optString("zh_definition").trim();
+        String enDef = m.optString("en_definition").trim();
+        if ("en".equals(definitionMode)) {
+          if (!enDef.isEmpty() && displayField(fields, local, "en_definition")) {
+            TextView enTv = a.text(enDef, 14, true);
+            enTv.setTextColor(a.foreground);
+            LinearLayout.LayoutParams enLp = new LinearLayout.LayoutParams(-1, -2);
+            enLp.topMargin = a.dp(4);
+            mBox.addView(enTv, enLp);
+          }
+          if (!zhDef.isEmpty() && displayField(fields, local, "zh_definition")) {
+            TextView zhTv = a.text(zhDef, 13, false);
+            zhTv.setTextColor(a.muted);
+            LinearLayout.LayoutParams zhLp = new LinearLayout.LayoutParams(-1, -2);
+            zhLp.topMargin = a.dp(2);
+            mBox.addView(zhTv, zhLp);
+          }
+        } else {
+          if (!zhDef.isEmpty() && displayField(fields, local, "zh_definition")) {
+            TextView zhTv = a.text(zhDef, 14, true);
+            zhTv.setTextColor(a.foreground);
+            LinearLayout.LayoutParams zhLp = new LinearLayout.LayoutParams(-1, -2);
+            zhLp.topMargin = a.dp(4);
+            mBox.addView(zhTv, zhLp);
+          }
+          if (!enDef.isEmpty() && displayField(fields, local, "en_definition")) {
+            TextView enTv = a.text(enDef, 13, false);
+            enTv.setTextColor(a.muted);
+            LinearLayout.LayoutParams enLp = new LinearLayout.LayoutParams(-1, -2);
+            enLp.topMargin = a.dp(2);
+            mBox.addView(enTv, enLp);
           }
         }
-      }
 
-      card.addView(mBox);
+        String eg = m.optString("example").trim();
+        if (!eg.isEmpty() && displayField(fields, local, "example")) {
+          LinearLayout egBox = a.column();
+          egBox.setPadding(a.dp(8), a.dp(6), a.dp(8), a.dp(6));
+          egBox.setBackground(a.shape(a.inputBg, 6, a.border));
+          LinearLayout.LayoutParams egLp = new LinearLayout.LayoutParams(-1, -2);
+          egLp.topMargin = a.dp(6);
+
+          boolean isAiEg = FieldProvenance.isGenerated(m, "example");
+          TextView egLabel = a.text(isAiEg ? "例句 · AI生成：" : "例句：", 11, true);
+          egLabel.setTextColor(a.accent);
+          egBox.addView(egLabel);
+
+          TextView egTv = a.text(eg, 12, false);
+          egTv.setTextColor(a.foreground);
+          egBox.addView(egTv);
+          mBox.addView(egBox, egLp);
+        }
+
+        if (displayField(fields, local, "annotations")) {
+          JSONArray notes = m.optJSONArray("annotations");
+          if (notes != null && notes.length() > 0) {
+            totalAnnotations += notes.length();
+            for (int j = 0; j < notes.length(); j++) {
+              JSONObject note = notes.optJSONObject(j);
+              if (note == null) continue;
+              LinearLayout noteBox = a.row();
+              noteBox.setGravity(Gravity.CENTER_VERTICAL);
+              noteBox.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
+              noteBox.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x14000000, 6, 0));
+              LinearLayout.LayoutParams noteLp = new LinearLayout.LayoutParams(-1, -2);
+              noteLp.topMargin = a.dp(4);
+
+              String target = note.optString("target_text");
+              String content = note.optString("content");
+              TextView noteTv = a.text((target.isEmpty() ? "" : "「" + target + "」 ") + content, 12, false);
+              noteTv.setTextColor(a.foreground);
+              noteBox.addView(noteTv);
+              mBox.addView(noteBox, noteLp);
+            }
+          }
+        }
+
+        card.addView(mBox);
+      }
     }
 
     LinearLayout cardFooter = a.row();
@@ -2554,10 +2804,10 @@ final class NotebookUi {
     boolean isPhrase = "phrase".equals(v.optString("type"));
     TextView typeBadge = a.text(isPhrase ? "短语" : "单词", 11, true);
     typeBadge.setTextColor(a.accent);
-    typeBadge.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
-    typeBadge.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 6, 0));
+    typeBadge.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
+    typeBadge.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 12, 0));
     LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(-2, -2);
-    badgeLp.rightMargin = a.dp(4);
+    badgeLp.rightMargin = a.dp(8);
     titleRow.addView(typeBadge, badgeLp);
 
     Button editWordBtn = a.button("编辑", view -> editWord(v));
@@ -2567,7 +2817,9 @@ final class NotebookUi {
     Button delWordBtn = a.button("删除", view -> confirmDeleteVocabulary(v));
     delWordBtn.setTextSize(13 * a.scale);
     delWordBtn.setTextColor(Color.parseColor("#EF4444"));
-    titleRow.addView(delWordBtn);
+    LinearLayout.LayoutParams delWordLp = new LinearLayout.LayoutParams(-2, -2);
+    delWordLp.leftMargin = a.dp(8);
+    titleRow.addView(delWordBtn, delWordLp);
 
     wordCard.addView(titleRow);
 
@@ -2766,10 +3018,10 @@ final class NotebookUi {
 
         String pos = meaning.optString("part_of_speech");
         if (!pos.isEmpty()) {
-          TextView posBadge = a.text(pos, 12, true);
+          TextView posBadge = a.text(pos, 11, true);
           posBadge.setTextColor(a.foreground);
-          posBadge.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
-          posBadge.setBackground(a.shape(a.inputBg, 6, a.border));
+          posBadge.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
+          posBadge.setBackground(a.shape(a.inputBg, 10, a.border));
           LinearLayout.LayoutParams posLp = new LinearLayout.LayoutParams(-2, -2);
           posLp.leftMargin = a.dp(6);
           mTop.addView(posBadge, posLp);
@@ -2787,10 +3039,10 @@ final class NotebookUi {
         boolean hasAiMeaning = FieldProvenance.hasAnyGenerated(meaning, "zh_definition", "en_definition", "example")
             || "ai".equals(meaning.optString("lookup_origin"));
         if (hasAiMeaning) {
-          TextView aiBadge = a.text("✦ AI生成", 11, true);
+          TextView aiBadge = a.text("AI", 11, true);
           aiBadge.setTextColor(a.accent);
-          aiBadge.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
-          aiBadge.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 6, 0));
+          aiBadge.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
+          aiBadge.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 12, 0));
           LinearLayout.LayoutParams aiLp = new LinearLayout.LayoutParams(-2, -2);
           aiLp.leftMargin = a.dp(6);
           mTop.addView(aiBadge, aiLp);
@@ -2805,7 +3057,9 @@ final class NotebookUi {
         Button delM = a.button("删除", view -> confirmDeleteMeaning(v, meaning));
         delM.setTextSize(13 * a.scale);
         delM.setTextColor(Color.parseColor("#EF4444"));
-        mTop.addView(delM);
+        LinearLayout.LayoutParams delMLp = new LinearLayout.LayoutParams(-2, -2);
+        delMLp.leftMargin = a.dp(8);
+        mTop.addView(delM, delMLp);
 
         mCard.addView(mTop);
 
@@ -2993,7 +3247,11 @@ final class NotebookUi {
     String[] labels = {"词性", "中文释义", "英文释义", "音标", "例句", "来源", "备注"};
     List<EditText> inputs = new ArrayList<>();
     for (int i = 0; i < fields.length; i++) {
-      box.addView(a.text(labels[i], 13, true));
+      TextView label = a.text(labels[i], 13, true);
+      LinearLayout.LayoutParams lblLp = new LinearLayout.LayoutParams(-1, -2);
+      if (i > 0) lblLp.topMargin = a.dp(10);
+      lblLp.bottomMargin = a.dp(4);
+      box.addView(label, lblLp);
       EditText e = a.input(labels[i], m.optString(fields[i]), i > 0);
       box.addView(e);
       inputs.add(e);
@@ -3002,13 +3260,18 @@ final class NotebookUi {
     if (annotations != null)
       for (int i = 0; i < annotations.length(); i++) {
         JSONObject note = annotations.optJSONObject(i);
-        box.addView(
+        Button delNoteBtn =
             a.button(
                 "删除批注：" + note.optString("content"),
-                view -> a.change(() -> Library.removeValue(annotations, note.optString("id")))));
+                view -> a.change(() -> Library.removeValue(annotations, note.optString("id"))));
+        LinearLayout.LayoutParams dnLp = new LinearLayout.LayoutParams(-1, -2);
+        dnLp.topMargin = a.dp(6);
+        box.addView(delNoteBtn, dnLp);
       }
     EditText annotation = a.input("添加一条批注（绑定当前释义）", "", true);
-    box.addView(annotation);
+    LinearLayout.LayoutParams annLp = new LinearLayout.LayoutParams(-1, -2);
+    annLp.topMargin = a.dp(10);
+    box.addView(annotation, annLp);
     box.setPadding(a.dp(20), a.dp(8), a.dp(20), a.dp(8));
     ScrollView scroll = new ScrollView(a);
     scroll.addView(box);

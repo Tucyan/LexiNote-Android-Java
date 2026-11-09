@@ -354,6 +354,10 @@ final class QueryUi {
 
         LinearLayout imgActions = a.row();
         imgActions.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams imgActionsLp = new LinearLayout.LayoutParams(-1, -2);
+        imgActionsLp.topMargin = a.dp(8);
+        imgActions.setLayoutParams(imgActionsLp);
+
         Button cropBtn =
             a.button(
                 "裁剪 / 选区",
@@ -362,9 +366,21 @@ final class QueryUi {
                   a.cropImage();
                 });
         cropBtn.setTextColor(a.accent);
-        imgActions.addView(cropBtn, new LinearLayout.LayoutParams(0, -2, 1));
-        imgActions.addView(
-            a.button("更换图片", v -> a.chooseImage(false)), new LinearLayout.LayoutParams(0, -2, 1));
+        cropBtn.setBackground(a.shape(a.inputBg, 8, a.border));
+        imgActions.addView(cropBtn, new LinearLayout.LayoutParams(0, a.dp(36), 1));
+
+        Button changeBtn =
+            a.button(
+                "更换图片",
+                v -> {
+                  v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                  a.chooseImage(false);
+                });
+        changeBtn.setBackground(a.shape(a.inputBg, 8, a.border));
+        LinearLayout.LayoutParams changeLp = new LinearLayout.LayoutParams(0, a.dp(36), 1);
+        changeLp.leftMargin = a.dp(8);
+        imgActions.addView(changeBtn, changeLp);
+
         Button removeBtn =
             a.button(
                 "移除",
@@ -374,7 +390,10 @@ final class QueryUi {
                   a.render();
                 });
         removeBtn.setTextColor(android.graphics.Color.parseColor("#EF4444"));
-        imgActions.addView(removeBtn, new LinearLayout.LayoutParams(0, -2, 1));
+        removeBtn.setBackground(a.shape(a.inputBg, 8, a.border));
+        LinearLayout.LayoutParams removeLp = new LinearLayout.LayoutParams(0, a.dp(36), 1);
+        removeLp.leftMargin = a.dp(8);
+        imgActions.addView(removeBtn, removeLp);
         queryCard.addView(imgActions);
       }
     } else {
@@ -409,6 +428,10 @@ final class QueryUi {
 
         LinearLayout bothBtns = a.column();
         bothBtns.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams bothBtnsLp = new LinearLayout.LayoutParams(0, -2, 1);
+        bothBtnsLp.leftMargin = a.dp(10);
+        both.addView(bothBtns, bothBtnsLp);
+
         Button cropBtn =
             a.button(
                 "裁剪 / 选区",
@@ -417,7 +440,9 @@ final class QueryUi {
                   a.cropImage();
                 });
         cropBtn.setTextColor(a.accent);
-        bothBtns.addView(cropBtn);
+        cropBtn.setBackground(a.shape(a.inputBg, 8, a.border));
+        bothBtns.addView(cropBtn, new LinearLayout.LayoutParams(-1, a.dp(34)));
+
         Button changeBtn =
             a.button(
                 "更换图片",
@@ -425,7 +450,11 @@ final class QueryUi {
                   v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                   a.chooseImage(false);
                 });
-        bothBtns.addView(changeBtn);
+        changeBtn.setBackground(a.shape(a.inputBg, 8, a.border));
+        LinearLayout.LayoutParams changeLp = new LinearLayout.LayoutParams(-1, a.dp(34));
+        changeLp.topMargin = a.dp(6);
+        bothBtns.addView(changeBtn, changeLp);
+
         Button removeBtn =
             a.button(
                 "移除",
@@ -435,34 +464,52 @@ final class QueryUi {
                   a.render();
                 });
         removeBtn.setTextColor(android.graphics.Color.parseColor("#EF4444"));
-        bothBtns.addView(removeBtn);
-        both.addView(bothBtns);
+        removeBtn.setBackground(a.shape(a.inputBg, 8, a.border));
+        LinearLayout.LayoutParams removeLp = new LinearLayout.LayoutParams(-1, a.dp(34));
+        removeLp.topMargin = a.dp(6);
+        bothBtns.addView(removeBtn, removeLp);
       }
       LinearLayout.LayoutParams bothLp = new LinearLayout.LayoutParams(-1, 0, 1);
       bothLp.topMargin = a.dp(8);
       bothLp.bottomMargin = a.dp(8);
       queryCard.addView(both, bothLp);
     }
-    queryCard.addView(a.primaryButton("✦  智能查询", v -> submit()));
+    Button submitBtn = a.primaryButton("✦  智能查询", v -> submit());
+    LinearLayout.LayoutParams submitLp = new LinearLayout.LayoutParams(-1, a.dp(44));
+    submitLp.topMargin = a.dp(10);
+    queryCard.addView(submitBtn, submitLp);
 
     if (pending() != null) {
       JSONObject pending = pending();
       LinearLayout p = a.card("待确认查询");
       p.addView(a.text(pending.optString("target") + " · " + pending.optString("type"), 20, true));
-      p.addView(
+      TextView quoteView =
           a.text(
               pending.optString("context_quote") + "\n" + pending.optString("user_requirement"),
               14,
-              false));
-      p.addView(a.button("确认查询", v -> lookup(pending)));
-      p.addView(
-          a.button(
+              false);
+      LinearLayout.LayoutParams quoteLp = new LinearLayout.LayoutParams(-1, -2);
+      quoteLp.topMargin = a.dp(4);
+      quoteLp.bottomMargin = a.dp(10);
+      p.addView(quoteView, quoteLp);
+
+      LinearLayout pendingActions = a.row();
+      pendingActions.setGravity(Gravity.CENTER_VERTICAL);
+      Button confirmBtn = a.primaryButton("确认查询", v -> lookup(pending));
+      pendingActions.addView(confirmBtn, new LinearLayout.LayoutParams(0, a.dp(40), 1));
+
+      Button changeTargetBtn =
+          a.outlineButton(
               "修改目标",
               v -> {
                 draft = pending.optString("target");
                 Library.put(a.session, "pending_lookup", JSONObject.NULL);
                 a.render();
-              }));
+              });
+      LinearLayout.LayoutParams changeLp = new LinearLayout.LayoutParams(0, a.dp(40), 1);
+      changeLp.leftMargin = a.dp(10);
+      pendingActions.addView(changeTargetBtn, changeLp);
+      p.addView(pendingActions);
     }
     addRecentQueryChips();
     renderSessionLists();
@@ -637,7 +684,9 @@ final class QueryUi {
     newBtn.setPadding(a.dp(8), 0, a.dp(8), 0);
     newBtn.setMinHeight(a.dp(32));
     newBtn.setMinimumHeight(a.dp(32));
-    headerRow.addView(newBtn);
+    LinearLayout.LayoutParams newBtnLp = new LinearLayout.LayoutParams(-2, a.dp(32));
+    newBtnLp.leftMargin = a.dp(8);
+    headerRow.addView(newBtn, newBtnLp);
 
     sessionCard.addView(headerRow);
 
@@ -943,7 +992,9 @@ final class QueryUi {
     delBtn.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
     delBtn.setMinHeight(a.dp(32));
     delBtn.setMinimumHeight(a.dp(32));
-    row.addView(delBtn);
+    LinearLayout.LayoutParams delLp = new LinearLayout.LayoutParams(-2, -2);
+    delLp.leftMargin = a.dp(6);
+    row.addView(delBtn, delLp);
 
     parent.addView(row);
     View divider = new View(a);
@@ -1845,8 +1896,8 @@ final class QueryUi {
       if (!value.isEmpty()) card.addView(a.text(value, 14, false));
     }
     if ("supported".equals(status) && !verification.optString("meaning").isEmpty()
-        && verification.optString("attached_meaning_id").isEmpty())
-      card.addView(a.outlineButton("加入可保存释义", v -> {
+        && verification.optString("attached_meaning_id").isEmpty()) {
+      Button attachBtn = a.outlineButton("加入可保存释义", v -> {
         if (a.active != null || a.session == null || a.session.optJSONObject("query_results") != result
             || a.session.optJSONObject("web_verification") != verification
             || !verification.optString("attached_meaning_id").isEmpty()) return;
@@ -1856,13 +1907,20 @@ final class QueryUi {
         Library.put(verification, "attached_meaning_id", meaning.optString("id"));
         saveUpdatedLookup();
         a.render();
-      }));
+      });
+      LinearLayout.LayoutParams attachLp = new LinearLayout.LayoutParams(-1, a.dp(40));
+      attachLp.topMargin = a.dp(8);
+      card.addView(attachBtn, attachLp);
+    }
     JSONArray ids = verification.optJSONArray("source_ids"), sources = verification.optJSONArray("sources");
     if (ids == null || ids.length() == 0 || sources == null) return;
     LinearLayout details = a.column();
     details.setVisibility(View.GONE);
-    card.addView(a.chip("查看引用", false, v -> details.setVisibility(
-        details.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE)));
+    Button viewRefs = a.chip("查看引用", false, v -> details.setVisibility(
+        details.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+    LinearLayout.LayoutParams refLp = new LinearLayout.LayoutParams(-2, a.dp(34));
+    refLp.topMargin = a.dp(8);
+    card.addView(viewRefs, refLp);
     card.addView(details);
     for (int i = 0; i < sources.length(); i++) {
       JSONObject source = sources.optJSONObject(i);
@@ -1899,7 +1957,9 @@ final class QueryUi {
     visible.setChecked(selected);
     visible.setOnCheckedChangeListener(
         (v, checked) -> presentation(meaning, checked, choice, example));
-    choices.addView(visible);
+    LinearLayout.LayoutParams visLp = new LinearLayout.LayoutParams(-2, -2);
+    visLp.rightMargin = a.dp(8);
+    choices.addView(visible, visLp);
     for (String language : new String[] {"zh", "en"}) {
       Button button =
           a.chip(
@@ -1920,15 +1980,17 @@ final class QueryUi {
     examples.setChecked(example);
     examples.setOnCheckedChangeListener(
         (v, checked) -> presentation(meaning, selected, choice, checked));
-    card.addView(examples);
+    LinearLayout.LayoutParams exLp = new LinearLayout.LayoutParams(-2, -2);
+    exLp.topMargin = a.dp(4);
+    card.addView(examples, exLp);
     if (!editingMeanings.contains(id)) {
-      card.addView(
-          a.button(
-              "就地编辑释义",
-              v -> {
-                editingMeanings.add(id);
-                a.render();
-              }));
+      Button editBtn = a.button("就地编辑释义", v -> {
+        editingMeanings.add(id);
+        a.render();
+      });
+      LinearLayout.LayoutParams editLp = new LinearLayout.LayoutParams(-2, -2);
+      editLp.topMargin = a.dp(6);
+      card.addView(editBtn, editLp);
       return;
     }
     String[] keys = {
@@ -1937,7 +1999,10 @@ final class QueryUi {
     String[] names = {"词性", "中文释义", "英文释义", "音标", "例句", "来源", "备注"};
     List<EditText> inputs = new ArrayList<>();
     for (int i = 0; i < keys.length; i++) {
-      card.addView(a.text(names[i], 12, true));
+      TextView nameView = a.text(names[i], 12, true);
+      LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(-2, -2);
+      nameLp.topMargin = a.dp(6);
+      card.addView(nameView, nameLp);
       EditText input = a.input(names[i], meaning.optString(keys[i]), i != 0 && i != 3);
       inputs.add(input);
       card.addView(input);
@@ -1950,7 +2015,7 @@ final class QueryUi {
               editingMeanings.remove(id);
               a.render();
             }));
-    actions.addView(
+    Button saveMeaningBtn =
         a.button(
             "保存本条修改",
             v -> {
@@ -1965,8 +2030,13 @@ final class QueryUi {
               } catch (Exception error) {
                 a.error(error);
               }
-            }));
-    card.addView(actions);
+            });
+    LinearLayout.LayoutParams saveMeaningLp = new LinearLayout.LayoutParams(-2, -2);
+    saveMeaningLp.leftMargin = a.dp(8);
+    actions.addView(saveMeaningBtn, saveMeaningLp);
+    LinearLayout.LayoutParams actionsLp = new LinearLayout.LayoutParams(-1, -2);
+    actionsLp.topMargin = a.dp(8);
+    card.addView(actions, actionsLp);
   }
 
   void deleteConversation(JSONObject s) {
@@ -2014,6 +2084,27 @@ final class QueryUi {
     a.showDialog(b);
   }
 
+  private TextView pillTag(String label, boolean clickable, View.OnClickListener onClick) {
+    TextView v = a.text(label, 11, true);
+    v.setGravity(Gravity.CENTER);
+    v.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
+    v.setBackground(a.shape(a.inputBg, 12, 0));
+    if (clickable) {
+      v.setClickable(true);
+      v.setFocusable(true);
+      android.util.TypedValue outValue = new android.util.TypedValue();
+      if (a.getTheme().resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)) {
+        v.setForeground(a.getDrawable(outValue.resourceId));
+      }
+      v.setOnClickListener(
+          vClick -> {
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+            if (onClick != null) onClick.onClick(vClick);
+          });
+    }
+    return v;
+  }
+
   void result() {
     JSONObject r = a.session == null ? null : a.session.optJSONObject("query_results");
     if (r == null) {
@@ -2022,42 +2113,75 @@ final class QueryUi {
     }
     LinearLayout heading = a.card(null);
     heading.setPadding(a.dp(20), a.dp(16), a.dp(20), a.dp(16));
+
     LinearLayout wordRow = a.row();
+    wordRow.setGravity(Gravity.CENTER_VERTICAL);
     wordRow.addView(
         a.text(r.optString("word", r.optString("content")), 24, true),
         new LinearLayout.LayoutParams(0, -2, 1));
-    TextView type = a.text(r.optString("type").equals("phrase") ? "短语" : "单词", 11, true);
-    type.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
-    type.setBackground(a.shape(a.inputBg, 12, 0));
-    wordRow.addView(type);
-    Button enrich = a.chip("AI 补充", false, v -> supplement());
+
+    LinearLayout badges = a.row();
+    badges.setGravity(Gravity.CENTER_VERTICAL);
+
+    TextView type = pillTag(r.optString("type").equals("phrase") ? "短语" : "单词", false, null);
+    badges.addView(type);
+
+    TextView enrich = pillTag("AI", a.active == null, a.active == null ? v -> supplement() : null);
     enrich.setEnabled(a.active == null);
-    wordRow.addView(enrich);
+    enrich.setAlpha(a.active == null ? 1.0f : 0.45f);
+    LinearLayout.LayoutParams enrichLp = new LinearLayout.LayoutParams(-2, -2);
+    enrichLp.leftMargin = a.dp(6);
+    badges.addView(enrich, enrichLp);
+
+    TextView verify =
+        pillTag(
+            a.active == null ? "联网核对" : "取消请求",
+            true,
+            v -> {
+              if (a.active != null) {
+                a.cancel();
+                a.render();
+              } else verifyOnline(r);
+            });
+    if (a.active != null) {
+      verify.setTextColor(android.graphics.Color.parseColor("#EF4444"));
+    }
+    LinearLayout.LayoutParams verifyLp = new LinearLayout.LayoutParams(-2, -2);
+    verifyLp.leftMargin = a.dp(6);
+    badges.addView(verify, verifyLp);
+
+    LinearLayout.LayoutParams badgesLp = new LinearLayout.LayoutParams(-2, -2);
+    badgesLp.leftMargin = a.dp(8);
+    wordRow.addView(badges, badgesLp);
+    heading.addView(wordRow);
+
+    LinearLayout metaRow = a.row();
+    metaRow.setGravity(Gravity.CENTER_VERTICAL);
+    LinearLayout.LayoutParams metaLp = new LinearLayout.LayoutParams(-1, -2);
+    metaLp.topMargin = a.dp(8);
+    metaRow.setLayoutParams(metaLp);
+
+    boolean dictionary = "ecdict".equals(r.optString("lookup_origin"));
+    boolean personal = r.optBoolean("is_from_local");
+    TextView local =
+        a.text(
+            personal ? "个人笔记" : dictionary ? "内置词库 · ECDICT" : "✦ AI 模型生成", 11, true);
+    local.setTextColor(a.accent);
+    local.setPadding(a.dp(8), a.dp(3), a.dp(8), a.dp(3));
+    local.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 12, 0));
+    metaRow.addView(local);
+
     if (a.library.local(r.optString("word")) != null) {
-      TextView saved = a.text("✓ 已在笔记中", 12, true);
+      TextView saved = a.text("✓ 已在笔记中", 11, true);
       saved.setTextColor(a.accent);
-      saved.setPadding(a.dp(8), a.dp(5), a.dp(8), a.dp(5));
+      saved.setPadding(a.dp(8), a.dp(3), a.dp(8), a.dp(3));
       saved.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 8, a.accent));
       LinearLayout.LayoutParams savedLp = new LinearLayout.LayoutParams(-2, -2);
       savedLp.leftMargin = a.dp(8);
-      wordRow.addView(saved, savedLp);
+      metaRow.addView(saved, savedLp);
     }
-    heading.addView(wordRow);
-    boolean dictionary = "ecdict".equals(r.optString("lookup_origin"));
-    boolean personal = r.optBoolean("is_from_local");
-    if (personal || dictionary) {
-      TextView local = a.text(personal ? "个人笔记" : "内置词库 · ECDICT", 11, true);
-      local.setTextColor(a.accent);
-      local.setPadding(a.dp(8), a.dp(3), a.dp(8), a.dp(3));
-      local.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 12, 0));
-      heading.addView(local, new LinearLayout.LayoutParams(-2, -2));
-    } else {
-      TextView local = a.text("✦ AI 模型生成", 11, true);
-      local.setTextColor(a.accent);
-      local.setPadding(a.dp(8), a.dp(3), a.dp(8), a.dp(3));
-      local.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 12, 0));
-      heading.addView(local, new LinearLayout.LayoutParams(-2, -2));
-    }
+    heading.addView(metaRow);
+
     String phonetic = r.optString("phonetic");
     final String targetWord = r.optString("word", r.optString("content"));
     if (!phonetic.isEmpty() || !targetWord.isEmpty()) {
@@ -2084,12 +2208,12 @@ final class QueryUi {
       phoneticRow.addView(speakerBtn, spLp);
       heading.addView(phoneticRow);
     }
-    if (!r.optString("recognized_text").isEmpty())
-      heading.addView(a.text("✦ AI 识别文字：" + r.optString("recognized_text"), 14, false));
-    heading.addView(a.chip(a.active == null ? "联网核对" : "取消请求", false, v -> {
-      if (a.active != null) { a.cancel(); a.render(); }
-      else verifyOnline(r);
-    }));
+    if (!r.optString("recognized_text").isEmpty()) {
+      TextView recView = a.text("✦ AI 识别文字：" + r.optString("recognized_text"), 14, false);
+      LinearLayout.LayoutParams recLp = new LinearLayout.LayoutParams(-1, -2);
+      recLp.topMargin = a.dp(8);
+      heading.addView(recView, recLp);
+    }
     JSONObject interpretation = r.optJSONObject("dictionary_context");
     String selectedMeaning = interpretation == null ? "" : interpretation.optString("selected_meaning_id");
     if (interpretation != null && !interpretation.optString("explanation").isEmpty())
@@ -2122,12 +2246,31 @@ final class QueryUi {
         LinearLayout.LayoutParams partLp = new LinearLayout.LayoutParams(-2, -2);
         partLp.leftMargin = a.dp(8);
         meaningHeader.addView(part, partLp);
-        if (m.optString("id").equals(selectedMeaning) && !selectedMeaning.isEmpty())
-          meaningHeader.addView(a.text("  当前语境义项", 11, true));
-        else if ("ai".equals(m.optString("lookup_origin")))
-          meaningHeader.addView(a.text("  ✦ AI 补充义项", 11, true));
-        else if (FieldProvenance.hasAnyGenerated(m, "zh_definition", "en_definition", "example"))
-          meaningHeader.addView(a.text("  ✦ AI生成", 11, true));
+        if (m.optString("id").equals(selectedMeaning) && !selectedMeaning.isEmpty()) {
+          TextView badge = a.text("当前语境义项", 11, true);
+          badge.setTextColor(a.accent);
+          badge.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
+          badge.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x14000000, 8, 0));
+          LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(-2, -2);
+          bLp.leftMargin = a.dp(8);
+          meaningHeader.addView(badge, bLp);
+        } else if ("ai".equals(m.optString("lookup_origin"))) {
+          TextView badge = a.text("✦ AI 补充义项", 11, true);
+          badge.setTextColor(a.accent);
+          badge.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
+          badge.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x14000000, 8, 0));
+          LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(-2, -2);
+          bLp.leftMargin = a.dp(8);
+          meaningHeader.addView(badge, bLp);
+        } else if (FieldProvenance.hasAnyGenerated(m, "zh_definition", "en_definition", "example")) {
+          TextView badge = a.text("✦ AI生成", 11, true);
+          badge.setTextColor(a.accent);
+          badge.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
+          badge.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x14000000, 8, 0));
+          LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(-2, -2);
+          bLp.leftMargin = a.dp(8);
+          meaningHeader.addView(badge, bLp);
+        }
         c.addView(meaningHeader);
         if (organizing) addMeaningControls(c, m);
         for (String f : new String[] {"zh_definition", "en_definition"})
@@ -2183,23 +2326,30 @@ final class QueryUi {
     if (!r.optString("raw_explanation").isEmpty())
       a.card("✦ AI 补充说明").addView(a.text(r.optString("raw_explanation"), 15, false));
     LinearLayout actions = a.fixedFooter();
-    actions.addView(
+    Button askAssistantBtn =
         a.button(
             "打开 AI 助手继续提问",
             v -> {
               a.screen = "assistant";
               a.render();
-            }));
-    if (!organizing)
-      actions.addView(
+            });
+    askAssistantBtn.setLayoutParams(new LinearLayout.LayoutParams(-1, a.dp(40)));
+    actions.addView(askAssistantBtn);
+
+    if (!organizing) {
+      Button organizeBtn =
           a.primaryButton(
               "整理笔记",
               v -> {
                 organizing = true;
                 a.render();
-              }));
-    else {
+              });
+      LinearLayout.LayoutParams organizeLp = new LinearLayout.LayoutParams(-1, a.dp(44));
+      organizeLp.topMargin = a.dp(8);
+      actions.addView(organizeBtn, organizeLp);
+    } else {
       LinearLayout organizeHeader = a.row();
+      organizeHeader.setGravity(Gravity.CENTER_VERTICAL);
       organizeHeader.addView(
           a.text("整理模式 · 仅控制笔记显示", 12, true), new LinearLayout.LayoutParams(0, -2, 1));
       organizeHeader.addView(
@@ -2210,14 +2360,20 @@ final class QueryUi {
                 editingMeanings.clear();
                 a.render();
               }));
-      actions.addView(organizeHeader);
+      LinearLayout.LayoutParams orgHeadLp = new LinearLayout.LayoutParams(-1, -2);
+      orgHeadLp.topMargin = a.dp(6);
+      orgHeadLp.bottomMargin = a.dp(6);
+      actions.addView(organizeHeader, orgHeadLp);
+
       LinearLayout organizeActions = a.row();
       organizeActions.addView(
           a.outlineButton("添加到默认笔记", v -> a.notebooks.saveDefault(r)),
           new LinearLayout.LayoutParams(0, a.dp(44), 1));
-      organizeActions.addView(
-          a.primaryButton("选择添加笔记", v -> a.notebooks.saveDialog(r)),
-          new LinearLayout.LayoutParams(0, a.dp(44), 1));
+      Button selectAddBtn =
+          a.primaryButton("选择添加笔记", v -> a.notebooks.saveDialog(r));
+      LinearLayout.LayoutParams selectAddLp = new LinearLayout.LayoutParams(0, a.dp(44), 1);
+      selectAddLp.leftMargin = a.dp(8);
+      organizeActions.addView(selectAddBtn, selectAddLp);
       actions.addView(organizeActions);
     }
   }

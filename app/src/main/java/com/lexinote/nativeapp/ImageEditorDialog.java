@@ -191,7 +191,7 @@ public final class ImageEditorDialog {
         }
       });
       LinearLayout.LayoutParams doneLp = new LinearLayout.LayoutParams(-2, -2);
-      doneLp.leftMargin = dp(activity, 2);
+      doneLp.leftMargin = dp(activity, 8);
       header.addView(doneBtn, doneLp);
 
       root.addView(header);
@@ -447,7 +447,10 @@ public final class ImageEditorDialog {
             SeekBar seekBar = new SeekBar(activity);
             seekBar.setMax(90);
             seekBar.setProgress(editor.getFineAngle() + 45);
-            row2.addView(seekBar, new LinearLayout.LayoutParams(0, -2, 1));
+            LinearLayout.LayoutParams sbLp = new LinearLayout.LayoutParams(0, -2, 1);
+            sbLp.leftMargin = dp(activity, 4);
+            sbLp.rightMargin = dp(activity, 4);
+            row2.addView(seekBar, sbLp);
 
             TextView plusBtn = new TextView(activity);
             plusBtn.setText("+");
@@ -456,6 +459,7 @@ public final class ImageEditorDialog {
             plusBtn.setGravity(Gravity.CENTER);
             plusBtn.setBackground(shape(0xFF334155, 6, 0, 0, activity));
             LinearLayout.LayoutParams plusLp = new LinearLayout.LayoutParams(dp(activity, 34), dp(activity, 30));
+            plusLp.rightMargin = dp(activity, 8);
             row2.addView(plusBtn, plusLp);
 
             TextView angleDegree = new TextView(activity);

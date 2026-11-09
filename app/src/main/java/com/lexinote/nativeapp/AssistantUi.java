@@ -190,8 +190,9 @@ final class AssistantUi {
 
   static AssistantUi show(MainActivity a, QueryUi q) {
     AssistantUi ui = new AssistantUi(a, q);
-    int index = a.root.indexOfChild(a.scroll);
+    int index = a.root.indexOfChild(a.contentContainer != null ? a.contentContainer : a.scroll);
     if (index < 0) index = Math.max(0, a.root.getChildCount() - 1);
+    if (a.contentContainer != null) a.contentContainer.setVisibility(View.GONE);
     a.scroll.setVisibility(View.GONE);
     DrawerSwipeLayout timeline = ui.new DrawerSwipeLayout(a);
     timeline.addView(ui.list, new FrameLayout.LayoutParams(-1, -1));
@@ -258,7 +259,9 @@ final class AssistantUi {
               a.render();
             });
     newBtn.setTextSize(12 * a.scale);
-    panelHeader.addView(newBtn);
+    LinearLayout.LayoutParams newBtnLp = new LinearLayout.LayoutParams(-2, -2);
+    newBtnLp.rightMargin = a.dp(8);
+    panelHeader.addView(newBtn, newBtnLp);
 
     TextView closeIcon = a.text("✕", 18, false);
     closeIcon.setTextColor(a.muted);
@@ -766,8 +769,12 @@ final class AssistantUi {
                 a.render();
               });
       cancelBtn.setTextColor(Color.parseColor("#EF4444"));
-      cancelBtn.setPadding(a.dp(8), 0, a.dp(4), 0);
-      row.addView(cancelBtn);
+      cancelBtn.setTextSize(13 * a.scale);
+      cancelBtn.setPadding(a.dp(12), a.dp(6), a.dp(12), a.dp(6));
+      cancelBtn.setBackground(a.shape(Color.parseColor("#1AEF4444"), 18, Color.parseColor("#40EF4444")));
+      LinearLayout.LayoutParams cancelLp = new LinearLayout.LayoutParams(-2, a.dp(36));
+      cancelLp.leftMargin = a.dp(8);
+      row.addView(cancelBtn, cancelLp);
     } else {
       FrameLayout sendBtn = new FrameLayout(a);
       sendBtn.setContentDescription("发送");
@@ -864,7 +871,8 @@ final class AssistantUi {
 
         if (!content.isEmpty()) {
           TextView copyBtn = a.icon("document-text-outline", 14, a.subtle);
-          copyBtn.setPadding(a.dp(6), a.dp(2), a.dp(2), a.dp(2));
+          copyBtn.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
+          copyBtn.setContentDescription("复制内容");
           copyBtn.setOnClickListener(
               v -> {
                 v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);

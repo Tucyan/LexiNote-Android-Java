@@ -30,6 +30,7 @@ public final class MainActivity extends Activity {
   SecureSettings secure;
   LinearLayout root, body, nav, footer;
   ScrollView scroll;
+  FrameLayout contentContainer;
   Typeface iconTypeface;
   int page = 0;
   String screen = "tabs";
@@ -241,8 +242,14 @@ public final class MainActivity extends Activity {
       root.setPadding(dp(16), dp(60), dp(16), dp(16));
       root.addView(text("恢复本地数据", 22, true));
       root.addView(text("数据读取失败，原文件保留。可以选择有效备份恢复；确认恢复时会额外保留损坏文件副本。\n" + loadFailure, 16, false));
-      root.addView(button("选择 ZIP / JSON 备份恢复", v -> restore()));
-      root.addView(button("退出", v -> finish()));
+      Button restoreBtn = button("选择 ZIP / JSON 备份恢复", v -> restore());
+      LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(-1, dp(44));
+      rLp.topMargin = dp(16);
+      rLp.bottomMargin = dp(10);
+      root.addView(restoreBtn, rLp);
+      Button exitBtn = button("退出", v -> finish());
+      LinearLayout.LayoutParams eLp = new LinearLayout.LayoutParams(-1, dp(44));
+      root.addView(exitBtn, eLp);
       return;
     }
     if (!(screen.equals("tabs") && (page == 2 || page == 3))) {
@@ -259,7 +266,9 @@ public final class MainActivity extends Activity {
     body.setPadding(dp(padding), dp(14), dp(padding), dp(32));
     body.setBackgroundColor(background);
     scroll.addView(body);
-    root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+    contentContainer = new FrameLayout(this);
+    contentContainer.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+    root.addView(contentContainer, new LinearLayout.LayoutParams(-1, 0, 1));
     footer = column();
     footer.setTag("fixed-footer");
     footer.setBackground(shape(card, 0, 0));
@@ -345,10 +354,12 @@ public final class MainActivity extends Activity {
           session != null
               && session.optJSONArray("ai_messages") != null
               && session.optJSONArray("ai_messages").length() > 0);
-      bar.addView(save);
+      LinearLayout.LayoutParams saveLp = new LinearLayout.LayoutParams(-2, -2);
+      saveLp.rightMargin = dp(8);
+      bar.addView(save, saveLp);
 
       TextView drawerBtn = icon("chatbubble-ellipses-outline", 22, foreground);
-      drawerBtn.setPadding(dp(10), dp(4), dp(4), dp(4));
+      drawerBtn.setPadding(dp(6), dp(4), dp(4), dp(4));
       drawerBtn.setContentDescription("会话列表");
       drawerBtn.setOnClickListener(
           v -> {
@@ -357,7 +368,7 @@ public final class MainActivity extends Activity {
       bar.addView(drawerBtn);
     }
     if (screen.equals("tabs") && page == 0) {
-      TextView version = text("v1.3", 11, true);
+      TextView version = text("v1.4", 11, true);
       version.setTextColor(accent);
       version.setPadding(dp(6), dp(3), dp(6), dp(3));
       version.setBackground(shape((accent & 0xFFFFFF) | 0x1A000000, 6, 0));

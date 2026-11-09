@@ -115,7 +115,7 @@ final class SettingsUi {
     Button defaultFieldsBtn = a.button("默认记录显示字段", v -> defaultFields());
     LinearLayout.LayoutParams dfLp = new LinearLayout.LayoutParams(-1, a.dp(40));
     dfLp.topMargin = a.dp(8);
-    dfLp.bottomMargin = a.dp(6);
+    dfLp.bottomMargin = a.dp(8);
     notebook.addView(defaultFieldsBtn, dfLp);
     String defaultId = prefs.optString("default_notebook_id", "");
     JSONObject defaultNote = a.library.find("notebooks", defaultId);
@@ -136,18 +136,18 @@ final class SettingsUi {
             false));
     Button zipBackupBtn = a.button("保存完整 ZIP 备份（含图片）", v -> a.backupZip());
     LinearLayout.LayoutParams zbLp = new LinearLayout.LayoutParams(-1, a.dp(40));
-    zbLp.topMargin = a.dp(6);
-    zbLp.bottomMargin = a.dp(4);
+    zbLp.topMargin = a.dp(10);
+    zbLp.bottomMargin = a.dp(8);
     backup.addView(zipBackupBtn, zbLp);
     Button jsonBackupBtn = a.button(
         "保存全量 JSON 备份",
         v -> a.backupJson());
     LinearLayout.LayoutParams jbLp = new LinearLayout.LayoutParams(-1, a.dp(40));
-    jbLp.bottomMargin = a.dp(4);
+    jbLp.bottomMargin = a.dp(8);
     backup.addView(jsonBackupBtn, jbLp);
     Button restoreBtn = a.button("选择 ZIP / JSON 备份恢复", v -> a.restore());
     LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(-1, a.dp(40));
-    rLp.bottomMargin = a.dp(4);
+    rLp.bottomMargin = a.dp(8);
     backup.addView(restoreBtn, rLp);
     Button rollbackBtn = a.button(
         "回到上次恢复前",
@@ -169,6 +169,7 @@ final class SettingsUi {
           a.styleDestructive(d);
         });
     LinearLayout.LayoutParams rbLp = new LinearLayout.LayoutParams(-1, a.dp(40));
+    rbLp.topMargin = a.dp(6);
     rbLp.bottomMargin = a.dp(4);
     backup.addView(rollbackBtn, rbLp);
     LinearLayout about = a.card("LexiNote · Android Java");

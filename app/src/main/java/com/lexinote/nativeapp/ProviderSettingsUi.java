@@ -1,6 +1,7 @@
 package com.lexinote.nativeapp;
 
 import android.app.AlertDialog;
+import android.graphics.Color;
 import android.text.*;
 import android.text.method.PasswordTransformationMethod;
 import android.view.*;
@@ -300,7 +301,9 @@ final class ProviderSettingsUi {
                 key.setSelection(key.getText().length());
                 ((Button) v).setText(keyVisible ? "隐藏" : "显示");
               });
-      keyRow.addView(reveal, new LinearLayout.LayoutParams(a.dp(64), a.dp(44)));
+      LinearLayout.LayoutParams revLp = new LinearLayout.LayoutParams(a.dp(64), a.dp(44));
+      revLp.leftMargin = a.dp(8);
+      keyRow.addView(reveal, revLp);
       panel.addView(keyRow);
       panel.addView(a.gap(8));
 
@@ -386,8 +389,8 @@ final class ProviderSettingsUi {
       clearKeyLp.bottomMargin = a.dp(8);
       panel.addView(clearKeyBtn, clearKeyLp);
 
-      if (ProviderProfiles.preset(saved.optString("id")) != null)
-        panel.addView(
+      if (ProviderProfiles.preset(saved.optString("id")) != null) {
+        Button restorePresetBtn =
             a.button(
                 "恢复当前预设参数",
                 v -> {
@@ -398,9 +401,12 @@ final class ProviderSettingsUi {
                         status = "已恢复预设草稿，保存后生效；密钥保持独立。";
                         a.render();
                       });
-                }));
-      else
-        panel.addView(
+                });
+        LinearLayout.LayoutParams rpLp = new LinearLayout.LayoutParams(-1, a.dp(40));
+        rpLp.bottomMargin = a.dp(8);
+        panel.addView(restorePresetBtn, rpLp);
+      } else {
+        Button delProviderBtn =
             a.button(
                 "删除当前兼容服务",
                 v -> {
@@ -423,12 +429,21 @@ final class ProviderSettingsUi {
                               });
                   AlertDialog d = a.showDialog(b);
                   a.styleDestructive(d);
-                }));
+                });
+        delProviderBtn.setTextColor(Color.parseColor("#EF4444"));
+        LinearLayout.LayoutParams dpLp = new LinearLayout.LayoutParams(-1, a.dp(40));
+        dpLp.bottomMargin = a.dp(8);
+        panel.addView(delProviderBtn, dpLp);
+      }
     }
   }
 
   void addInput(LinearLayout panel, String hint, String field, String value) {
-    panel.addView(a.text(hint, 12, true));
+    TextView label = a.text(hint, 12, true);
+    LinearLayout.LayoutParams lblLp = new LinearLayout.LayoutParams(-1, -2);
+    lblLp.topMargin = a.dp(8);
+    lblLp.bottomMargin = a.dp(4);
+    panel.addView(label, lblLp);
     EditText input = a.input(hint, value, false);
     input.setSaveEnabled(false);
     input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
