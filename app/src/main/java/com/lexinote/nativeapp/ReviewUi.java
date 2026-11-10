@@ -54,6 +54,7 @@ final class ReviewUi {
   }
 
   final SessionSummary sessionSummary = new SessionSummary();
+  int pendingSlideDirection = 0;
 
   ReviewUi(MainActivity a) {
     this.a = a;
@@ -75,14 +76,19 @@ final class ReviewUi {
   static class SwipableLayout extends LinearLayout {
     private final MainActivity a;
     private float startX, startY;
-    private long startTime;
     private boolean isHorizontalDrag;
+    private final boolean canSwipeLeft;
+    private final boolean canSwipeRight;
     private final Runnable onSwipeLeft;
     private final Runnable onSwipeRight;
+    private boolean isAnimating = false;
 
-    SwipableLayout(MainActivity a, Runnable onSwipeLeft, Runnable onSwipeRight) {
+    SwipableLayout(MainActivity a, boolean canSwipeLeft, boolean canSwipeRight,
+        Runnable onSwipeLeft, Runnable onSwipeRight) {
       super(a);
       this.a = a;
+      this.canSwipeLeft = canSwipeLeft;
+      this.canSwipeRight = canSwipeRight;
       this.onSwipeLeft = onSwipeLeft;
       this.onSwipeRight = onSwipeRight;
       setOrientation(VERTICAL);
@@ -91,17 +97,17 @@ final class ReviewUi {
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
+      if (isAnimating) return true;
       switch (ev.getAction()) {
         case MotionEvent.ACTION_DOWN:
           startX = ev.getX();
           startY = ev.getY();
-          startTime = System.currentTimeMillis();
           isHorizontalDrag = false;
           break;
         case MotionEvent.ACTION_MOVE:
           float dx = ev.getX() - startX;
           float dy = ev.getY() - startY;
-          if (Math.abs(dx) > a.dp(14) && Math.abs(dx) > Math.abs(dy) * 1.3f) {
+          if (Math.abs(dx) > a.dp(10) && Math.abs(dx) > Math.abs(dy) * 1.25f) {
             isHorizontalDrag = true;
             if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
             return true;
@@ -117,39 +123,83 @@ final class ReviewUi {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+      if (isAnimating) return true;
       switch (event.getAction()) {
         case MotionEvent.ACTION_DOWN:
           startX = event.getX();
           startY = event.getY();
-          startTime = System.currentTimeMillis();
           isHorizontalDrag = false;
           return true;
-        case MotionEvent.ACTION_MOVE:
+        case MotionEvent.ACTION_MOVE: {
           float dx = event.getX() - startX;
           float dy = event.getY() - startY;
-          if (Math.abs(dx) > a.dp(14) && Math.abs(dx) > Math.abs(dy) * 1.3f) {
+          if (!isHorizontalDrag && Math.abs(dx) > a.dp(10) && Math.abs(dx) > Math.abs(dy) * 1.25f) {
             isHorizontalDrag = true;
             if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
           }
+          if (isHorizontalDrag) {
+            float effectiveDx = dx;
+            if ((dx < 0 && !canSwipeLeft) || (dx > 0 && !canSwipeRight)) {
+              effectiveDx = dx * 0.28f;
+            }
+            setTranslationX(effectiveDx);
+            float progress = Math.min(1f, Math.abs(effectiveDx) / Math.max(1f, getWidth()));
+            setAlpha(1f - progress * 0.28f);
+          }
           break;
-        case MotionEvent.ACTION_UP:
+        }
+        case MotionEvent.ACTION_UP: {
           if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
           if (isHorizontalDrag) {
             float totalDx = event.getX() - startX;
-            float totalDy = event.getY() - startY;
-            if (Math.abs(totalDx) > a.dp(36) && Math.abs(totalDx) > Math.abs(totalDy)) {
-              if (totalDx < 0 && onSwipeLeft != null) {
-                onSwipeLeft.run();
-                return true;
-              } else if (totalDx > 0 && onSwipeRight != null) {
-                onSwipeRight.run();
-                return true;
-              }
+            float threshold = Math.max(a.dp(50), getWidth() * 0.18f);
+            if (totalDx < -threshold && canSwipeLeft && onSwipeLeft != null) {
+              isAnimating = true;
+              animate()
+                  .translationX(-getWidth() * 0.85f)
+                  .alpha(0.2f)
+                  .setDuration(160)
+                  .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                  .withEndAction(() -> {
+                    setTranslationX(0);
+                    setAlpha(1f);
+                    isAnimating = false;
+                    onSwipeLeft.run();
+                  })
+                  .start();
+              return true;
+            } else if (totalDx > threshold && canSwipeRight && onSwipeRight != null) {
+              isAnimating = true;
+              animate()
+                  .translationX(getWidth() * 0.85f)
+                  .alpha(0.2f)
+                  .setDuration(160)
+                  .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                  .withEndAction(() -> {
+                    setTranslationX(0);
+                    setAlpha(1f);
+                    isAnimating = false;
+                    onSwipeRight.run();
+                  })
+                  .start();
+              return true;
+            } else {
+              isAnimating = true;
+              animate()
+                  .translationX(0f)
+                  .alpha(1f)
+                  .setDuration(180)
+                  .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                  .withEndAction(() -> isAnimating = false)
+                  .start();
+              return true;
             }
           }
           break;
+        }
         case MotionEvent.ACTION_CANCEL:
           if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
+          animate().translationX(0f).alpha(1f).setDuration(180).start();
           break;
       }
       return true;
@@ -440,6 +490,7 @@ final class ReviewUi {
       Button prevBtn = a.chip("‹", false, v -> {
         int prev = (currentIdx - 1 + totalActive) % totalActive;
         activePlanId = sortedActivePlans.get(prev).plan.optString("id");
+        pendingSlideDirection = -1;
         a.render();
       });
       prevBtn.setTextSize(14 * a.scale);
@@ -448,13 +499,18 @@ final class ReviewUi {
 
       TextView dotTv = a.text(renderDots(currentIdx, totalActive) + "  " + (currentIdx + 1) + " / " + totalActive + " · 左右滑动切换", 11, true);
       dotTv.setTextColor(a.accent);
+      dotTv.setBackground(a.shape(a.inputBg, 12, a.border));
+      dotTv.setPadding(a.dp(10), a.dp(4), a.dp(10), a.dp(4));
       dotTv.setGravity(Gravity.CENTER);
       LinearLayout.LayoutParams dtLp = new LinearLayout.LayoutParams(0, -2, 1);
+      dtLp.leftMargin = a.dp(8);
+      dtLp.rightMargin = a.dp(8);
       pagerRow.addView(dotTv, dtLp);
 
       Button nextBtn = a.chip("›", false, v -> {
         int next = (currentIdx + 1) % totalActive;
         activePlanId = sortedActivePlans.get(next).plan.optString("id");
+        pendingSlideDirection = 1;
         a.render();
       });
       nextBtn.setTextSize(14 * a.scale);
@@ -491,8 +547,10 @@ final class ReviewUi {
     }
 
     Button addPlanBtn = a.chip("+ 新建", false, v -> showCreatePlanModal());
-    addPlanBtn.setLayoutParams(new LinearLayout.LayoutParams(-2, a.dp(34)));
-    addPlanBtn.setPadding(a.dp(10), 0, a.dp(10), 0);
+    LinearLayout.LayoutParams abLp = new LinearLayout.LayoutParams(-2, a.dp(36));
+    abLp.rightMargin = a.dp(8);
+    addPlanBtn.setLayoutParams(abLp);
+    addPlanBtn.setPadding(a.dp(12), 0, a.dp(12), 0);
     switcherRow.addView(addPlanBtn);
 
     HorizontalScrollView switcherScroll = new HorizontalScrollView(a);
@@ -500,12 +558,25 @@ final class ReviewUi {
     switcherScroll.addView(switcherRow);
     header.addView(switcherScroll);
 
+    // Auto-center active pill in switcher scroll
+    switcherScroll.post(() -> {
+      if (currentIdx >= 0 && currentIdx < switcherRow.getChildCount()) {
+        View selectedChild = switcherRow.getChildAt(currentIdx);
+        if (selectedChild != null) {
+          int scrollX = selectedChild.getLeft() - (switcherScroll.getWidth() - selectedChild.getWidth()) / 2;
+          switcherScroll.smoothScrollTo(Math.max(0, scrollX), 0);
+        }
+      }
+    });
+
     // 2. Swipable Container wrapping Plan details, Today's task, and 7-day stats
     SwipableLayout swipeContainer = new SwipableLayout(a,
+        totalActive > 1, totalActive > 1,
         () -> {
           if (totalActive > 1) {
             int next = (currentIdx + 1) % totalActive;
             activePlanId = sortedActivePlans.get(next).plan.optString("id");
+            pendingSlideDirection = 1;
             a.render();
           }
         },
@@ -513,9 +584,22 @@ final class ReviewUi {
           if (totalActive > 1) {
             int prev = (currentIdx - 1 + totalActive) % totalActive;
             activePlanId = sortedActivePlans.get(prev).plan.optString("id");
+            pendingSlideDirection = -1;
             a.render();
           }
         });
+
+    if (pendingSlideDirection != 0) {
+      swipeContainer.setTranslationX(pendingSlideDirection * a.dp(60));
+      swipeContainer.setAlpha(0.35f);
+      swipeContainer.animate()
+          .translationX(0)
+          .alpha(1f)
+          .setDuration(220)
+          .setInterpolator(new android.view.animation.DecelerateInterpolator())
+          .start();
+      pendingSlideDirection = 0;
+    }
 
     // Plan Details Box
     LinearLayout planDetailsBox = createCardLayout(null);
@@ -561,16 +645,6 @@ final class ReviewUi {
 
     View gapChip1 = new View(a);
     pTitleRow.addView(gapChip1, new LinearLayout.LayoutParams(a.dp(6), 1));
-
-    Button managePlanBtn = a.chip("管理", false, v -> {
-      phase = "manage";
-      a.render();
-    });
-    managePlanBtn.setTextSize(11 * a.scale);
-    pTitleRow.addView(managePlanBtn);
-
-    View gapChip2 = new View(a);
-    pTitleRow.addView(gapChip2, new LinearLayout.LayoutParams(a.dp(6), 1));
 
     Button archivePlanBtn = a.chip("归档", false, v -> confirmArchivePlan(activePlanId));
     archivePlanBtn.setTextSize(11 * a.scale);
@@ -738,6 +812,8 @@ final class ReviewUi {
       ProgressBar pb = new ProgressBar(a, null, android.R.attr.progressBarStyleHorizontal);
       pb.setMax(totalTarget);
       pb.setProgress(completed);
+      pb.setProgressTintList(android.content.res.ColorStateList.valueOf(a.accent));
+      pb.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(a.border));
       pbRow.addView(pb, new LinearLayout.LayoutParams(0, a.dp(6), 1));
 
       TextView pctTv = a.text("  " + completed + " / " + totalTarget + " (" + pct + "%)", 11, true);
@@ -1854,11 +1930,13 @@ final class ReviewUi {
 
   Button scopePill(String label, boolean selected, Runnable action) {
     Button button = a.button(label, v -> action.run());
-    button.setTextSize(12.5f * a.scale);
+    button.setTextSize(12f * a.scale);
     button.setTextColor(selected ? Color.WHITE : a.foreground);
     button.setPadding(a.dp(14), 0, a.dp(14), 0);
-    button.setBackground(a.shape(selected ? a.accent : a.inputBg, 20, selected ? a.accent : a.border));
-    button.setLayoutParams(new LinearLayout.LayoutParams(-2, a.dp(38)));
+    button.setBackground(a.shape(selected ? a.accent : a.inputBg, 18, selected ? a.accent : a.border));
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, a.dp(36));
+    lp.rightMargin = a.dp(8);
+    button.setLayoutParams(lp);
     return button;
   }
 

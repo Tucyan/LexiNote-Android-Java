@@ -187,6 +187,27 @@ final class FastScrollIndexBar extends View {
         if (alphabetTargetIndices[hashIdx] == -1) alphabetTargetIndices[hashIdx] = r;
       }
     }
+
+    // Populate fallback targets so touching ANY letter smoothly navigates to the nearest word
+    for (int i = 0; i < alphabetItems.length; i++) {
+      if (alphabetTargetIndices[i] == -1) {
+        for (int j = i + 1; j < alphabetItems.length; j++) {
+          if (alphabetTargetIndices[j] != -1) {
+            alphabetTargetIndices[i] = alphabetTargetIndices[j];
+            break;
+          }
+        }
+        if (alphabetTargetIndices[i] == -1) {
+          for (int j = i - 1; j >= 0; j--) {
+            if (alphabetTargetIndices[j] != -1) {
+              alphabetTargetIndices[i] = alphabetTargetIndices[j];
+              break;
+            }
+          }
+        }
+        if (alphabetTargetIndices[i] == -1) alphabetTargetIndices[i] = 0;
+      }
+    }
   }
 
   private void initTimeline() {
@@ -198,14 +219,27 @@ final class FastScrollIndexBar extends View {
       String key = "其他";
       String shortLabel = "—";
       String fullLabel = "未知时间";
-      if (dateStr.length() >= 7) {
+      if (dateStr.length() >= 10) {
+        String ymd = dateStr.substring(0, 10);
+        key = ymd;
+        try {
+          String[] parts = ymd.split("-");
+          if (parts.length >= 3) {
+            shortLabel = parts[1] + "." + parts[2];
+            fullLabel = parts[0] + "年" + Integer.parseInt(parts[1]) + "月" + Integer.parseInt(parts[2]) + "日";
+          }
+        } catch (Exception ignored) {
+          shortLabel = ymd;
+          fullLabel = ymd;
+        }
+      } else if (dateStr.length() >= 7) {
         String ym = dateStr.substring(0, 7);
         key = ym;
         try {
           String[] parts = ym.split("-");
           if (parts.length >= 2) {
-            shortLabel = "'" + parts[0].substring(Math.max(0, parts[0].length() - 2)) + "." + parts[1];
-            fullLabel = parts[0] + "年" + parts[1] + "月";
+            shortLabel = parts[0].substring(Math.max(0, parts[0].length() - 2)) + "." + parts[1];
+            fullLabel = parts[0] + "年" + Integer.parseInt(parts[1]) + "月";
           }
         } catch (Exception ignored) {
           shortLabel = ym;
@@ -255,18 +289,23 @@ final class FastScrollIndexBar extends View {
     int count = alphabetItems.length;
     if (count == 0) return;
     float itemH = (float) h / count;
-    textPaint.setTextSize(Math.min(a.dp(10), itemH * 0.75f));
+    textPaint.setTextSize(Math.min(a.dp(10.5f), itemH * 0.78f));
 
     for (int i = 0; i < count; i++) {
       float cy = (i + 0.5f) * itemH;
       if (i == activeIndex) {
         accentPaint.setColor(a.accent);
-        canvas.drawCircle(w / 2f, cy, Math.min(w / 2f - a.dp(2), itemH / 2f - a.dp(1)), accentPaint);
+        float circleR = Math.min(w / 2f - a.dp(1.5f), itemH / 2f);
+        canvas.drawCircle(w / 2f, cy, circleR, accentPaint);
         textPaint.setColor(Color.WHITE);
+        textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
       } else if (alphabetItemExists[i]) {
-        textPaint.setColor(a.isDark ? 0xFFCBD5E1 : 0xFF475569);
+        textPaint.setColor(a.isDark ? 0xFFFFFFFF : 0xFF1E293B);
+        textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
       } else {
-        textPaint.setColor(a.isDark ? 0x3364748B : 0x3394A3B8);
+        // Clearly visible in solid medium slate gray (never ghosted or invisible)
+        textPaint.setColor(a.isDark ? 0xFF94A3B8 : 0xFF64748B);
+        textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.NORMAL));
       }
 
       String letter = alphabetItems[i];
@@ -282,7 +321,8 @@ final class FastScrollIndexBar extends View {
 
     int count = timelineSections.size();
     if (count > 0) {
-      textPaint.setTextSize(a.dp(8.5f));
+      textPaint.setTextSize(a.dp(8f));
+      float lastDrawnY = -100f;
       for (int i = 0; i < count; i++) {
         TimelineSection sec = timelineSections.get(i);
         float ratio = (float) sec.startIndex / Math.max(1, rows.size() - 1);
@@ -292,10 +332,11 @@ final class FastScrollIndexBar extends View {
         thumbPaint.setColor(a.border);
         canvas.drawCircle(cx, cy, a.dp(2.5f), thumbPaint);
 
-        if (count <= 8 || i % Math.max(1, count / 7) == 0 || i == count - 1) {
+        if (cy - lastDrawnY > a.dp(20) || i == count - 1) {
           textPaint.setColor(a.isDark ? 0xFF94A3B8 : 0xFF64748B);
           textPaint.getTextBounds(sec.displayLabel, 0, sec.displayLabel.length(), bounds);
           canvas.drawText(sec.displayLabel, cx, cy - a.dp(4), textPaint);
+          lastDrawnY = cy;
         }
       }
     }
@@ -382,17 +423,28 @@ final class FastScrollIndexBar extends View {
       invalidate();
 
       int target = Math.max(0, Math.min(rows.size() - 1, Math.round(ratio * (rows.size() - 1))));
-      TimelineSection matchSec = null;
-      for (int i = timelineSections.size() - 1; i >= 0; i--) {
-        TimelineSection s = timelineSections.get(i);
-        if (target >= s.startIndex) {
-          matchSec = s;
-          break;
+      JSONObject targetItem = rows.get(target);
+      String dateStr = targetItem.optString("created_at", targetItem.optString("updated_at", ""));
+      String main = "未知时间";
+      if (dateStr.length() >= 10) {
+        try {
+          String[] parts = dateStr.substring(0, 10).split("-");
+          main = parts[0] + "年" + Integer.parseInt(parts[1]) + "月" + Integer.parseInt(parts[2]) + "日";
+        } catch (Exception e) {
+          main = dateStr.substring(0, 10);
+        }
+      } else {
+        for (int i = timelineSections.size() - 1; i >= 0; i--) {
+          TimelineSection s = timelineSections.get(i);
+          if (target >= s.startIndex) {
+            main = s.fullLabel;
+            break;
+          }
         }
       }
 
-      String main = matchSec != null ? matchSec.fullLabel : "时间节点";
-      String sub = "第 " + (target + 1) + " / " + rows.size() + " 词";
+      String word = targetItem.optString("content", "");
+      String sub = (!word.isEmpty() ? word + " · " : "") + "第 " + (target + 1) + " / " + rows.size() + " 词";
       showTimelineBubble(main, sub, clampedY);
 
       if (listener != null) {
@@ -420,13 +472,13 @@ final class FastScrollIndexBar extends View {
     bubbleView.setVisibility(View.VISIBLE);
     bubbleView.setAlpha(1f);
 
-    bubbleView.setBackground(a.shape(Color.parseColor("#EE1E293B"), 26, 0));
+    bubbleView.setBackground(a.shape(Color.parseColor("#EE1E293B"), 24, 0));
     bubbleView.setPadding(a.dp(16), a.dp(8), a.dp(16), a.dp(8));
     bubbleMainText.setText(letter);
     bubbleMainText.setTextSize(24 * a.scale);
     bubbleSubText.setVisibility(View.GONE);
 
-    updateBubblePosition(touchY, a.dp(52));
+    updateBubblePosition(touchY, a.dp(48));
   }
 
   private void showTimelineBubble(String main, String sub, float touchY) {
@@ -434,14 +486,14 @@ final class FastScrollIndexBar extends View {
     bubbleView.setVisibility(View.VISIBLE);
     bubbleView.setAlpha(1f);
 
-    bubbleView.setBackground(a.shape(Color.parseColor("#EE1E293B"), 10, 0));
-    bubbleView.setPadding(a.dp(12), a.dp(6), a.dp(12), a.dp(6));
+    bubbleView.setBackground(a.shape(Color.parseColor("#EE1E293B"), 12, 0));
+    bubbleView.setPadding(a.dp(14), a.dp(8), a.dp(14), a.dp(8));
     bubbleMainText.setText(main);
-    bubbleMainText.setTextSize(13 * a.scale);
+    bubbleMainText.setTextSize(14 * a.scale);
     bubbleSubText.setVisibility(View.VISIBLE);
     bubbleSubText.setText(sub);
 
-    updateBubblePosition(touchY, a.dp(44));
+    updateBubblePosition(touchY, a.dp(52));
   }
 
   private void updateBubblePosition(float touchY, int bubbleApproxHeight) {

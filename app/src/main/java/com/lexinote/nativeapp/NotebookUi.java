@@ -51,7 +51,6 @@ final class NotebookUi {
     count += selectedTags.size();
     if (!"全部".equals(statusFilter)) count++;
     if (!"全部".equals(featureFilter)) count++;
-    if (!"默认".equals(sortOrder)) count++;
     return count;
   }
 
@@ -60,7 +59,6 @@ final class NotebookUi {
     selectedTags.clear();
     statusFilter = "全部";
     featureFilter = "全部";
-    sortOrder = "默认";
   }
 
   boolean hasAnnotations(JSONObject v) {
@@ -854,16 +852,16 @@ final class NotebookUi {
     fsLp.rightMargin = a.dp(6);
     filterBar.addView(filterSheetBtn, fsLp);
 
-    // 排序按钮 (紧邻筛选右侧)
-    Button sortBtn = a.chip("⇅ " + sortOrderDisplay() + " ▾", !"默认".equals(sortOrder), v -> showSortDialog(controls));
+    // 排序按钮 (从筛选中独立，点击展开下拉菜单)
+    Button sortBtn = a.chip("⇅ " + sortOrderDisplay() + " ▾", !"默认".equals(sortOrder), v -> showSortMenu(v));
     sortBtn.setTextSize(11 * a.scale);
     sortBtn.setPadding(a.dp(8), 0, a.dp(8), 0);
     LinearLayout.LayoutParams sortLp = new LinearLayout.LayoutParams(-2, a.dp(30));
     sortLp.rightMargin = a.dp(6);
     filterBar.addView(sortBtn, sortLp);
 
-    // 释义项按钮 (紧邻排序右侧)
-    Button defBtn = a.chip("👁 " + defModeDisplay() + " ▾", !"zh".equals(definitionMode), v -> showDefinitionModeDialog(controls));
+    // 释义项按钮 (点击展开下拉菜单)
+    Button defBtn = a.chip("👁 " + defModeDisplay() + " ▾", !"zh".equals(definitionMode), v -> showDefinitionModeMenu(v));
     defBtn.setTextSize(11 * a.scale);
     defBtn.setPadding(a.dp(8), 0, a.dp(8), 0);
     LinearLayout.LayoutParams defLp = new LinearLayout.LayoutParams(-2, a.dp(30));
@@ -916,14 +914,6 @@ final class NotebookUi {
     }
     if (!"全部".equals(featureFilter)) {
       Button c = a.chip("特征: " + featureFilter + " ✕", true, v -> { featureFilter = "全部"; a.render(); });
-      c.setTextSize(10 * a.scale);
-      c.setPadding(a.dp(6), 0, a.dp(6), 0);
-      LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, a.dp(26));
-      lp.rightMargin = a.dp(4);
-      activeChips.addView(c, lp);
-    }
-    if (!"默认".equals(sortOrder)) {
-      Button c = a.chip("排序: " + sortOrderDisplay() + " ✕", true, v -> { sortOrder = "默认"; a.render(); });
       c.setTextSize(10 * a.scale);
       c.setPadding(a.dp(6), 0, a.dp(6), 0);
       LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, a.dp(26));
@@ -1210,60 +1200,63 @@ final class NotebookUi {
     }
   }
 
-  void showSortDialog(LinearLayout controls) {
+  void showSortMenu(View anchor) {
+    PopupMenu popup = new PopupMenu(a, anchor);
+    Menu menu = popup.getMenu();
     String[] items = new String[] {
-      "默认排序 (笔记原有顺序)",
-      "按时间降序 (最新添加)",
-      "按时间升序 (最早添加)",
+      "默认排序 (原有顺序)",
+      "按时间降序 (最新)",
+      "按时间升序 (最早)",
       "按字母升序 (A - Z)",
       "按字母降序 (Z - A)",
-      "随机乱序 (打乱背词)",
-      "生词优先 (待复习在先)"
+      "生词优先 (待学在先)",
+      "随机乱序"
     };
-    final String[] keys = new String[] {"默认", "最新", "最早", "A-Z", "Z-A", "随机", "生词优先"};
-    int cur = 0;
+    final String[] keys = new String[] {"默认", "最新", "最早", "A-Z", "Z-A", "生词优先", "随机"};
     for (int i = 0; i < keys.length; i++) {
-      if (keys[i].equals(sortOrder)) { cur = i; break; }
+      String prefix = keys[i].equals(sortOrder) ? "✓  " : "    ";
+      menu.add(0, i, i, prefix + items[i]);
     }
-    AlertDialog.Builder builder = new AlertDialog.Builder(a)
-        .setTitle("选择排序方式")
-        .setSingleChoiceItems(items, cur, (dialog, which) -> {
-          sortOrder = keys[which];
-          dialog.dismiss();
-          a.render();
-        })
-        .setNegativeButton("取消", null);
-    a.showDialog(builder);
+    popup.setOnMenuItemClickListener(item -> {
+      int id = item.getItemId();
+      if (id >= 0 && id < keys.length) {
+        sortOrder = keys[id];
+        a.render();
+      }
+      return true;
+    });
+    popup.show();
   }
 
-  void showDefinitionModeDialog(LinearLayout controls) {
+  void showDefinitionModeMenu(View anchor) {
+    PopupMenu popup = new PopupMenu(a, anchor);
+    Menu menu = popup.getMenu();
     String[] items = new String[] {
       "中文释义 (中文优先)",
       "英文释义 (英文优先)",
       "隐藏释义 (自测背词)"
     };
     final String[] keys = new String[] {"zh", "en", "hidden"};
-    int cur = 0;
     for (int i = 0; i < keys.length; i++) {
-      if (keys[i].equals(definitionMode)) { cur = i; break; }
+      String prefix = keys[i].equals(definitionMode) ? "✓  " : "    ";
+      menu.add(0, i, i, prefix + items[i]);
     }
-    AlertDialog.Builder builder = new AlertDialog.Builder(a)
-        .setTitle("释义显示模式")
-        .setSingleChoiceItems(items, cur, (dialog, which) -> {
-          definitionMode = keys[which];
-          revealedVocabularyIds.clear();
-          dialog.dismiss();
-          a.render();
-        })
-        .setNegativeButton("取消", null);
-    a.showDialog(builder);
+    popup.setOnMenuItemClickListener(item -> {
+      int id = item.getItemId();
+      if (id >= 0 && id < keys.length) {
+        definitionMode = keys[id];
+        revealedVocabularyIds.clear();
+        a.render();
+      }
+      return true;
+    });
+    popup.show();
   }
 
   void showFilterSheet() {
     final String[] tempType = {typeFilter};
     final String[] tempStatus = {statusFilter};
     final String[] tempFeature = {featureFilter};
-    final String[] tempSort = {sortOrder};
     final LinkedHashSet<String> tempTags = new LinkedHashSet<>(selectedTags);
 
     ScrollView scroll = new ScrollView(a);
@@ -1279,7 +1272,7 @@ final class NotebookUi {
     LinearLayout titleRow = a.row();
     titleRow.setGravity(Gravity.CENTER_VERTICAL);
     titleRow.addView(a.icon("funnel-outline", 20, a.accent));
-    TextView titleTv = a.text(" 高级筛选与排序", 18, true);
+    TextView titleTv = a.text(" 词汇筛选", 18, true);
     titleRow.addView(titleTv, new LinearLayout.LayoutParams(0, -2, 1));
 
     Button resetBtn = a.chip("重置", false, null);
@@ -1375,36 +1368,7 @@ final class NotebookUi {
     }
     sheet.addView(featureRow);
 
-    // 4. 排序规则
-    sheet.addView(a.text("排序规则", 13, true));
-    HorizontalScrollView sortScroll = new HorizontalScrollView(a);
-    sortScroll.setHorizontalScrollBarEnabled(false);
-    LinearLayout sortRow = a.row();
-    sortRow.setPadding(0, a.dp(6), 0, a.dp(10));
-    List<Button> sortChips = new ArrayList<>();
-    for (String opt : new String[] {"默认", "最新", "最早", "A-Z", "Z-A", "随机", "生词优先"}) {
-      String label = "默认".equals(opt) ? "默认排序" : ("最新".equals(opt) ? "最新添加" : ("最早".equals(opt) ? "最早添加" : ("A-Z".equals(opt) ? "字母 A-Z" : ("Z-A".equals(opt) ? "字母 Z-A" : ("随机".equals(opt) ? "随机乱序" : "生词优先")))));
-      Button chip = a.chip(label, tempSort[0].equals(opt), null);
-      chip.setTag(opt);
-      chip.setTextSize(12 * a.scale);
-      chip.setOnClickListener(v -> {
-        tempSort[0] = opt;
-        for (Button b : sortChips) {
-          boolean sel = opt.equals(b.getTag());
-          b.setTextColor(sel ? Color.WHITE : a.foreground);
-          b.setBackground(a.shape(sel ? a.accent : a.inputBg, 16, sel ? a.accent : a.border));
-        }
-        updateApplyCount.run();
-      });
-      sortChips.add(chip);
-      LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, a.dp(32));
-      lp.rightMargin = a.dp(6);
-      sortRow.addView(chip, lp);
-    }
-    sortScroll.addView(sortRow);
-    sheet.addView(sortScroll);
-
-    // 5. 标签分类 (按当前笔记本上下文动态统计 + 频次降序 + 流式自适应多选)
+    // 4. 标签分类 (按当前笔记本上下文动态统计 + 频次降序 + 流式自适应多选)
     JSONObject currentNb = (selected == null || "nb_global_root".equals(selected))
         ? null : a.library.find("notebooks", selected);
     JSONArray currentRefs = currentNb == null ? null : currentNb.optJSONArray("vocabulary_ids");
@@ -1548,7 +1512,6 @@ final class NotebookUi {
       tempType[0] = "全部";
       tempStatus[0] = "全部";
       tempFeature[0] = "全部";
-      tempSort[0] = "默认";
       tempTags.clear();
       tagSearch.setText("");
       for (Button b : typeChips) {
@@ -1563,11 +1526,6 @@ final class NotebookUi {
       }
       for (Button b : featureChips) {
         boolean sel = "全部".equals(b.getText().toString());
-        b.setTextColor(sel ? Color.WHITE : a.foreground);
-        b.setBackground(a.shape(sel ? a.accent : a.inputBg, 16, sel ? a.accent : a.border));
-      }
-      for (Button b : sortChips) {
-        boolean sel = "默认".equals(b.getTag());
         b.setTextColor(sel ? Color.WHITE : a.foreground);
         b.setBackground(a.shape(sel ? a.accent : a.inputBg, 16, sel ? a.accent : a.border));
       }
@@ -1592,7 +1550,6 @@ final class NotebookUi {
       typeFilter = tempType[0];
       statusFilter = tempStatus[0];
       featureFilter = tempFeature[0];
-      sortOrder = tempSort[0];
       selectedTags.clear();
       selectedTags.addAll(tempTags);
       dialog.dismiss();
