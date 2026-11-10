@@ -211,4 +211,39 @@ public class BackupArchiveTest {
     assertEquals(120, library.array("vocabularies").length());
     assertEquals(8, library.array("notebooks").length());
   }
+
+  @Test
+  public void normalUsageWithPlansZipFixtureImportsSuccessfullyInNewVersion() throws Exception {
+    java.io.File zipFile = new java.io.File("docs/fixtures/normal-usage/lexinote-normal-usage-with-plans-20261028.zip");
+    if (!zipFile.exists()) zipFile = new java.io.File("../docs/fixtures/normal-usage/lexinote-normal-usage-with-plans-20261028.zip");
+    assertTrue("Zip with plans fixture exists", zipFile.exists());
+    byte[] bytes = java.nio.file.Files.readAllBytes(zipFile.toPath());
+    BackupArchive.Prepared prepared = BackupArchive.decode(bytes);
+    assertNotNull(prepared);
+    assertNotNull(prepared.backup);
+    Library library = new Library(prepared.backup);
+    assertEquals(120, library.array("vocabularies").length());
+    assertEquals(8, library.array("notebooks").length());
+    assertEquals(10, library.array("recent_queries").length());
+    assertEquals(13, library.array("conversations").length());
+    assertNotNull(prepared.backup.optJSONObject("review"));
+    assertEquals(4, prepared.backup.getJSONObject("review").getJSONArray("plans").length());
+    assertEquals(4, library.reviewPlans().list(false).length());
+  }
+
+  @Test
+  public void normalUsageWithPlansJsonFixtureImportsSuccessfullyInNewVersion() throws Exception {
+    java.io.File jsonFile = new java.io.File("docs/fixtures/normal-usage/lexinote-normal-usage-with-plans-20261028.json");
+    if (!jsonFile.exists()) jsonFile = new java.io.File("../docs/fixtures/normal-usage/lexinote-normal-usage-with-plans-20261028.json");
+    assertTrue("Json with plans fixture exists", jsonFile.exists());
+    byte[] bytes = java.nio.file.Files.readAllBytes(jsonFile.toPath());
+    BackupArchive.Prepared prepared = BackupArchive.decode(bytes);
+    assertNotNull(prepared);
+    assertNotNull(prepared.backup);
+    Library library = new Library(prepared.backup);
+    assertEquals(120, library.array("vocabularies").length());
+    assertEquals(8, library.array("notebooks").length());
+    assertNotNull(prepared.backup.optJSONObject("review"));
+    assertEquals(4, prepared.backup.getJSONObject("review").getJSONArray("plans").length());
+  }
 }
