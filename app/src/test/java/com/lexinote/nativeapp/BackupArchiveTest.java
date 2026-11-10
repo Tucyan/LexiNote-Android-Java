@@ -181,4 +181,34 @@ public class BackupArchiveTest {
     } catch (IllegalArgumentException expected) {
     }
   }
+
+  @Test
+  public void normalUsageZipFixtureImportsSuccessfullyInNewVersion() throws Exception {
+    java.io.File zipFile = new java.io.File("docs/fixtures/normal-usage/lexinote-normal-usage-20261028.zip");
+    if (!zipFile.exists()) zipFile = new java.io.File("../docs/fixtures/normal-usage/lexinote-normal-usage-20261028.zip");
+    assertTrue("Zip fixture exists", zipFile.exists());
+    byte[] bytes = java.nio.file.Files.readAllBytes(zipFile.toPath());
+    BackupArchive.Prepared prepared = BackupArchive.decode(bytes);
+    assertNotNull(prepared);
+    assertNotNull(prepared.backup);
+    Library library = new Library(prepared.backup);
+    assertEquals(120, library.array("vocabularies").length());
+    assertEquals(8, library.array("notebooks").length());
+    assertEquals(10, library.array("recent_queries").length());
+    assertEquals(13, library.array("conversations").length());
+  }
+
+  @Test
+  public void normalUsageJsonFixtureImportsSuccessfullyInNewVersion() throws Exception {
+    java.io.File jsonFile = new java.io.File("docs/fixtures/normal-usage/lexinote-normal-usage-20261028.json");
+    if (!jsonFile.exists()) jsonFile = new java.io.File("../docs/fixtures/normal-usage/lexinote-normal-usage-20261028.json");
+    assertTrue("Json fixture exists", jsonFile.exists());
+    byte[] bytes = java.nio.file.Files.readAllBytes(jsonFile.toPath());
+    BackupArchive.Prepared prepared = BackupArchive.decode(bytes);
+    assertNotNull(prepared);
+    assertNotNull(prepared.backup);
+    Library library = new Library(prepared.backup);
+    assertEquals(120, library.array("vocabularies").length());
+    assertEquals(8, library.array("notebooks").length());
+  }
 }
