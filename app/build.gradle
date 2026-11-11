@@ -7,8 +7,8 @@ android {
         applicationId 'com.lexinote.nativeapp'
         minSdk 26
         targetSdk 36
-        versionCode 2
-        versionName '1.4.0-native'
+        versionCode 3
+        versionName '1.5.0-native'
         testInstrumentationRunner providers.gradleProperty('deviceRunner').getOrElse('com.lexinote.nativeapp.SmokeInstrumentation')
         ndk {
             abiFilters 'arm64-v8a', 'x86_64'

@@ -75,7 +75,7 @@ final class ReviewUi {
 
   static class SwipableLayout extends LinearLayout {
     private final MainActivity a;
-    private float startX, startY;
+    private float startRawX, startRawY;
     private boolean isHorizontalDrag;
     private final boolean canSwipeLeft;
     private final boolean canSwipeRight;
@@ -100,19 +100,20 @@ final class ReviewUi {
       if (isAnimating) return true;
       switch (ev.getAction()) {
         case MotionEvent.ACTION_DOWN:
-          startX = ev.getX();
-          startY = ev.getY();
+          startRawX = ev.getRawX();
+          startRawY = ev.getRawY();
           isHorizontalDrag = false;
           break;
-        case MotionEvent.ACTION_MOVE:
-          float dx = ev.getX() - startX;
-          float dy = ev.getY() - startY;
+        case MotionEvent.ACTION_MOVE: {
+          float dx = ev.getRawX() - startRawX;
+          float dy = ev.getRawY() - startRawY;
           if (Math.abs(dx) > a.dp(10) && Math.abs(dx) > Math.abs(dy) * 1.25f) {
             isHorizontalDrag = true;
             if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
             return true;
           }
           break;
+        }
         case MotionEvent.ACTION_UP:
         case MotionEvent.ACTION_CANCEL:
           if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
@@ -126,13 +127,13 @@ final class ReviewUi {
       if (isAnimating) return true;
       switch (event.getAction()) {
         case MotionEvent.ACTION_DOWN:
-          startX = event.getX();
-          startY = event.getY();
+          startRawX = event.getRawX();
+          startRawY = event.getRawY();
           isHorizontalDrag = false;
           return true;
         case MotionEvent.ACTION_MOVE: {
-          float dx = event.getX() - startX;
-          float dy = event.getY() - startY;
+          float dx = event.getRawX() - startRawX;
+          float dy = event.getRawY() - startRawY;
           if (!isHorizontalDrag && Math.abs(dx) > a.dp(10) && Math.abs(dx) > Math.abs(dy) * 1.25f) {
             isHorizontalDrag = true;
             if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
@@ -140,7 +141,7 @@ final class ReviewUi {
           if (isHorizontalDrag) {
             float effectiveDx = dx;
             if ((dx < 0 && !canSwipeLeft) || (dx > 0 && !canSwipeRight)) {
-              effectiveDx = dx * 0.28f;
+              effectiveDx = dx * 0.25f;
             }
             setTranslationX(effectiveDx);
             float progress = Math.min(1f, Math.abs(effectiveDx) / Math.max(1f, getWidth()));
@@ -151,13 +152,13 @@ final class ReviewUi {
         case MotionEvent.ACTION_UP: {
           if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
           if (isHorizontalDrag) {
-            float totalDx = event.getX() - startX;
-            float threshold = Math.max(a.dp(50), getWidth() * 0.18f);
+            float totalDx = event.getRawX() - startRawX;
+            float threshold = Math.max(a.dp(48), getWidth() * 0.16f);
             if (totalDx < -threshold && canSwipeLeft && onSwipeLeft != null) {
               isAnimating = true;
               animate()
                   .translationX(-getWidth() * 0.85f)
-                  .alpha(0.2f)
+                  .alpha(0.15f)
                   .setDuration(160)
                   .setInterpolator(new android.view.animation.AccelerateInterpolator())
                   .withEndAction(() -> {
@@ -172,7 +173,7 @@ final class ReviewUi {
               isAnimating = true;
               animate()
                   .translationX(getWidth() * 0.85f)
-                  .alpha(0.2f)
+                  .alpha(0.15f)
                   .setDuration(160)
                   .setInterpolator(new android.view.animation.AccelerateInterpolator())
                   .withEndAction(() -> {
@@ -601,12 +602,12 @@ final class ReviewUi {
       pendingSlideDirection = 0;
     }
 
-    // Plan Details Box
-    LinearLayout planDetailsBox = createCardLayout(null);
-    planDetailsBox.setPadding(a.dp(16), a.dp(14), a.dp(16), a.dp(16));
-    LinearLayout.LayoutParams pdbLp = new LinearLayout.LayoutParams(-1, -2);
-    pdbLp.topMargin = a.dp(12);
-    planDetailsBox.setLayoutParams(pdbLp);
+    // Consolidated Plan Hub Card
+    LinearLayout planCard = createCardLayout(null);
+    planCard.setPadding(a.dp(16), a.dp(15), a.dp(16), a.dp(18));
+    LinearLayout.LayoutParams pcLp = new LinearLayout.LayoutParams(-1, -2);
+    pcLp.topMargin = a.dp(12);
+    planCard.setLayoutParams(pcLp);
 
     LinearLayout pTitleRow = a.row();
     pTitleRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -628,7 +629,7 @@ final class ReviewUi {
       }
       stBadge.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
       LinearLayout.LayoutParams sbLp = new LinearLayout.LayoutParams(-2, -2);
-      sbLp.rightMargin = a.dp(6);
+      sbLp.rightMargin = a.dp(8);
       pTitleRow.addView(stBadge, sbLp);
     }
 
@@ -649,9 +650,9 @@ final class ReviewUi {
     Button archivePlanBtn = a.chip("归档", false, v -> confirmArchivePlan(activePlanId));
     archivePlanBtn.setTextSize(11 * a.scale);
     pTitleRow.addView(archivePlanBtn);
-    planDetailsBox.addView(pTitleRow);
+    planCard.addView(pTitleRow);
 
-    // Bound Notebook Row
+    // Bound Notebook & Frequency/Quota Row
     JSONObject nb = a.library.find("notebooks", plan.optString("notebook_id"));
     String nbName = nb != null ? nb.optString("name", "笔记本") : "已绑定笔记";
     LinearLayout nbRow = a.row();
@@ -663,45 +664,31 @@ final class ReviewUi {
     TextView nbTv = a.text(" 所属笔记本：" + nbName, 12, false);
     nbTv.setTextColor(a.muted);
     nbRow.addView(nbTv);
-    planDetailsBox.addView(nbRow);
 
-    // Badges Row
-    LinearLayout badgesRow = a.row();
-    badgesRow.setGravity(Gravity.CENTER_VERTICAL);
-    LinearLayout.LayoutParams bgLp = new LinearLayout.LayoutParams(-1, -2);
-    bgLp.topMargin = a.dp(10);
-    badgesRow.setLayoutParams(bgLp);
+    View nbSpacer = new View(a);
+    nbRow.addView(nbSpacer, new LinearLayout.LayoutParams(0, 1, 1));
 
     String freqLabel = formatWeekdaysBadge(plan.optJSONArray("weekdays"));
-    TextView freqBadge = a.text(freqLabel, 11, true);
-    freqBadge.setTextColor(a.accent);
-    freqBadge.setPadding(a.dp(8), a.dp(3), a.dp(8), a.dp(3));
-    freqBadge.setBackground(a.shape((a.accent & 0x00FFFFFF) | 0x1A000000, 10, 0));
-    badgesRow.addView(freqBadge);
-
-    View bgGap = new View(a);
-    badgesRow.addView(bgGap, new LinearLayout.LayoutParams(a.dp(6), 1));
-
     String quotaLabel = "每日新词 " + plan.optInt("daily_new_limit") + " · 复习 " + plan.optInt("daily_review_limit");
-    TextView quotaBadge = a.text(quotaLabel, 11, false);
-    quotaBadge.setTextColor(a.muted);
-    quotaBadge.setPadding(a.dp(8), a.dp(3), a.dp(8), a.dp(3));
-    quotaBadge.setBackground(a.shape(a.inputBg, 10, a.border));
-    badgesRow.addView(quotaBadge);
+    TextView metaBadge = a.text(freqLabel + " · " + quotaLabel, 11, false);
+    metaBadge.setTextColor(a.muted);
+    metaBadge.setBackground(a.shape(a.inputBg, 8, a.border));
+    metaBadge.setPadding(a.dp(8), a.dp(3), a.dp(8), a.dp(3));
+    nbRow.addView(metaBadge);
+    planCard.addView(nbRow);
 
-    planDetailsBox.addView(badgesRow);
-    swipeContainer.addView(planDetailsBox);
+    // Subtle Section Divider
+    View divider = new View(a);
+    divider.setBackgroundColor(a.border);
+    LinearLayout.LayoutParams divLp = new LinearLayout.LayoutParams(-1, a.dp(1));
+    divLp.topMargin = a.dp(12);
+    divLp.bottomMargin = a.dp(12);
+    planCard.addView(divider, divLp);
 
-    // 4. Today's Task Card
+    // Today's Task Content
     JSONObject day = a.library.reviewPlans().peekDailyQueue(activePlanId, now);
     boolean queueLoading = day == null;
     if (queueLoading) { prepareQueue(activePlanId, now); day = new JSONObject(); }
-
-    LinearLayout todayCard = createCardLayout(null);
-    todayCard.setPadding(a.dp(16), a.dp(16), a.dp(16), a.dp(18));
-    LinearLayout.LayoutParams tcLp = new LinearLayout.LayoutParams(-1, -2);
-    tcLp.topMargin = a.dp(12);
-    todayCard.setLayoutParams(tcLp);
 
     boolean scheduled = day.optBoolean("scheduled", false);
     int newTarget = day.optInt("new_target", 0);
@@ -713,10 +700,10 @@ final class ReviewUi {
 
     if (queueLoading) {
       if (failedQueues.contains(activePlanId)) {
-        todayCard.addView(a.button("任务准备失败，点击重试", v -> {
+        planCard.addView(a.button("任务准备失败，点击重试", v -> {
           failedQueues.remove(activePlanId); prepareQueue(activePlanId, System.currentTimeMillis()); a.render();
         }));
-      } else todayCard.addView(a.text("正在准备今日任务…", 14, false));
+      } else planCard.addView(a.text("正在准备今日任务…", 14, false));
     } else if (!scheduled) {
       LinearLayout restRow = a.row();
       restRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -729,19 +716,19 @@ final class ReviewUi {
       restSub.setTextColor(a.muted);
       restCol.addView(restSub);
       restRow.addView(restCol, rcLp);
-      todayCard.addView(restRow);
+      planCard.addView(restRow);
 
       Button changeFreqBtn = a.button("调整计划学习频次", v -> showEditPlanModal(plan));
       changeFreqBtn.setTextColor(a.accent);
       LinearLayout.LayoutParams cfLp2 = new LinearLayout.LayoutParams(-1, a.dp(40));
       cfLp2.topMargin = a.dp(14);
       changeFreqBtn.setLayoutParams(cfLp2);
-      todayCard.addView(changeFreqBtn);
+      planCard.addView(changeFreqBtn);
 
       Button restExtraBtn = a.primaryButton("⚡ 今天也学一组", v -> showExtraReviewModal());
       LinearLayout.LayoutParams reLp = new LinearLayout.LayoutParams(-1, a.dp(44));
       reLp.topMargin = a.dp(8);
-      todayCard.addView(restExtraBtn, reLp);
+      planCard.addView(restExtraBtn, reLp);
     } else if (totalTarget == 0) {
       LinearLayout emptyWords = a.column();
       emptyWords.setGravity(Gravity.CENTER);
@@ -754,7 +741,7 @@ final class ReviewUi {
       TextView ewSub = a.text("可在笔记本中添加更多生词，或编辑计划绑定其他笔记本。", 12, false);
       ewSub.setTextColor(a.muted);
       emptyWords.addView(ewSub);
-      todayCard.addView(emptyWords);
+      planCard.addView(emptyWords);
     } else if (remaining == 0) {
       LinearLayout doneCol = a.column();
       doneCol.setGravity(Gravity.CENTER);
@@ -779,10 +766,10 @@ final class ReviewUi {
       ebLp.topMargin = a.dp(14);
       doneCol.addView(extraBtn, ebLp);
 
-      todayCard.addView(doneCol);
+      planCard.addView(doneCol);
     } else {
       TextView todayTitle = a.text("今日学习任务", 16, true);
-      todayCard.addView(todayTitle);
+      planCard.addView(todayTitle);
 
       LinearLayout tmRow = a.row();
       tmRow.setPadding(a.dp(6), a.dp(8), a.dp(6), a.dp(8));
@@ -800,7 +787,7 @@ final class ReviewUi {
       addMetric(tmRow, newTarget, "新词配额", a.foreground);
       addMetricDivider(tmRow);
       addMetric(tmRow, reviewTarget, "复习配额", a.foreground);
-      todayCard.addView(tmRow);
+      planCard.addView(tmRow);
 
       int pct = (int) Math.round(((double) completed / Math.max(1, totalTarget)) * 100);
       LinearLayout pbRow = a.row();
@@ -819,17 +806,17 @@ final class ReviewUi {
       TextView pctTv = a.text("  " + completed + " / " + totalTarget + " (" + pct + "%)", 11, true);
       pctTv.setTextColor(a.accent);
       pbRow.addView(pctTv);
-      todayCard.addView(pbRow);
+      planCard.addView(pbRow);
 
       TextView modeTitle = a.text("复习模式", 13, true);
       LinearLayout.LayoutParams mtLp = new LinearLayout.LayoutParams(-1, -2);
       mtLp.topMargin = a.dp(14);
-      todayCard.addView(modeTitle, mtLp);
+      planCard.addView(modeTitle, mtLp);
 
       LinearLayout modeRow = a.row();
       LinearLayout.LayoutParams mrLp = new LinearLayout.LayoutParams(-1, a.dp(72));
       mrLp.topMargin = a.dp(6);
-      todayCard.addView(modeRow, mrLp);
+      planCard.addView(modeRow, mrLp);
 
       modeRow.addView(
           modeCard(
@@ -863,9 +850,9 @@ final class ReviewUi {
       sbLp.topMargin = a.dp(16);
       startBtn.setLayoutParams(sbLp);
       startBtn.setTextSize(16 * a.scale);
-      todayCard.addView(startBtn);
+      planCard.addView(startBtn);
     }
-    swipeContainer.addView(todayCard);
+    swipeContainer.addView(planCard);
 
     // 5. Past 7 Days Statistics Card
     try {

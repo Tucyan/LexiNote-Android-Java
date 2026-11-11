@@ -159,6 +159,41 @@ public final class MainActivity extends Activity {
               android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::handleBack);
     review.restoreState(state);
     render();
+
+    Intent intent = getIntent();
+    if (intent != null && intent.hasExtra("import_fixture_path")) {
+      String path = intent.getStringExtra("import_fixture_path");
+      intent.removeExtra("import_fixture_path");
+      restoreFromFile(new File(path));
+    }
+  }
+
+  @Override
+  protected void onNewIntent(Intent intent) {
+    super.onNewIntent(intent);
+    setIntent(intent);
+    if (intent != null && intent.hasExtra("import_fixture_path")) {
+      String path = intent.getStringExtra("import_fixture_path");
+      intent.removeExtra("import_fixture_path");
+      restoreFromFile(new File(path));
+    }
+  }
+
+  void restoreFromFile(File file) {
+    cancel();
+    ProgressDialog progress = ProgressDialog.show(this, "", "正在恢复备份…", true, false);
+    worker.execute(() -> {
+      try (InputStream in = new FileInputStream(file)) {
+        BackupStreamCodec.Prepared prepared = BackupStreamCodec.decode(in, getCacheDir());
+        handler.post(() -> {
+          progress.dismiss();
+          if (!alive()) { prepared.close(); return; }
+          applyRestore(prepared);
+        });
+      } catch (Exception e) {
+        handler.post(() -> { progress.dismiss(); if (alive()) error(e); });
+      }
+    });
   }
 
   void palette() {

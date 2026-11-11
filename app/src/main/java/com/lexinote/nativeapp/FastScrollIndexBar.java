@@ -52,10 +52,66 @@ final class FastScrollIndexBar extends View {
   private float scrollRatio = 0f;
   private boolean isDragging = false;
 
-  // Floating Bubble View (added to contentContainer)
-  private View bubbleView;
-  private TextView bubbleMainText;
-  private TextView bubbleSubText;
+  // Floating Bubble Views (added to contentContainer)
+  static class WeChatBubbleView extends View {
+    private final MainActivity a;
+    private final Paint bubblePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Path path = new Path();
+    private String letter = "";
+
+    WeChatBubbleView(MainActivity a) {
+      super(a);
+      this.a = a;
+      bubblePaint.setStyle(Paint.Style.FILL);
+      bubblePaint.setColor(0xE6C8CBCF); // frosted silver-gray matching WeChat
+      textPaint.setColor(Color.WHITE);
+      textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+      textPaint.setTextAlign(Paint.Align.CENTER);
+    }
+
+    void setLetter(String letter) {
+      this.letter = letter;
+      invalidate();
+    }
+
+    @Override
+    protected void onDraw(Canvas canvas) {
+      super.onDraw(canvas);
+      int w = getWidth();
+      int h = getHeight();
+      if (w <= 0 || h <= 0) return;
+
+      float pw = a.dp(8); // pointer width pointing right
+      float ph = a.dp(12); // pointer height
+      float bodyW = w - pw;
+      float r = bodyW / 2f; // rounded circular body
+
+      path.reset();
+      RectF bodyRect = new RectF(0, 0, bodyW, h);
+      path.addRoundRect(bodyRect, r, r, Path.Direction.CW);
+
+      Path pointer = new Path();
+      pointer.moveTo(bodyW - a.dp(0.5f), h / 2f - ph / 2f);
+      pointer.lineTo(w, h / 2f);
+      pointer.lineTo(bodyW - a.dp(0.5f), h / 2f + ph / 2f);
+      pointer.close();
+
+      path.op(pointer, Path.Op.UNION);
+      canvas.drawPath(path, bubblePaint);
+
+      textPaint.setTextSize(h * 0.52f);
+      Rect b = new Rect();
+      textPaint.getTextBounds(letter, 0, letter.length(), b);
+      float baseLine = h / 2f - b.exactCenterY();
+      canvas.drawText(letter, bodyW / 2f, baseLine, textPaint);
+    }
+  }
+
+  private WeChatBubbleView wechatBubble;
+  private LinearLayout cardBubble;
+  private TextView cardMainText;
+  private TextView cardSubText;
   private Runnable hideBubbleRunnable;
 
   FastScrollIndexBar(MainActivity a) {
@@ -79,43 +135,59 @@ final class FastScrollIndexBar extends View {
     thumbPaint.setColor(a.accent);
 
     hideBubbleRunnable = () -> {
-      if (bubbleView != null) {
-        bubbleView.animate().alpha(0f).setDuration(180).withEndAction(() -> {
-          bubbleView.setVisibility(View.GONE);
-          bubbleView.setAlpha(1f);
+      if (wechatBubble != null && wechatBubble.getVisibility() == View.VISIBLE) {
+        wechatBubble.animate().alpha(0f).setDuration(160).withEndAction(() -> {
+          wechatBubble.setVisibility(View.GONE);
+          wechatBubble.setAlpha(1f);
+        }).start();
+      }
+      if (cardBubble != null && cardBubble.getVisibility() == View.VISIBLE) {
+        cardBubble.animate().alpha(0f).setDuration(160).withEndAction(() -> {
+          cardBubble.setVisibility(View.GONE);
+          cardBubble.setAlpha(1f);
         }).start();
       }
     };
   }
 
   void attachBubble(FrameLayout container) {
-    if (bubbleView != null && bubbleView.getParent() != null) {
-      ((ViewGroup) bubbleView.getParent()).removeView(bubbleView);
+    if (wechatBubble != null && wechatBubble.getParent() != null) {
+      ((ViewGroup) wechatBubble.getParent()).removeView(wechatBubble);
+    }
+    if (cardBubble != null && cardBubble.getParent() != null) {
+      ((ViewGroup) cardBubble.getParent()).removeView(cardBubble);
     }
 
-    LinearLayout bubble = new LinearLayout(a);
-    bubble.setOrientation(LinearLayout.VERTICAL);
-    bubble.setGravity(Gravity.CENTER);
-    bubble.setBackground(a.shape(Color.parseColor("#EE1E293B"), 12, 0));
-    bubble.setElevation(a.dp(8));
-    bubble.setVisibility(View.GONE);
+    wechatBubble = new WeChatBubbleView(a);
+    wechatBubble.setVisibility(View.GONE);
+    FrameLayout.LayoutParams wLp = new FrameLayout.LayoutParams(a.dp(60), a.dp(48), Gravity.TOP | Gravity.END);
+    wLp.rightMargin = a.dp(24);
+    container.addView(wechatBubble, wLp);
 
-    bubbleMainText = new TextView(a);
-    bubbleMainText.setTextColor(Color.WHITE);
-    bubbleMainText.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
-    bubbleMainText.setGravity(Gravity.CENTER);
-    bubble.addView(bubbleMainText);
+    cardBubble = new LinearLayout(a);
+    cardBubble.setOrientation(LinearLayout.VERTICAL);
+    cardBubble.setGravity(Gravity.CENTER);
+    cardBubble.setBackground(a.shape(Color.parseColor("#EE1E293B"), 12, 0));
+    cardBubble.setElevation(a.dp(8));
+    cardBubble.setPadding(a.dp(14), a.dp(8), a.dp(14), a.dp(8));
+    cardBubble.setVisibility(View.GONE);
 
-    bubbleSubText = new TextView(a);
-    bubbleSubText.setTextColor(Color.parseColor("#94A3B8"));
-    bubbleSubText.setTextSize(11 * a.scale);
-    bubbleSubText.setGravity(Gravity.CENTER);
-    bubble.addView(bubbleSubText);
+    cardMainText = new TextView(a);
+    cardMainText.setTextColor(Color.WHITE);
+    cardMainText.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+    cardMainText.setTextSize(14 * a.scale);
+    cardMainText.setGravity(Gravity.CENTER);
+    cardBubble.addView(cardMainText);
 
-    bubbleView = bubble;
-    FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
-    lp.rightMargin = a.dp(36);
-    container.addView(bubbleView, lp);
+    cardSubText = new TextView(a);
+    cardSubText.setTextColor(Color.parseColor("#94A3B8"));
+    cardSubText.setTextSize(11 * a.scale);
+    cardSubText.setGravity(Gravity.CENTER);
+    cardBubble.addView(cardSubText);
+
+    FrameLayout.LayoutParams cLp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
+    cLp.rightMargin = a.dp(36);
+    container.addView(cardBubble, cLp);
   }
 
   void setData(List<JSONObject> items, String currentSortOrder, OnIndexScrollListener l) {
@@ -288,11 +360,14 @@ final class FastScrollIndexBar extends View {
   private void drawAlphabetMode(Canvas canvas, int w, int h) {
     int count = alphabetItems.length;
     if (count == 0) return;
-    float itemH = (float) h / count;
-    textPaint.setTextSize(Math.min(a.dp(10.5f), itemH * 0.78f));
+    float padTop = a.dp(6);
+    float padBottom = a.dp(6);
+    float usableH = Math.max(1f, h - padTop - padBottom);
+    float itemH = usableH / count;
+    textPaint.setTextSize(Math.min(a.dp(10.5f), itemH * 0.76f));
 
     for (int i = 0; i < count; i++) {
-      float cy = (i + 0.5f) * itemH;
+      float cy = padTop + (i + 0.5f) * itemH;
       if (i == activeIndex) {
         accentPaint.setColor(a.accent);
         float circleR = Math.min(w / 2f - a.dp(1.5f), itemH / 2f);
@@ -321,7 +396,6 @@ final class FastScrollIndexBar extends View {
 
     int count = timelineSections.size();
     if (count > 0) {
-      textPaint.setTextSize(a.dp(8f));
       float lastDrawnY = -100f;
       for (int i = 0; i < count; i++) {
         TimelineSection sec = timelineSections.get(i);
@@ -329,19 +403,32 @@ final class FastScrollIndexBar extends View {
         float cy = a.dp(16) + ratio * (h - a.dp(32));
         sec.relativeY = cy;
 
-        thumbPaint.setColor(a.border);
-        canvas.drawCircle(cx, cy, a.dp(2.5f), thumbPaint);
+        if (cy - lastDrawnY > a.dp(24) || i == count - 1) {
+          String label = sec.displayLabel;
+          textPaint.setTextSize(a.dp(7.5f));
+          textPaint.getTextBounds(label, 0, label.length(), bounds);
+          float badgeW = bounds.width() + a.dp(8);
+          float badgeH = a.dp(14);
+          RectF badgeRect = new RectF(cx - badgeW / 2f, cy - badgeH / 2f, cx + badgeW / 2f, cy + badgeH / 2f);
 
-        if (cy - lastDrawnY > a.dp(20) || i == count - 1) {
-          textPaint.setColor(a.isDark ? 0xFF94A3B8 : 0xFF64748B);
-          textPaint.getTextBounds(sec.displayLabel, 0, sec.displayLabel.length(), bounds);
-          canvas.drawText(sec.displayLabel, cx, cy - a.dp(4), textPaint);
-          lastDrawnY = cy;
+          Paint pillBg = new Paint(Paint.ANTI_ALIAS_FLAG);
+          pillBg.setStyle(Paint.Style.FILL);
+          pillBg.setColor(a.isDark ? 0xDD334155 : 0xDD475569);
+          canvas.drawRoundRect(badgeRect, a.dp(4), a.dp(4), pillBg);
+
+          textPaint.setColor(Color.WHITE);
+          textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+          float baseLine = cy - bounds.exactCenterY();
+          canvas.drawText(label, cx, baseLine, textPaint);
+          lastDrawnY = cy + a.dp(10);
+        } else {
+          thumbPaint.setColor(a.border);
+          canvas.drawCircle(cx, cy, a.dp(2.5f), thumbPaint);
         }
       }
     }
 
-    // Scrubber thumb (Photo gallery style pill)
+    // Scrubber thumb (Photo gallery style pill with arrows)
     float thumbY = a.dp(16) + scrollRatio * (h - a.dp(32));
     float thumbW = w - a.dp(4);
     float thumbH = a.dp(22);
@@ -401,15 +488,17 @@ final class FastScrollIndexBar extends View {
     if (mode == MODE_ALPHABET) {
       int count = alphabetItems.length;
       if (count == 0) return;
-      float itemH = (float) h / count;
-      int idx = Math.max(0, Math.min(count - 1, (int) (y / itemH)));
+      float padTop = a.dp(6);
+      float usableH = Math.max(1f, h - a.dp(12));
+      float itemH = usableH / count;
+      int idx = Math.max(0, Math.min(count - 1, (int) ((y - padTop) / itemH)));
       if (idx != activeIndex) {
         activeIndex = idx;
         performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
         invalidate();
 
         String letter = alphabetItems[idx];
-        showAlphabetBubble(letter, (idx + 0.5f) * itemH);
+        showAlphabetBubble(letter, padTop + (idx + 0.5f) * itemH);
 
         int target = alphabetTargetIndices[idx];
         if (target >= 0 && listener != null) {
@@ -468,38 +557,31 @@ final class FastScrollIndexBar extends View {
   }
 
   private void showAlphabetBubble(String letter, float touchY) {
-    if (bubbleView == null) return;
-    bubbleView.setVisibility(View.VISIBLE);
-    bubbleView.setAlpha(1f);
+    if (cardBubble != null) cardBubble.setVisibility(View.GONE);
+    if (wechatBubble == null) return;
+    wechatBubble.setVisibility(View.VISIBLE);
+    wechatBubble.setAlpha(1f);
+    wechatBubble.setLetter(letter);
 
-    bubbleView.setBackground(a.shape(Color.parseColor("#EE1E293B"), 24, 0));
-    bubbleView.setPadding(a.dp(16), a.dp(8), a.dp(16), a.dp(8));
-    bubbleMainText.setText(letter);
-    bubbleMainText.setTextSize(24 * a.scale);
-    bubbleSubText.setVisibility(View.GONE);
-
-    updateBubblePosition(touchY, a.dp(48));
+    updateBubblePosition(wechatBubble, touchY, a.dp(48));
   }
 
   private void showTimelineBubble(String main, String sub, float touchY) {
-    if (bubbleView == null) return;
-    bubbleView.setVisibility(View.VISIBLE);
-    bubbleView.setAlpha(1f);
+    if (wechatBubble != null) wechatBubble.setVisibility(View.GONE);
+    if (cardBubble == null) return;
+    cardBubble.setVisibility(View.VISIBLE);
+    cardBubble.setAlpha(1f);
+    cardMainText.setText(main);
+    cardSubText.setText(sub);
 
-    bubbleView.setBackground(a.shape(Color.parseColor("#EE1E293B"), 12, 0));
-    bubbleView.setPadding(a.dp(14), a.dp(8), a.dp(14), a.dp(8));
-    bubbleMainText.setText(main);
-    bubbleMainText.setTextSize(14 * a.scale);
-    bubbleSubText.setVisibility(View.VISIBLE);
-    bubbleSubText.setText(sub);
-
-    updateBubblePosition(touchY, a.dp(52));
+    updateBubblePosition(cardBubble, touchY, a.dp(52));
   }
 
-  private void updateBubblePosition(float touchY, int bubbleApproxHeight) {
+  private void updateBubblePosition(View view, float touchY, int bubbleApproxHeight) {
+    if (view == null) return;
     int containerH = getParent() instanceof ViewGroup ? ((ViewGroup) getParent()).getHeight() : getHeight();
-    float targetY = touchY - bubbleApproxHeight / 2f;
+    float targetY = getTop() + touchY - bubbleApproxHeight / 2f;
     targetY = Math.max(a.dp(8), Math.min(containerH - bubbleApproxHeight - a.dp(8), targetY));
-    bubbleView.setTranslationY(targetY);
+    view.setTranslationY(targetY);
   }
 }
