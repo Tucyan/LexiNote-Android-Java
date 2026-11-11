@@ -94,6 +94,7 @@ public final class MainActivity extends Activity {
     settingsUi.models.restoreState(state);
     if (state != null && !recoveryOnly) {
       page = Math.max(0, Math.min(4, state.getInt("page", 0)));
+      if (page == 1) page = 0;
       screen = state.getString("screen", "tabs");
       String sessionId = state.getString("session");
       JSONObject saved = sessionId == null ? null : library.find("conversations", sessionId);
@@ -403,7 +404,7 @@ public final class MainActivity extends Activity {
       bar.addView(drawerBtn);
     }
     if (screen.equals("tabs") && page == 0) {
-      TextView version = text("v1.4", 11, true);
+      TextView version = text("v1.5", 11, true);
       version.setTextColor(accent);
       version.setPadding(dp(6), dp(3), dp(6), dp(3));
       version.setBackground(shape((accent & 0xFFFFFF) | 0x1A000000, 6, 0));
@@ -433,28 +434,28 @@ public final class MainActivity extends Activity {
     nav = row();
     nav.setTag("bottom-navigation");
     nav.setBackgroundColor(card);
-    String[] labels = {"查询记录", "猜词辅助", "笔记", "复习", "我的"};
-    String[] glyphs = {
-      "search", "bulb-outline", "book-outline", "repeat-outline", "settings-outline"
-    };
+    // "猜词辅助" is temporarily hidden per user instruction, bottom nav layout fills the vacant space
+    String[] labels = {"查询记录", "笔记", "复习", "我的"};
+    String[] glyphs = {"search", "book-outline", "repeat-outline", "settings-outline"};
+    int[] targetPages = {0, 2, 3, 4};
     for (int i = 0; i < labels.length; i++) {
-      final int index = i;
+      final int targetPage = targetPages[i];
       Button b =
           button(
               labels[i],
               v -> {
-                page = index;
+                page = targetPage;
                 render();
               });
       b.setTag("tab-" + i);
-      b.setTextSize(11 * scale);
-      b.setTextColor(i == page ? accent : subtle);
+      b.setTextSize(11.5f * scale);
+      b.setTextColor(page == targetPage ? accent : subtle);
       b.setMinWidth(0);
       b.setMinimumWidth(0);
       b.setPadding(0, dp(6), 0, dp(7));
       b.setCompoundDrawablePadding(dp(2));
       b.setCompoundDrawables(
-          null, new GlyphDrawable(glyphs[i], 24, i == page ? accent : subtle), null, null);
+          null, new GlyphDrawable(glyphs[i], 24, page == targetPage ? accent : subtle), null, null);
       b.setBackground(shape(Color.TRANSPARENT, 0, 0));
       nav.addView(b, new LinearLayout.LayoutParams(0, dp(62), 1));
     }

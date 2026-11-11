@@ -105,12 +105,13 @@ public final class SmokeInstrumentation extends Instrumentation {
   }
 
   private void testNavigation() {
-    String[] labels = {"查询记录", "猜词辅助", "笔记", "复习", "我的"};
+    String[] labels = {"查询记录", "笔记", "复习", "我的"};
+    int[] pages = {0, 2, 3, 4};
     for (int i = 0; i < labels.length; i++) {
       Button button = findButton(activity.nav, labels[i]);
       check(button != null, "Missing tab " + labels[i]);
       button.performClick();
-      check(activity.page == i, "Tab did not navigate");
+      check(activity.page == pages[i], "Tab did not navigate");
     }
   }
 
