@@ -103,6 +103,14 @@ final class SettingsUi {
     densities.setLayoutParams(densitiesLp);
     appearance.addView(densities);
     LinearLayout notebook = a.card("查询偏好");
+    Switch supplement = new Switch(a);
+    supplement.setText("查词时自动进行 AI 补充");
+    supplement.setTextColor(a.foreground);
+    supplement.setChecked(prefs.optBoolean("auto_ai_supplement"));
+    supplement.setOnCheckedChangeListener((button, checked) ->
+        a.change(() -> Library.put(a.library.settings(), "auto_ai_supplement", checked)));
+    notebook.addView(supplement);
+    notebook.addView(a.text("先显示离线词条，联网后由 AI 整理双语义项，并可补充音标、例句和用法。", 12, false));
     Switch auto = new Switch(a);
     auto.setText("查询结果自动记录到默认笔记");
     auto.setTextColor(a.foreground);

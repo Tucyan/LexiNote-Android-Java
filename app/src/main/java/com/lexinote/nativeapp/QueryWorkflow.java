@@ -55,6 +55,106 @@ final class QueryWorkflow {
     return fields;
   }
 
+  static boolean shouldAutoSupplement(JSONObject result, JSONObject settings) {
+    return result != null && "ecdict".equals(result.optString("lookup_origin"))
+        && settings.optBoolean("auto_ai_supplement");
+  }
+
+  static boolean canAlignDictionary(JSONObject result) {
+    if (result == null || !"ecdict".equals(result.optString("lookup_origin"))
+        || result.has("dictionary_context") || result.optBoolean("dictionary_ai_aligned"))
+      return false;
+    JSONArray items = result.optJSONArray("meanings");
+    if (items == null || items.length() == 0) return false;
+    for (int i = 0; i < items.length(); i++) {
+      JSONObject item = items.optJSONObject(i);
+      if (item == null || !item.optString("id").matches("(zh|en)-[0-9]+")
+          || item.optString("zh_definition").isEmpty() == item.optString("en_definition").isEmpty())
+        return false;
+      // Existing edits and display selections must survive a manual supplement.
+      Iterator<String> keys = item.keys();
+      while (keys.hasNext())
+        if (!Arrays.asList("id", "zh_definition", "en_definition", "field_meta", "source_images")
+            .contains(keys.next())) return false;
+    }
+    return true;
+  }
+
+  static JSONObject alignDictionary(JSONObject result, JSONObject reply) throws Exception {
+    if (!canAlignDictionary(result)) throw new IllegalArgumentException("当前词条无法重新整理");
+    JSONArray original = result.getJSONArray("meanings");
+    JSONArray groups = reply.optJSONArray("groups");
+    if (groups == null || groups.length() > original.length())
+      throw new IllegalArgumentException("AI 义项整理格式无效");
+    Map<String, JSONObject> byId = new LinkedHashMap<>();
+    for (int i = 0; i < original.length(); i++) {
+      JSONObject item = original.getJSONObject(i);
+      if (byId.put(item.getString("id"), item) != null)
+        throw new IllegalArgumentException("词库义项编号重复");
+    }
+    Map<String, JSONObject> organized = new HashMap<>();
+    for (int i = 0; i < groups.length(); i++) {
+      JSONObject group = groups.getJSONObject(i);
+      JSONArray ids = group.getJSONArray("ids");
+      if (ids.length() < 1 || ids.length() > 2)
+        throw new IllegalArgumentException("AI 义项分组无效");
+      JSONObject card = null;
+      for (int j = 0; j < ids.length(); j++) {
+        String id = ids.getString(j);
+        JSONObject source = byId.get(id);
+        if (source == null || organized.containsKey(id))
+          throw new IllegalArgumentException("AI 使用了未知或重复的词库义项");
+        if (card == null) {
+          card = Library.copy(source);
+        } else {
+          String field = source.optString("zh_definition").isEmpty()
+              ? "en_definition" : "zh_definition";
+          String value = source.getString(field);
+          if (!card.optString(field).isEmpty() || value.contains("\n")
+              || card.optString("zh_definition").contains("\n")
+              || card.optString("en_definition").contains("\n"))
+            throw new IllegalArgumentException("AI 分组必须是一条中文和一条英文释义");
+          card.put(field, value);
+          FieldProvenance.transfer(source, field, card, field);
+          JSONArray images = source.optJSONArray("source_images");
+          if (images != null && images.length() > 0) {
+            JSONArray previous = card.optJSONArray("source_images");
+            Set<String> urls = new LinkedHashSet<>();
+            for (int k = 0; previous != null && k < previous.length(); k++) urls.add(previous.getString(k));
+            for (int k = 0; k < images.length(); k++) urls.add(images.getString(k));
+            card.put("source_images", new JSONArray(urls));
+            FieldProvenance.markPresent(card, false, "source_images");
+          }
+        }
+        organized.put(id, card);
+      }
+      for (String field : new String[] {"zh_definition", "en_definition", "example"}) {
+        String value = boundedText(group, field, 1800);
+        if (!value.isEmpty() && card.optString(field).isEmpty()) {
+          card.put(field, value);
+          FieldProvenance.markPresent(card, true, field);
+        }
+      }
+    }
+    JSONArray cards = new JSONArray();
+    Set<String> emitted = new HashSet<>();
+    for (Map.Entry<String, JSONObject> item : byId.entrySet()) {
+      JSONObject card = organized.getOrDefault(item.getKey(), item.getValue());
+      if (emitted.add(card.getString("id"))) cards.put(Library.copy(card));
+    }
+    JSONObject updated = Library.copy(result);
+    updated.put("meanings", cards);
+    for (String field : new String[] {"phonetic", "raw_explanation"}) {
+      String value = boundedText(reply, field, "phonetic".equals(field) ? 200 : 1800);
+      if (!value.isEmpty() && updated.optString(field).isEmpty()) {
+        updated.put(field, value);
+        FieldProvenance.markPresent(updated, true, field);
+      }
+    }
+    updated.put("dictionary_ai_aligned", true);
+    return updated;
+  }
+
   static JSONObject mergeSupplement(JSONObject current, JSONObject incoming) throws Exception {
     JSONObject next = FieldProvenance.modelResult(AgentProtocol.validateResult(incoming));
     if (!AgentProtocol.normalize(current.optString("word"))
@@ -84,6 +184,7 @@ final class QueryWorkflow {
         String id = copy.optString("id");
         if (id.isEmpty() || ids.contains(id)) id = UUID.randomUUID().toString();
         copy.put("id", id);
+        copy.put("lookup_origin", "ai");
         ids.add(id);
         meanings.put(copy);
       }
@@ -221,6 +322,45 @@ final class QueryWorkflow {
     return copy;
   }
 
+  static String organizeKey(String field) {
+    if ("zh_definition".equals(field)) return "save_zh";
+    if ("en_definition".equals(field)) return "save_en";
+    return "save_" + field;
+  }
+
+  static JSONObject organizeField(JSONObject result, String id, String field, boolean visible)
+      throws Exception {
+    JSONObject copy = new JSONObject(result.toString());
+    JSONObject item = id == null ? copy : meaning(copy, id);
+    item.put(organizeKey(field), visible);
+    return copy;
+  }
+
+  static JSONObject annotateMeaning(JSONObject result, String id, String field, String note)
+      throws Exception {
+    JSONObject copy = new JSONObject(result.toString());
+    JSONObject item = meaning(copy, id);
+    Annotations.add(item, field, item.optString(field), note);
+    item.put("save_annotations", true);
+    return copy;
+  }
+
+  static JSONObject changeAnnotation(JSONObject result, String meaningId, String annotationId,
+      String field, String content) throws Exception {
+    JSONObject copy = new JSONObject(result.toString());
+    JSONObject item = meaning(copy, meaningId);
+    if (content == null) Annotations.remove(item, annotationId);
+    else Annotations.edit(item, annotationId, field, item.optString(field), content);
+    JSONArray changed = item.optJSONArray("query_changed_annotation_ids");
+    if (changed == null) {
+      changed = new JSONArray();
+      item.put("query_changed_annotation_ids", changed);
+    }
+    Library.removeValue(changed, annotationId);
+    changed.put(annotationId);
+    return copy;
+  }
+
   static JSONObject editMeaning(JSONObject r, String id, JSONObject fields) throws Exception {
     JSONObject copy = new JSONObject(r.toString()), meaning = meaning(copy, id);
     for (String key :
@@ -239,6 +379,7 @@ final class QueryWorkflow {
           throw new IllegalArgumentException("释义字段须为不超过12000字的文本");
         meaning.put(key, value);
         FieldProvenance.edited(meaning, key);
+        if ("remarks".equals(key)) meaning.put("query_remarks_edited", true);
       }
     if (meaning.optString("zh_definition").trim().isEmpty()
         && meaning.optString("en_definition").trim().isEmpty())

@@ -2396,6 +2396,10 @@ final class NotebookUi {
   }
 
   void saveDialog(JSONObject result) {
+    saveDialog(result, false);
+  }
+
+  void saveDialog(JSONObject result, boolean organized) {
     List<JSONObject> leaves = leaves();
     if (leaves.isEmpty()) {
       a.say("请先创建一个末级笔记");
@@ -2403,7 +2407,8 @@ final class NotebookUi {
     }
     LinearLayout box = a.column();
     List<CheckBox> checks = new ArrayList<>();
-    box.addView(a.text("保存全部释义。下面的字段选择仅控制这些笔记中的显示。", 14, false));
+    if (!organized)
+      box.addView(a.text("保存全部释义。下面的字段选择仅控制这些笔记中的显示。", 14, false));
     for (JSONObject n : leaves) {
       CheckBox cb = new CheckBox(a);
       cb.setText(n.optString("name"));
@@ -2425,7 +2430,7 @@ final class NotebookUi {
     };
     String[] names = {"中文释义", "英文释义", "音标", "例句", "来源", "图片", "批注", "备注"};
     List<CheckBox> fs = new ArrayList<>();
-    for (int i = 0; i < fields.length; i++) {
+    for (int i = 0; !organized && i < fields.length; i++) {
       CheckBox cb = new CheckBox(a);
       cb.setText(names[i]);
       cb.setChecked(true);
@@ -2450,7 +2455,8 @@ final class NotebookUi {
       if (ids.isEmpty()) { a.say("至少选择一个笔记"); return; }
       JSONObject display = new JSONObject(), selection = new JSONObject();
       for (int i = 0; i < fields.length; i++)
-        Library.put(selection, fields[i], fs.get(i).isChecked());
+        Library.put(selection, fields[i], organized
+            ? result.optBoolean(QueryWorkflow.organizeKey(fields[i]), true) : fs.get(i).isChecked());
       Library.put(display, "fields", selection);
       saveResultPending = true;
       view.setEnabled(false);
@@ -2484,7 +2490,8 @@ final class NotebookUi {
     if (saveResultPending) return;
     JSONObject fields = new JSONObject();
     for (String f : new String[] {"zh_definition", "en_definition", "phonetic", "example",
-        "source", "source_images", "annotations", "remarks"}) Library.put(fields, f, true);
+        "source", "source_images", "annotations", "remarks"})
+      Library.put(fields, f, result.optBoolean(QueryWorkflow.organizeKey(f), true));
     JSONObject display = new JSONObject();
     Library.put(display, "fields", fields);
     String notebookName = n.optString("name");

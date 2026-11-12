@@ -244,6 +244,10 @@ public final class Library {
     Map<Integer, JSONObject> matchedDrafts = new LinkedHashMap<>();
     for (int i = 0; i < incoming.length(); i++) {
       JSONObject m = copy(incoming.optJSONObject(i));
+      boolean remarksEdited = m.optBoolean("query_remarks_edited");
+      m.remove("query_remarks_edited");
+      JSONArray changedAnnotations = m.optJSONArray("query_changed_annotation_ids");
+      m.remove("query_changed_annotation_ids");
       JSONObject matched = null;
       for (int j = 0; j < target.length(); j++) {
         JSONObject old = target.optJSONObject(j);
@@ -251,7 +255,15 @@ public final class Library {
             && old.optString("zh_definition").equals(m.optString("zh_definition"))
             && old.optString("en_definition").equals(m.optString("en_definition"))) {
           matched = old;
+          if (changedAnnotations != null)
+            for (int k = 0; k < changedAnnotations.length(); k++)
+              Annotations.remove(old, changedAnnotations.optString(k));
+          rebindAnnotations(m, old.optString("id"));
           mergeMeaning(old, m);
+          if (remarksEdited) {
+            put(old, "remarks", m.optString("remarks"));
+            FieldProvenance.transfer(m, "remarks", old, "remarks");
+          }
           break;
         }
       }
@@ -260,6 +272,7 @@ public final class Library {
         put(m, "created_at", now());
         put(m, "updated_at", now());
         if (!m.has("annotations")) put(m, "annotations", new JSONArray());
+        rebindAnnotations(m, m.optString("id"));
         target.put(m);
         matched = m;
       }
@@ -298,9 +311,10 @@ public final class Library {
         JSONObject draft = incoming.optJSONObject(i), entity = matchedDrafts.get(i);
         if (draft.optBoolean("selected", true)) shown.put(entity.optString("id"));
         JSONObject fields = new JSONObject();
-        if (draft.has("save_zh")) put(fields, "zh_definition", draft.optBoolean("save_zh"));
-        if (draft.has("save_en")) put(fields, "en_definition", draft.optBoolean("save_en"));
-        if (draft.has("save_example")) put(fields, "example", draft.optBoolean("save_example"));
+        for (String field : QueryWorkflow.FIELDS) {
+          String key = QueryWorkflow.organizeKey(field);
+          if (draft.has(key)) put(fields, field, draft.optBoolean(key));
+        }
         if (fields.length() > 0) put(meaningFields, entity.optString("id"), fields);
       }
       if (incoming.length() > 0) {
@@ -482,6 +496,14 @@ public final class Library {
     return s.optBoolean("saved")
         || s.optJSONObject("metadata") != null
             && s.optJSONObject("metadata").optString("retention").equals("saved");
+  }
+
+  private static void rebindAnnotations(JSONObject meaning, String id) {
+    JSONArray annotations = meaning.optJSONArray("annotations");
+    for (int i = 0; annotations != null && i < annotations.length(); i++) {
+      JSONObject annotation = annotations.optJSONObject(i);
+      if (annotation != null) put(annotation, "meaning_id", id);
+    }
   }
 
   private static void mergeMeaning(JSONObject old, JSONObject incoming) {

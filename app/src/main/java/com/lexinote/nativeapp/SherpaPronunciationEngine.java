@@ -39,6 +39,8 @@ public class SherpaPronunciationEngine implements PronunciationEngine {
   private AudioTrack activeTrack;
   private AudioManager audioManager;
   private AudioFocusRequest focusRequest;
+  private final java.util.concurrent.atomic.AtomicInteger playbackRequest =
+      new java.util.concurrent.atomic.AtomicInteger();
   private volatile boolean initialized = false;
   private volatile boolean released = false;
 
@@ -108,8 +110,9 @@ public class SherpaPronunciationEngine implements PronunciationEngine {
       return;
     }
 
+    final int request = playbackRequest.incrementAndGet();
     executor.execute(() -> {
-      if (released) return;
+      if (released || request != playbackRequest.get()) return;
       try {
         if (!initialized || tts == null) {
           throw new IllegalStateException("TTS engine not yet ready");
@@ -131,13 +134,13 @@ public class SherpaPronunciationEngine implements PronunciationEngine {
 
         final GeneratedAudio finalAudio = audio;
         mainHandler.post(() -> {
-          if (released) return;
+          if (released || request != playbackRequest.get()) return;
           if (onStart != null) onStart.run();
           playAudio(finalAudio, onComplete, onError);
         });
       } catch (Throwable t) {
         mainHandler.post(() -> {
-          if (onError != null) onError.accept(t);
+          if (!released && request == playbackRequest.get() && onError != null) onError.accept(t);
         });
       }
     });
@@ -170,7 +173,8 @@ public class SherpaPronunciationEngine implements PronunciationEngine {
           .setTransferMode(AudioTrack.MODE_STATIC)
           .build();
 
-      activeTrack.write(samples, 0, samples.length, AudioTrack.WRITE_BLOCKING);
+      if (activeTrack.write(samples, 0, samples.length, AudioTrack.WRITE_BLOCKING) != samples.length)
+        throw new IllegalStateException("AudioTrack could not load the generated audio");
 
       if (audioManager != null) {
         focusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
@@ -188,7 +192,10 @@ public class SherpaPronunciationEngine implements PronunciationEngine {
       currentTrack.setPlaybackPositionUpdateListener(new AudioTrack.OnPlaybackPositionUpdateListener() {
         @Override
         public void onMarkerReached(AudioTrack track) {
-          stopPlayback();
+          synchronized (SherpaPronunciationEngine.this) {
+            if (activeTrack != track) return;
+            stopPlayback();
+          }
           if (onComplete != null) {
             mainHandler.post(onComplete);
           }
@@ -228,7 +235,8 @@ public class SherpaPronunciationEngine implements PronunciationEngine {
 
   @Override
   public void stop() {
-    executor.execute(this::stopPlayback);
+    playbackRequest.incrementAndGet();
+    stopPlayback();
   }
 
   @Override

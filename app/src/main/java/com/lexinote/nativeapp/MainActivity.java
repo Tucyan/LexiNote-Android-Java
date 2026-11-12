@@ -51,6 +51,11 @@ public final class MainActivity extends Activity {
   ReviewUi review;
   SettingsUi settingsUi;
   public PronunciationEngine pronunciationEngine;
+  private android.speech.tts.TextToSpeech systemVoice;
+  private boolean systemVoiceInitializing;
+  private boolean systemVoiceReady;
+  private int pronunciationRequest;
+  private String pendingSystemSpeech;
   int background, foreground, muted, card, accent, inputBg, border, subtle;
   boolean isDark;
   float scale = 1;
@@ -71,6 +76,7 @@ public final class MainActivity extends Activity {
     secure = new SecureSettings(this);
     titles = new ConversationTitles(this);
     pronunciationEngine = new SherpaPronunciationEngine(this);
+    initializeSystemVoice();
     store = LibraryStore.getInstance(this);
     store.bind(this);
     store.loadLibrary(this, result -> {
@@ -664,9 +670,52 @@ public final class MainActivity extends Activity {
     Toast.makeText(this, s, Toast.LENGTH_LONG).show();
   }
 
+  private void initializeSystemVoice() {
+    systemVoiceInitializing = true;
+    systemVoice = new android.speech.tts.TextToSpeech(this, status -> handler.post(() -> {
+      if (!alive() || systemVoice == null) return;
+      systemVoiceInitializing = false;
+      systemVoiceReady = status == android.speech.tts.TextToSpeech.SUCCESS
+          && systemVoice.setLanguage(java.util.Locale.US) >= android.speech.tts.TextToSpeech.LANG_AVAILABLE;
+      if (systemVoiceReady) {
+        systemVoice.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
+          @Override public void onStart(String id) {}
+          @Override public void onDone(String id) {}
+          @Override public void onError(String id) {
+            handler.post(() -> {
+              if (alive() && Integer.toString(pronunciationRequest).equals(id))
+                say("系统英语语音不可用，请检查设备的文字转语音设置");
+            });
+          }
+        });
+      }
+      String pending = pendingSystemSpeech;
+      pendingSystemSpeech = null;
+      if (pending != null) speakWithSystemVoice(pending, pronunciationRequest);
+    }));
+  }
+
+  private void speakWithSystemVoice(String word, int request) {
+    if (!alive() || request != pronunciationRequest) return;
+    if (systemVoiceInitializing) {
+      pendingSystemSpeech = word;
+      return;
+    }
+    if (!systemVoiceReady || systemVoice.speak(word, android.speech.tts.TextToSpeech.QUEUE_FLUSH,
+        null, Integer.toString(request)) != android.speech.tts.TextToSpeech.SUCCESS)
+      say("系统英语语音不可用，请检查设备的文字转语音设置");
+  }
+
   public void pronounce(String word) {
-    if (pronunciationEngine != null) {
-      pronunciationEngine.pronounce(word, null, null, error -> say("发音加载失败"));
+    String clean = SherpaPronunciationEngine.cleanWord(word);
+    if (clean.isEmpty()) return;
+    int request = ++pronunciationRequest;
+    pendingSystemSpeech = null;
+    if (systemVoiceReady) systemVoice.stop();
+    if (pronunciationEngine != null && pronunciationEngine.isReady()) {
+      pronunciationEngine.pronounce(clean, null, null, error -> speakWithSystemVoice(clean, request));
+    } else {
+      speakWithSystemVoice(clean, request);
     }
   }
 
@@ -893,15 +942,19 @@ public final class MainActivity extends Activity {
   }
 
   void request(Work work, Done done, boolean modal) {
-    request(work, done, modal, true);
+    request(work, done, modal, true, false);
   }
 
   /** The result handler commits its own session delta. */
   void requestSessionResult(Work work, Done done, boolean modal) {
-    request(work, done, modal, false);
+    request(work, done, modal, false, false);
   }
 
-  private void request(Work work, Done done, boolean modal, boolean persistResult) {
+  void requestQuietly(Work work, Done done) {
+    request(work, done, false, false, true);
+  }
+
+  private void request(Work work, Done done, boolean modal, boolean persistResult, boolean quiet) {
     if (active != null) {
       say("正在请求，可取消后重新发送");
       return;
@@ -912,7 +965,7 @@ public final class MainActivity extends Activity {
       active = new AiClient(secure.getProvider(), secure.getApiKey());
     } catch (Exception e) {
       rememberRequestFailure(e);
-      error(e);
+      if (!quiet) error(e);
       return;
     }
     AiClient c = active;
@@ -924,7 +977,7 @@ public final class MainActivity extends Activity {
       progress.setButton(DialogInterface.BUTTON_NEGATIVE, "取消", (d, w) -> cancel());
       progress.setOnCancelListener(d -> cancel());
       progress.show();
-    } else render();
+    } else if (!quiet) render();
     worker.execute(
         () -> {
           try {
@@ -957,6 +1010,10 @@ public final class MainActivity extends Activity {
                     Library.put(session, "last_error", e.getMessage());
                     library.touchSession(session, true);
                     persist();
+                  }
+                  if (quiet) {
+                    render();
+                    return;
                   }
                   if (modal) error(e);
                   else {
@@ -1497,6 +1554,10 @@ public final class MainActivity extends Activity {
   protected void onDestroy() {
     uiEpoch++;
     cancel();
+    if (systemVoice != null) {
+      systemVoice.shutdown();
+      systemVoice = null;
+    }
     if (pronunciationEngine != null) {
       pronunciationEngine.release();
     }
@@ -1521,6 +1582,9 @@ public final class MainActivity extends Activity {
 
   @Override
   protected void onPause() {
+    pronunciationRequest++;
+    pendingSystemSpeech = null;
+    if (systemVoiceReady) systemVoice.stop();
     if (pronunciationEngine != null) {
       pronunciationEngine.stop();
     }

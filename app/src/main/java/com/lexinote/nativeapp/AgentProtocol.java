@@ -96,6 +96,8 @@ public final class AgentProtocol {
     result.put("word", text(result, "word", 200, true));
     if (!java.util.Arrays.asList("word", "phrase").contains(result.optString("type"))
         || result.optBoolean("is_invalid")) throw invalid("尚未获得有效词汇，请先确认查询目标");
+    text(result, "phonetic", 200, false);
+    text(result, "raw_explanation", 4000, false);
     JSONArray meanings = result.optJSONArray("meanings");
     if (meanings == null || meanings.length() == 0 || meanings.length() > 30)
       throw invalid("释义数量无效");

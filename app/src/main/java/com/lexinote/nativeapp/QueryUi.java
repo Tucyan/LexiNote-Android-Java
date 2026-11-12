@@ -1384,13 +1384,15 @@ final class QueryUi {
       Runnable afterSave = () -> {
         if (!currentSession(id, revision, generation) || !"result".equals(a.screen)) return;
         a.render();
-        if (saved && !context.trim().isEmpty()) {
-          try {
-            if (!a.secure.getApiKey().isEmpty() && !a.secure.getProvider().optString("model_id").isEmpty())
-              explainDictionary(a.session.optJSONObject("query_results"), context);
-          } catch (Exception unavailable) {
-            // The dictionary result is already usable.
-          }
+        if (!saved || organizing) return;
+        JSONObject current = a.session.optJSONObject("query_results");
+        if (!QueryWorkflow.shouldAutoSupplement(current, a.library.settings())
+            || !QueryWorkflow.canAlignDictionary(current)) return;
+        try {
+          if (!a.secure.getApiKey().isEmpty() && !a.secure.getProvider().optString("model_id").isEmpty())
+            organizeDictionary(current, context, true);
+        } catch (Exception unavailable) {
+          // The dictionary result is already usable.
         }
       };
       if (saved && edited) {
@@ -1807,30 +1809,53 @@ final class QueryUi {
     a.persistAsync(saved -> { if (saved) a.render(); });
   }
 
-  void presentation(JSONObject meaning, boolean selected, String choice, boolean example) {
-    try {
-      updateResult(
-          QueryWorkflow.presentation(
-              a.session.getJSONObject("query_results"),
-              meaning.optString("id"),
-              selected,
-              choice,
-              example));
-    } catch (Exception error) {
-      a.error(error);
-    }
+  private JSONObject requestSupplement(AiClient client, JSONObject result, String context)
+      throws Exception {
+    return client.lookup(result.optString("word"),
+        "补充缺失音标、典型例句和用法提示。只在有必要时增加义项，已有义项请保留原释义文本。"
+            + "\n已有义项：" + QueryWorkflow.contextCandidates(result)
+            + "\n语境：" + context, null);
+  }
+
+  private void organizeDictionary(JSONObject result, String context, boolean automatic) {
+    if (a.active != null) return;
+    final String id = a.session.optString("id");
+    final int revision = a.session.optInt("revision");
+    final long generation = a.store.currentGeneration();
+    final JSONObject basis = Library.copy(result);
+    MainActivity.Work work = client -> client.organizeDictionary(basis, context);
+    MainActivity.Done done = updated -> {
+      if (!currentSession(id, revision, generation) || !"result".equals(a.screen)
+          || (automatic && (organizing
+              || !a.library.settings().optBoolean("auto_ai_supplement")))
+          || a.session.optJSONObject("query_results") != result) return;
+      Library.put(a.session, "query_results", updated);
+      saveUpdatedLookup(saved -> {
+        if (saved && !context.trim().isEmpty() && currentSession(id, revision, generation)
+            && "result".equals(a.screen)
+            && (!automatic || (!organizing && a.library.settings().optBoolean("auto_ai_supplement"))))
+          explainDictionary(a.session.optJSONObject("query_results"), context, automatic);
+      });
+    };
+    if (automatic) a.requestQuietly(work, done);
+    else a.requestSessionResult(work, done, true);
   }
 
   void supplement() {
     if (a.session == null || a.active != null) return;
     final JSONObject target = a.session;
-    final JSONObject original = Library.copy(target.optJSONObject("query_results"));
+    JSONObject result = target.optJSONObject("query_results");
+    if (QueryWorkflow.canAlignDictionary(result) && !organizing) {
+      organizeDictionary(result, target.optString("source_context"), false);
+      return;
+    }
+    final JSONObject original = Library.copy(result);
     final int revision = target.optInt("revision");
     final String targetId = target.optString("id");
     final long generation = a.store.currentGeneration();
     a.request(
         client ->
-            client.lookup(original.optString("word"), "请为此词汇提供更加丰富、深入的语境用法与高级搭配。保留原查询目标。", null),
+            requestSupplement(client, original, target.optString("source_context")),
         incoming -> {
           if (!currentSession(targetId, revision, generation)) return;
           Library.put(a.session, "query_results", QueryWorkflow.mergeSupplement(original, incoming));
@@ -1838,24 +1863,36 @@ final class QueryUi {
         });
   }
 
-  private void explainDictionary(JSONObject result, String context) {
+  private void explainDictionary(JSONObject result, String context, boolean automatic) {
     if (a.active != null) return;
     final String id = a.session.optString("id");
     final int revision = a.session.optInt("revision");
     final long generation = a.store.currentGeneration();
     final JSONObject basis = Library.copy(result);
-    a.requestSessionResult(client -> client.dictionaryContext(basis, context), explanation -> {
-      if (!currentSession(id, revision, generation) || !"result".equals(a.screen)) return;
+    MainActivity.Work work = client -> client.dictionaryContext(basis, context);
+    MainActivity.Done done = explanation -> {
+      if (!currentSession(id, revision, generation) || !"result".equals(a.screen)
+          || a.session.optJSONObject("query_results") != result
+          || (automatic && (organizing
+              || !a.library.settings().optBoolean("auto_ai_supplement")))) return;
       JSONObject current = a.session.getJSONObject("query_results");
-      JSONObject additional = explanation.optJSONObject("additional_meaning");
-      if (additional != null) {
-        current.getJSONArray("meanings").put(additional);
-        explanation.remove("additional_meaning");
-      }
-      Library.put(current, "dictionary_context", explanation);
+      applyDictionaryContext(current, explanation);
       saveUpdatedLookup();
-    }, false);
+    };
+    if (automatic) a.requestQuietly(work, done);
+    else a.requestSessionResult(work, done, false);
   }
+
+  private void applyDictionaryContext(JSONObject current, JSONObject explanation) {
+    JSONObject additional = explanation.optJSONObject("additional_meaning");
+    if (additional != null) {
+      current.optJSONArray("meanings").put(additional);
+      explanation.remove("additional_meaning");
+    }
+    Library.put(current, "dictionary_context", explanation);
+  }
+
+  private AiClient verificationRequest;
 
   private void verifyOnline(JSONObject result) {
     if (a.active != null) return;
@@ -1870,12 +1907,19 @@ final class QueryUi {
       Library.put(a.session, "web_verification", verification);
       saveUpdatedLookup();
     }, false);
+    verificationRequest = a.active;
+    if (verificationRequest != null) a.render();
   }
 
   private void saveUpdatedLookup() {
+    saveUpdatedLookup(null);
+  }
+
+  private void saveUpdatedLookup(java.util.function.Consumer<Boolean> callback) {
     a.library.touchSession(a.session, true);
     persistSession(true, saved -> {
       if (saved && "result".equals(a.screen)) a.render();
+      if (callback != null) callback.accept(saved);
     });
   }
 
@@ -1943,46 +1987,191 @@ final class QueryUi {
     }
   }
 
-  void addMeaningControls(LinearLayout card, JSONObject meaning) {
-    String id = meaning.optString("id");
-    boolean selected = meaning.optBoolean("selected", true),
-        example = meaning.optBoolean("save_example", true);
-    String choice =
-        meaning.optString(
-            "definition_choice", meaning.optString("zh_definition").isEmpty() ? "en" : "zh");
-    LinearLayout choices = a.row();
-    CheckBox visible = new CheckBox(a);
-    visible.setText("显示本义");
-    visible.setTextColor(a.foreground);
-    visible.setChecked(selected);
-    visible.setOnCheckedChangeListener(
-        (v, checked) -> presentation(meaning, checked, choice, example));
-    LinearLayout.LayoutParams visLp = new LinearLayout.LayoutParams(-2, -2);
-    visLp.rightMargin = a.dp(8);
-    choices.addView(visible, visLp);
-    for (String language : new String[] {"zh", "en"}) {
-      Button button =
-          a.chip(
-              language.equals("zh") ? "中文" : "英文",
-              choice.equals(language),
-              v -> presentation(meaning, selected, language, example));
-      button.setEnabled(
-          !meaning
-              .optString(language.equals("zh") ? "zh_definition" : "en_definition")
-              .trim()
-              .isEmpty());
-      choices.addView(button);
+  private CheckBox organizeCheck(String label, boolean checked, boolean enabled,
+      android.widget.CompoundButton.OnCheckedChangeListener listener) {
+    CheckBox box = new CheckBox(a);
+    box.setText(label);
+    box.setTextSize(12 * a.scale);
+    box.setTextColor(checked && enabled ? a.accent : a.muted);
+    box.setButtonTintList(android.content.res.ColorStateList.valueOf(checked && enabled ? a.accent : a.muted));
+    box.setMinHeight(a.dp(32));
+    box.setMinimumHeight(a.dp(32));
+    box.setChecked(checked);
+    box.setEnabled(enabled);
+    box.setOnCheckedChangeListener(listener);
+    return box;
+  }
+
+  private void changeOrganizeField(String id, String field, boolean visible) {
+    try {
+      updateResult(QueryWorkflow.organizeField(a.session.getJSONObject("query_results"), id, field, visible));
+    } catch (Exception error) {
+      a.error(error);
     }
-    card.addView(choices);
-    CheckBox examples = new CheckBox(a);
-    examples.setText("显示例句");
-    examples.setTextColor(a.foreground);
-    examples.setChecked(example);
-    examples.setOnCheckedChangeListener(
-        (v, checked) -> presentation(meaning, selected, choice, checked));
-    LinearLayout.LayoutParams exLp = new LinearLayout.LayoutParams(-2, -2);
-    exLp.topMargin = a.dp(4);
-    card.addView(examples, exLp);
+  }
+
+  private LinearLayout organizeFieldCard(LinearLayout card, JSONObject item, String id,
+      String field, String label) {
+    boolean included = id == null || item.optBoolean("selected", true);
+    boolean visible = item.optBoolean(QueryWorkflow.organizeKey(field), true);
+    LinearLayout fieldCard = a.column();
+    fieldCard.setPadding(a.dp(8), a.dp(3), a.dp(8), a.dp(9));
+    fieldCard.setBackground(a.shape(a.card, 9, included && visible ? a.accent : a.border));
+    fieldCard.addView(organizeCheck(label + (included && visible ? "  ● 显示" : "  ○ 隐藏"),
+        visible, included, (view, checked) -> changeOrganizeField(id, field, checked)));
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+    lp.topMargin = a.dp(9);
+    card.addView(fieldCard, lp);
+    return fieldCard;
+  }
+
+  private void addMeaningNotes(LinearLayout card, JSONObject meaning) {
+    LinearLayout actions = a.row();
+    String id = meaning.optString("id");
+    boolean selected = meaning.optBoolean("selected", true);
+    Button remarks = a.button("添加备注", v -> editMeaningNote(meaning, false, null, false));
+    Button annotation = a.button("添加批注", v -> editMeaningNote(meaning, true, null, false));
+    remarks.setEnabled(selected);
+    annotation.setEnabled(selected);
+    actions.addView(remarks, new LinearLayout.LayoutParams(0, -2, 1));
+    actions.addView(annotation, new LinearLayout.LayoutParams(0, -2, 1));
+    card.addView(actions);
+
+    if (!meaning.optString("remarks").isEmpty()) {
+      LinearLayout remarksCard = organizeFieldCard(card, meaning, id, "remarks", "备注");
+      addNoteRow(remarksCard, meaning.optString("remarks"), "备注", selected,
+          () -> editMeaningNote(meaning, false, null, true), () -> deleteMeaningNote(id, null));
+    }
+    JSONArray annotations = meaning.optJSONArray("annotations");
+    if (annotations != null && annotations.length() > 0) {
+      LinearLayout notes = organizeFieldCard(card, meaning, id, "annotations", "批注");
+      for (int i = 0; i < annotations.length(); i++) {
+        JSONObject note = annotations.optJSONObject(i);
+        if (note != null)
+          addNoteRow(notes, note.optString("content"), "批注", selected,
+              () -> editMeaningNote(meaning, true, note, true),
+              () -> deleteMeaningNote(id, note.optString("id")));
+      }
+    }
+  }
+
+  private void addNoteRow(LinearLayout card, String content, String label, boolean enabled,
+      Runnable edit, Runnable delete) {
+    LinearLayout row = a.row();
+    row.setGravity(Gravity.CENTER_VERTICAL);
+    row.addView(a.text(content, 13, false), new LinearLayout.LayoutParams(0, -2, 1));
+    addNoteIcon(row, R.drawable.ic_query_note_edit, "编辑" + label, enabled, edit);
+    addNoteIcon(row, R.drawable.ic_query_note_delete, "删除" + label, enabled, delete);
+    card.addView(row);
+  }
+
+  private void addNoteIcon(LinearLayout row, int drawable, String label, boolean enabled,
+      Runnable action) {
+    android.widget.ImageButton icon = new android.widget.ImageButton(a);
+    icon.setImageResource(drawable);
+    icon.setImageTintList(android.content.res.ColorStateList.valueOf(enabled ? a.muted : a.border));
+    icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+    icon.setContentDescription(label);
+    icon.setEnabled(enabled);
+    icon.setBackground(new android.graphics.drawable.RippleDrawable(
+        android.content.res.ColorStateList.valueOf(0x22000000 | (a.accent & 0xFFFFFF)),
+        null, a.shape(android.graphics.Color.WHITE, 8, 0)));
+    icon.setOnClickListener(v -> action.run());
+    row.addView(icon, new LinearLayout.LayoutParams(a.dp(44), a.dp(44)));
+  }
+
+  private void deleteMeaningNote(String meaningId, String annotationId) {
+    String label = annotationId == null ? "备注" : "批注";
+    AlertDialog dialog = a.showDialog(new AlertDialog.Builder(a)
+        .setTitle("删除" + label)
+        .setMessage("确定删除这条" + label + "？")
+        .setNegativeButton("取消", null)
+        .setPositiveButton("删除", (d, w) -> {
+          try {
+            JSONObject result = a.session.getJSONObject("query_results");
+            updateResult(annotationId == null
+                ? QueryWorkflow.editMeaning(result, meaningId, new JSONObject().put("remarks", ""))
+                : QueryWorkflow.changeAnnotation(result, meaningId, annotationId, null, null));
+          } catch (Exception error) {
+            a.error(error);
+          }
+        }));
+    a.styleDestructive(dialog);
+  }
+
+  private void editMeaningNote(JSONObject meaning, boolean annotation, JSONObject note, boolean editing) {
+    String id = meaning.optString("id");
+    LinearLayout box = a.column();
+    List<String> keys = new ArrayList<>(), labels = new ArrayList<>();
+    android.widget.Spinner targets = new android.widget.Spinner(a);
+    if (annotation) {
+      String[] fields = {"zh_definition", "en_definition", "example", "source", "remarks"};
+      String[] names = {"中文释义", "英文释义", "典型例句", "来源", "备注"};
+      for (int i = 0; i < fields.length; i++) {
+        if (!meaning.optString(fields[i]).trim().isEmpty()
+            || note != null && fields[i].equals(note.optString("target_field"))) {
+          keys.add(fields[i]);
+          labels.add(names[i]);
+        }
+      }
+      if (keys.isEmpty()) {
+        a.say("此释义暂无可批注的内容");
+        return;
+      }
+      android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<>(
+          a, android.R.layout.simple_spinner_item, labels);
+      adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+      targets.setAdapter(adapter);
+      if (note != null) {
+        int selected = keys.indexOf(note.optString("target_field"));
+        if (selected >= 0) targets.setSelection(selected);
+      }
+      box.addView(a.text("批注对象", 12, true));
+      box.addView(targets);
+    }
+    EditText input = a.input(annotation ? "批注内容" : "备注内容",
+        annotation ? (note == null ? "" : note.optString("content"))
+            : (editing ? meaning.optString("remarks") : ""), true);
+    input.setFilters(new android.text.InputFilter[] {new android.text.InputFilter.LengthFilter(12000)});
+    box.addView(input);
+    AlertDialog dialog = a.showDialog(new AlertDialog.Builder(a)
+        .setTitle((editing ? "编辑" : "添加") + (annotation ? "批注" : "备注"))
+        .setView(a.dialogInput(box))
+        .setNegativeButton("取消", null)
+        .setPositiveButton("保存", null));
+    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+      String value = input.getText().toString().trim();
+      if (value.isEmpty()) {
+        input.setError(annotation ? "请输入批注内容" : "请输入备注内容");
+        return;
+      }
+      if (a.active != null || a.session == null) {
+        a.say("请先等待当前请求完成");
+        return;
+      }
+      try {
+        JSONObject result = a.session.getJSONObject("query_results");
+        JSONObject updated;
+        if (annotation) {
+          String field = keys.get(targets.getSelectedItemPosition());
+          updated = note == null ? QueryWorkflow.annotateMeaning(result, id, field, value)
+              : QueryWorkflow.changeAnnotation(result, id, note.optString("id"), field, value);
+        } else {
+          String old = meaning.optString("remarks").trim();
+          String remarks = !editing && !old.isEmpty() ? old + "\n" + value : value;
+          updated = QueryWorkflow.editMeaning(result, id, new JSONObject().put("remarks", remarks));
+          if (old.isEmpty()) updated = QueryWorkflow.organizeField(updated, id, "remarks", true);
+        }
+        updateResult(updated);
+        dialog.dismiss();
+      } catch (Exception error) {
+        a.error(error);
+      }
+    });
+  }
+
+  private void addMeaningEditor(LinearLayout card, JSONObject meaning) {
+    String id = meaning.optString("id");
     if (!editingMeanings.contains(id)) {
       Button editBtn = a.button("就地编辑释义", v -> {
         editingMeanings.add(id);
@@ -2126,29 +2315,28 @@ final class QueryUi {
     TextView type = pillTag(r.optString("type").equals("phrase") ? "短语" : "单词", false, null);
     badges.addView(type);
 
-    TextView enrich = pillTag("AI", a.active == null, a.active == null ? v -> supplement() : null);
-    enrich.setEnabled(a.active == null);
-    enrich.setAlpha(a.active == null ? 1.0f : 0.45f);
-    LinearLayout.LayoutParams enrichLp = new LinearLayout.LayoutParams(-2, -2);
-    enrichLp.leftMargin = a.dp(6);
-    badges.addView(enrich, enrichLp);
-
-    TextView verify =
-        pillTag(
-            a.active == null ? "联网核对" : "取消请求",
-            true,
-            v -> {
-              if (a.active != null) {
-                a.cancel();
-                a.render();
-              } else verifyOnline(r);
-            });
-    if (a.active != null) {
-      verify.setTextColor(android.graphics.Color.parseColor("#EF4444"));
-    }
-    LinearLayout.LayoutParams verifyLp = new LinearLayout.LayoutParams(-2, -2);
-    verifyLp.leftMargin = a.dp(6);
-    badges.addView(verify, verifyLp);
+    boolean verifying = a.active != null && a.active == verificationRequest;
+    Button verify = a.button(verifying ? "取消核对" : "联网核对", v -> {
+      if (verifying && a.active == verificationRequest) {
+        a.cancel();
+        a.render();
+      } else if (a.active == null) verifyOnline(r);
+    });
+    int verifyColor = verifying ? android.graphics.Color.parseColor("#EF4444") : a.border;
+    verify.setBackground(new android.graphics.drawable.RippleDrawable(
+        android.content.res.ColorStateList.valueOf(0x22000000 | (a.accent & 0xFFFFFF)),
+        a.shape(a.inputBg, 10, verifyColor), null));
+    if (verifying) verify.setTextColor(verifyColor);
+    verify.setTextSize(12 * a.scale);
+    verify.setMinWidth(0);
+    verify.setMinimumWidth(0);
+    verify.setMinHeight(a.dp(28));
+    verify.setMinimumHeight(a.dp(28));
+    verify.setPadding(a.dp(10), a.dp(4), a.dp(10), a.dp(4));
+    verify.setSingleLine(true);
+    LinearLayout.LayoutParams verifyLayout = new LinearLayout.LayoutParams(-2, -2);
+    verifyLayout.leftMargin = a.dp(6);
+    badges.addView(verify, verifyLayout);
 
     LinearLayout.LayoutParams badgesLp = new LinearLayout.LayoutParams(-2, -2);
     badgesLp.leftMargin = a.dp(8);
@@ -2163,13 +2351,13 @@ final class QueryUi {
 
     boolean dictionary = "ecdict".equals(r.optString("lookup_origin"));
     boolean personal = r.optBoolean("is_from_local");
-    TextView local =
-        a.text(
-            personal ? "个人笔记" : dictionary ? "内置词库 · ECDICT" : "✦ AI 模型生成", 11, true);
-    local.setTextColor(a.accent);
-    local.setPadding(a.dp(8), a.dp(3), a.dp(8), a.dp(3));
-    local.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 12, 0));
-    metaRow.addView(local);
+    if (personal || dictionary) {
+      TextView local = a.text(personal ? "个人笔记" : "内置词库 · ECDICT", 11, true);
+      local.setTextColor(a.accent);
+      local.setPadding(a.dp(8), a.dp(3), a.dp(8), a.dp(3));
+      local.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x1A000000, 12, 0));
+      metaRow.addView(local);
+    }
 
     if (a.library.local(r.optString("word")) != null) {
       TextView saved = a.text("✓ 已在笔记中", 11, true);
@@ -2180,10 +2368,19 @@ final class QueryUi {
       savedLp.leftMargin = a.dp(8);
       metaRow.addView(saved, savedLp);
     }
-    heading.addView(metaRow);
+    if (metaRow.getChildCount() > 0) heading.addView(metaRow);
+    if (verifying) heading.addView(a.text("正在联网核对…", 12, false));
+    heading.addView(a.button("AI 补充", v -> {
+      if (a.active == null) supplement();
+      else a.say("请等待当前请求完成");
+    }));
 
     String phonetic = r.optString("phonetic");
     final String targetWord = r.optString("word", r.optString("content"));
+    if (organizing && !phonetic.isEmpty())
+      heading.addView(organizeCheck("音标" + (r.optBoolean("save_phonetic", true) ? "  ● 显示" : "  ○ 隐藏"),
+          r.optBoolean("save_phonetic", true), true,
+          (view, checked) -> changeOrganizeField(null, "phonetic", checked)));
     if (!phonetic.isEmpty() || !targetWord.isEmpty()) {
       heading.addView(a.gap(8));
       LinearLayout phoneticRow = a.row();
@@ -2192,6 +2389,11 @@ final class QueryUi {
         TextView pText = a.text(phonetic.startsWith("/") ? phonetic : "/" + phonetic + "/", 16, false);
         pText.setTextColor(a.muted);
         phoneticRow.addView(pText);
+        if (FieldProvenance.isGenerated(r, "phonetic")) {
+          TextView badge = a.text("✦ AI 音标", 11, true);
+          badge.setPadding(a.dp(6), 0, 0, 0);
+          phoneticRow.addView(badge);
+        }
       }
       TextView speakerBtn = a.icon("volume-high-outline", 20, a.accent);
       speakerBtn.setContentDescription("朗读发音");
@@ -2255,14 +2457,14 @@ final class QueryUi {
           bLp.leftMargin = a.dp(8);
           meaningHeader.addView(badge, bLp);
         } else if ("ai".equals(m.optString("lookup_origin"))) {
-          TextView badge = a.text("✦ AI 补充义项", 11, true);
+          TextView badge = a.text("✦ AI 补充", 11, true);
           badge.setTextColor(a.accent);
           badge.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
           badge.setBackground(a.shape((a.accent & 0xFFFFFF) | 0x14000000, 8, 0));
           LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(-2, -2);
           bLp.leftMargin = a.dp(8);
           meaningHeader.addView(badge, bLp);
-        } else if (FieldProvenance.hasAnyGenerated(m, "zh_definition", "en_definition", "example")) {
+        } else if (FieldProvenance.hasAnyGenerated(m, "zh_definition", "en_definition")) {
           TextView badge = a.text("✦ AI生成", 11, true);
           badge.setTextColor(a.accent);
           badge.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
@@ -2271,10 +2473,40 @@ final class QueryUi {
           bLp.leftMargin = a.dp(8);
           meaningHeader.addView(badge, bLp);
         }
+        String meaningId = m.optString("id");
+        boolean included = m.optBoolean("selected", true);
+        if (organizing) {
+          c.setBackground(a.shape(a.card, 14, included ? a.accent : a.border));
+          meaningHeader.addView(new View(a), new LinearLayout.LayoutParams(0, 1, 1));
+          CheckBox include = organizeCheck("收录此释义", included, true, (view, checked) -> {
+            JSONObject updated = Library.copy(a.session.optJSONObject("query_results"));
+            JSONArray meanings = updated.optJSONArray("meanings");
+            for (int j = 0; j < meanings.length(); j++) {
+              JSONObject item = meanings.optJSONObject(j);
+              if (meaningId.equals(item.optString("id"))) {
+                Library.put(item, "selected", checked);
+                updateResult(updated);
+                break;
+              }
+            }
+          });
+          include.setBackground(a.shape(included ? (a.accent & 0xFFFFFF) | 0x1A000000 : a.card,
+              12, included ? a.accent : a.border));
+          include.setPadding(a.dp(2), 0, a.dp(6), 0);
+          meaningHeader.addView(include);
+        }
         c.addView(meaningHeader);
-        if (organizing) addMeaningControls(c, m);
         for (String f : new String[] {"zh_definition", "en_definition"})
           if (!m.optString(f).isEmpty()) {
+            String label = (f.equals("zh_definition") ? "中文释义" : "英文释义")
+                + (FieldProvenance.isGenerated(m, f) ? " · AI生成" : "");
+            if (organizing) {
+              LinearLayout field = organizeFieldCard(c, m, meaningId, f, label);
+              TextView value = a.text(m.optString(f), 15, f.equals("zh_definition"));
+              if ("en_definition".equals(f)) value.setTypeface(null, android.graphics.Typeface.ITALIC);
+              field.addView(value);
+              continue;
+            }
             LinearLayout definition = a.column();
             definition.setPadding(a.dp(10), a.dp(10), a.dp(10), a.dp(10));
             definition.setBackground(a.shape(a.inputBg, 10, a.border));
@@ -2290,7 +2522,13 @@ final class QueryUi {
             definitionLp.topMargin = a.dp(8);
             c.addView(definition, definitionLp);
           }
-        if (!m.optString("example").isEmpty()) {
+        if (organizing && !m.optString("example").isEmpty()) {
+          LinearLayout field = organizeFieldCard(c, m, meaningId, "example",
+              FieldProvenance.isGenerated(m, "example") ? "✦ AI 例句" : "典型例句");
+          TextView ex = a.text(m.optString("example"), 14, false);
+          ex.setTypeface(null, android.graphics.Typeface.ITALIC);
+          field.addView(ex);
+        } else if (!m.optString("example").isEmpty()) {
           LinearLayout example = a.row();
           example.setBackground(a.shape(a.inputBg, 5, 0));
           View stripe = new View(a);
@@ -2299,7 +2537,7 @@ final class QueryUi {
           LinearLayout contents = a.column();
           contents.setPadding(a.dp(10), a.dp(10), a.dp(10), a.dp(10));
           boolean isAiEg = FieldProvenance.isGenerated(m, "example");
-          contents.addView(a.text(isAiEg ? "典型例句 · AI生成:" : "典型例句:", 11, true));
+          contents.addView(a.text(isAiEg ? "✦ AI 例句" : "典型例句", 11, true));
           TextView ex = a.text("\"" + m.optString("example") + "\"", 14, false);
           ex.setTypeface(null, android.graphics.Typeface.ITALIC);
           contents.addView(ex);
@@ -2308,23 +2546,35 @@ final class QueryUi {
           exampleLp.topMargin = a.dp(12);
           c.addView(example, exampleLp);
         }
-        for (String f : new String[] {"source", "remarks"})
+        if (organizing) {
+          if (!m.optString("source").isEmpty())
+            organizeFieldCard(c, m, meaningId, "source", "来源")
+                .addView(a.text(m.optString("source"), 13, false));
+          if (!m.optString("phonetic").isEmpty())
+            organizeFieldCard(c, m, meaningId, "phonetic", "义项音标")
+                .addView(a.text(m.optString("phonetic"), 13, false));
+          addMeaningNotes(c, m);
+          if (included) addMeaningEditor(c, m);
+        }
+        if (!organizing) for (String f : new String[] {"source", "remarks"})
           if (!m.optString(f).isEmpty()) c.addView(a.text(m.optString(f), 13, false));
         JSONArray sourceImages = m.optJSONArray("source_images");
+        LinearLayout imageCard = organizing && sourceImages != null && sourceImages.length() > 0
+            ? organizeFieldCard(c, m, meaningId, "source_images", "来源图片") : c;
         if (sourceImages != null)
           for (int j = 0; j < sourceImages.length(); j++) {
             ImageView sourceImage = new ImageView(a);
             sourceImage.setImageURI(Uri.parse(sourceImages.optString(j)));
             sourceImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            c.addView(sourceImage, new LinearLayout.LayoutParams(-1, a.dp(160)));
+            imageCard.addView(sourceImage, new LinearLayout.LayoutParams(-1, a.dp(160)));
           }
         JSONArray annotations = m.optJSONArray("annotations");
-        if (annotations != null)
+        if (!organizing && annotations != null)
           for (int j = 0; j < annotations.length(); j++)
             c.addView(a.text("批注：" + annotations.optJSONObject(j).optString("content"), 13, false));
       }
     if (!r.optString("raw_explanation").isEmpty())
-      a.card("✦ AI 补充说明").addView(a.text(r.optString("raw_explanation"), 15, false));
+      a.card(FieldProvenance.isGenerated(r, "raw_explanation") ? "✦ AI 用法提示" : "用法提示").addView(a.text(r.optString("raw_explanation"), 15, false));
     LinearLayout actions = a.fixedFooter();
     Button askAssistantBtn =
         a.button(
@@ -2351,7 +2601,7 @@ final class QueryUi {
       LinearLayout organizeHeader = a.row();
       organizeHeader.setGravity(Gravity.CENTER_VERTICAL);
       organizeHeader.addView(
-          a.text("整理模式 · 仅控制笔记显示", 12, true), new LinearLayout.LayoutParams(0, -2, 1));
+          a.text("● 整理模式 · 勾选笔记显示内容", 12, true), new LinearLayout.LayoutParams(0, -2, 1));
       organizeHeader.addView(
           a.button(
               "退出整理",
@@ -2370,7 +2620,7 @@ final class QueryUi {
           a.outlineButton("添加到默认笔记", v -> a.notebooks.saveDefault(r)),
           new LinearLayout.LayoutParams(0, a.dp(44), 1));
       Button selectAddBtn =
-          a.primaryButton("选择添加笔记", v -> a.notebooks.saveDialog(r));
+          a.primaryButton("选择添加笔记", v -> a.notebooks.saveDialog(r, true));
       LinearLayout.LayoutParams selectAddLp = new LinearLayout.LayoutParams(0, a.dp(44), 1);
       selectAddLp.leftMargin = a.dp(8);
       organizeActions.addView(selectAddBtn, selectAddLp);

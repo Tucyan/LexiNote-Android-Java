@@ -72,6 +72,7 @@ public class QueryWorkflowTest {
         merged.getJSONArray("meanings").getJSONObject(0).getString("id"),
         merged.getJSONArray("meanings").getJSONObject(1).getString("id"));
     assertEquals("more context", merged.getString("raw_explanation"));
+    assertEquals("ai", merged.getJSONArray("meanings").getJSONObject(1).optString("lookup_origin"));
     assertFalse(merged.getBoolean("is_from_local"));
     assertEquals(1, old.getJSONArray("meanings").length());
   }
@@ -216,4 +217,81 @@ public class QueryWorkflowTest {
     assertFalse(FieldProvenance.hasAnyGenerated(meaning, "example", "en_definition"));
     assertFalse(FieldProvenance.hasAnyGenerated(null, "zh_definition"));
   }
+  @Test
+  public void automaticSupplementRequiresOptInAndDictionaryResult() throws Exception {
+    JSONObject dictionary = result("resilient").put("lookup_origin", "ecdict");
+    JSONObject settings = new JSONObject();
+    assertFalse(QueryWorkflow.shouldAutoSupplement(dictionary, settings));
+    settings.put("auto_ai_supplement", true);
+    assertTrue(QueryWorkflow.shouldAutoSupplement(dictionary, settings));
+    assertFalse(QueryWorkflow.shouldAutoSupplement(result("resilient"), settings));
+  }
+
+  @Test
+  public void organizeFieldsAreIndependentAndAnnotationsKeepTheirTarget() throws Exception {
+    JSONObject original = result("resilient");
+    JSONObject hidden = QueryWorkflow.organizeField(original, "m1", "en_definition", false);
+    JSONObject shown = QueryWorkflow.organizeField(hidden, "m1", "en_definition", true);
+    JSONObject annotated = QueryWorkflow.annotateMeaning(shown, "m1", "en_definition", "我的批注");
+    JSONObject meaning = annotated.getJSONArray("meanings").getJSONObject(0);
+    assertTrue(meaning.optBoolean("save_zh", true));
+    assertTrue(meaning.getBoolean("save_en"));
+    assertFalse(hidden.getJSONArray("meanings").getJSONObject(0).getBoolean("save_en"));
+    assertEquals("able to recover", meaning.getJSONArray("annotations").getJSONObject(0).getString("target_text"));
+    assertFalse(original.getJSONArray("meanings").getJSONObject(0).has("annotations"));
+  }
+
+  @Test
+  public void editingAndDeletingAnAnnotationOnlyChangesItsOwnEntry() throws Exception {
+    JSONObject r = QueryWorkflow.annotateMeaning(result("resilient"), "m1", "zh_definition", "First");
+    r = QueryWorkflow.annotateMeaning(r, "m1", "example", "Second");
+    JSONArray before = r.getJSONArray("meanings").getJSONObject(0).getJSONArray("annotations");
+    String id = before.getJSONObject(0).getString("id");
+    JSONObject updated = QueryWorkflow.changeAnnotation(r, "m1", id, "en_definition", "Revised");
+    JSONArray edited = updated.getJSONArray("meanings").getJSONObject(0).getJSONArray("annotations");
+    assertEquals("Revised", edited.getJSONObject(0).getString("content"));
+    assertEquals("able to recover", edited.getJSONObject(0).getString("target_text"));
+    JSONObject deleted = QueryWorkflow.changeAnnotation(updated, "m1", id, null, null);
+    JSONArray remaining = deleted.getJSONArray("meanings").getJSONObject(0).getJSONArray("annotations");
+    assertEquals(1, remaining.length());
+    assertEquals("Second", remaining.getJSONObject(0).getString("content"));
+    assertEquals("First", before.getJSONObject(0).getString("content"));
+  }
+
+  @Test
+  public void dictionaryAlignmentKeepsOriginalTextAndUnmatchedSenses() throws Exception {
+    JSONObject original = OfflineDictionary.toResult("bank", "bæŋk",
+        "n. sloping land\\nn. financial institution", "n. 银行\\nn. 河岸\\nn. 沙洲");
+    JSONObject reply = new JSONObject("{\"groups\":["
+        + "{\"ids\":[\"zh-0\",\"en-1\"],\"zh_definition\":\"错误改写\",\"example\":\"The bank opens at nine.\"},"
+        + "{\"ids\":[\"zh-1\",\"en-0\"]}]}");
+    JSONObject aligned = QueryWorkflow.alignDictionary(original, reply);
+    JSONArray cards = aligned.getJSONArray("meanings");
+    assertEquals(3, cards.length());
+    JSONObject bank = cards.getJSONObject(0);
+    assertEquals("n. 银行", bank.getString("zh_definition"));
+    assertEquals("n. financial institution", bank.getString("en_definition"));
+    assertFalse(FieldProvenance.isGenerated(bank, "zh_definition"));
+    assertFalse(FieldProvenance.isGenerated(bank, "en_definition"));
+    assertTrue(FieldProvenance.isGenerated(bank, "example"));
+    assertEquals("n. sloping land", cards.getJSONObject(1).getString("en_definition"));
+    assertEquals("n. 沙洲", cards.getJSONObject(2).getString("zh_definition"));
+    assertEquals(5, original.getJSONArray("meanings").length());
+  }
+
+  @Test
+  public void dictionaryAlignmentLabelsMissingTranslationsAndRejectsReusedOrUnknownIds() throws Exception {
+    JSONObject original = OfflineDictionary.toResult("look up", "", "", "查阅");
+    JSONObject valid = new JSONObject("{\"groups\":[{\"ids\":[\"zh-0\"],"
+        + "\"en_definition\":\"To consult a source.\"}]}");
+    JSONObject meaning = QueryWorkflow.alignDictionary(original, valid)
+        .getJSONArray("meanings").getJSONObject(0);
+    assertTrue(FieldProvenance.isGenerated(meaning, "en_definition"));
+    assertFalse(FieldProvenance.isGenerated(meaning, "zh_definition"));
+    for (String ids : new String[] {"[\"zh-0\",\"zh-0\"]", "[\"missing\"]"}) {
+      JSONObject invalid = new JSONObject("{\"groups\":[{\"ids\":" + ids + "}]}");
+      assertThrows(IllegalArgumentException.class, () -> QueryWorkflow.alignDictionary(original, invalid));
+    }
+  }
+
 }
