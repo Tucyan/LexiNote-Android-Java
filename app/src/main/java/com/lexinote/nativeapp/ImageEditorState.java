@@ -1,6 +1,7 @@
 package com.lexinote.nativeapp;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -24,6 +25,8 @@ public final class ImageEditorState {
   public final int quarterTurns;
   public final Tool tool;
   public final SelectedRegion selection;
+  // The applied crop is expressed in the original image's normalized coordinates.
+  final SelectedRegion appliedCrop;
   public final double zoom, panX, panY;
   public final int fineAngle;
 
@@ -60,9 +63,17 @@ public final class ImageEditorState {
       double panY,
       List<List<SelectedRegion.Point>> inkStrokes,
       int fineAngle) {
+    this(quarterTurns, tool, selection, zoom, panX, panY, inkStrokes, fineAngle, null);
+  }
+
+  private ImageEditorState(
+      int quarterTurns, Tool tool, SelectedRegion selection, double zoom, double panX,
+      double panY, List<List<SelectedRegion.Point>> inkStrokes, int fineAngle,
+      SelectedRegion appliedCrop) {
     this.quarterTurns = ((quarterTurns % 4) + 4) % 4;
     this.tool = Objects.requireNonNull(tool);
     this.selection = selection;
+    this.appliedCrop = appliedCrop;
     this.zoom = Double.isFinite(zoom) ? Math.max(1, Math.min(6, zoom)) : 1;
     this.panX = Double.isFinite(panX) ? panX : 0;
     this.panY = Double.isFinite(panY) ? panY : 0;
@@ -97,27 +108,35 @@ public final class ImageEditorState {
     for (List<SelectedRegion.Point> stroke : inkStrokes) ink.add(rotatePoints(stroke, delta));
     if (rotated != null) {
       if (rotated.points.isEmpty()) {
-        List<SelectedRegion.Point> corners = new ArrayList<>();
-        corners.add(new SelectedRegion.Point(rotated.left, rotated.top));
-        corners.add(new SelectedRegion.Point(rotated.right, rotated.top));
-        corners.add(new SelectedRegion.Point(rotated.right, rotated.bottom));
-        corners.add(new SelectedRegion.Point(rotated.left, rotated.bottom));
-        List<SelectedRegion.Point> moved = rotatePoints(corners, delta);
-        double l = 1, t = 1, r = 0, b = 0;
-        for (SelectedRegion.Point p : moved) {
-          l = Math.min(l, p.x);
-          t = Math.min(t, p.y);
-          r = Math.max(r, p.x);
-          b = Math.max(b, p.y);
-        }
-        rotated = SelectedRegion.rectangle(l, t, r, b);
+        rotated = rotateRectangle(rotated, delta);
       } else
         rotated =
             rotated.kind == SelectedRegion.Kind.MARK
                 ? SelectedRegion.mark(rotatePoints(rotated.points, delta))
                 : SelectedRegion.freehand(rotatePoints(rotated.points, delta));
     }
-    return new ImageEditorState(turns, tool, rotated, 1, 0, 0, ink, fineAngle);
+    return new ImageEditorState(turns, tool, rotated, 1, 0, 0, ink, fineAngle, appliedCrop);
+  }
+
+  private static SelectedRegion rotateRectangle(SelectedRegion region, int turns) {
+    List<SelectedRegion.Point> corners = rotatePoints(Arrays.asList(
+        new SelectedRegion.Point(region.left, region.top),
+        new SelectedRegion.Point(region.right, region.bottom)), turns);
+    SelectedRegion.Point a = corners.get(0), b = corners.get(1);
+    return SelectedRegion.rectangle(a.x, a.y, b.x, b.y);
+  }
+
+  ImageEditorState withAppliedCrop(SelectedRegion visibleCrop) {
+    SelectedRegion local = rotateRectangle(visibleCrop, (4 - quarterTurns) % 4);
+    if (appliedCrop != null) {
+      local = SelectedRegion.rectangle(
+          appliedCrop.left + local.left * appliedCrop.width(),
+          appliedCrop.top + local.top * appliedCrop.height(),
+          appliedCrop.left + local.right * appliedCrop.width(),
+          appliedCrop.top + local.bottom * appliedCrop.height());
+    }
+    return new ImageEditorState(quarterTurns, tool, null, 1, 0, 0,
+        Collections.emptyList(), 0, local);
   }
 
   private static List<SelectedRegion.Point> rotatePoints(
@@ -136,23 +155,23 @@ public final class ImageEditorState {
   }
 
   public ImageEditorState withTool(Tool value) {
-    return new ImageEditorState(quarterTurns, value, selection, zoom, panX, panY, inkStrokes, fineAngle);
+    return new ImageEditorState(quarterTurns, value, selection, zoom, panX, panY, inkStrokes, fineAngle, appliedCrop);
   }
 
   public ImageEditorState withSelection(SelectedRegion value) {
-    return new ImageEditorState(quarterTurns, tool, value, zoom, panX, panY, inkStrokes, fineAngle);
+    return new ImageEditorState(quarterTurns, tool, value, zoom, panX, panY, inkStrokes, fineAngle, appliedCrop);
   }
 
   public ImageEditorState withViewport(double zoom, double panX, double panY) {
-    return new ImageEditorState(quarterTurns, tool, selection, zoom, panX, panY, inkStrokes, fineAngle);
+    return new ImageEditorState(quarterTurns, tool, selection, zoom, panX, panY, inkStrokes, fineAngle, appliedCrop);
   }
 
   public ImageEditorState withInkStrokes(List<List<SelectedRegion.Point>> value) {
-    return new ImageEditorState(quarterTurns, tool, selection, zoom, panX, panY, value, fineAngle);
+    return new ImageEditorState(quarterTurns, tool, selection, zoom, panX, panY, value, fineAngle, appliedCrop);
   }
 
   public ImageEditorState withFineAngle(int value) {
-    return new ImageEditorState(quarterTurns, tool, selection, zoom, panX, panY, inkStrokes, value);
+    return new ImageEditorState(quarterTurns, tool, selection, zoom, panX, panY, inkStrokes, value, appliedCrop);
   }
 
   public JSONObject toJson() {
@@ -166,6 +185,7 @@ public final class ImageEditorState {
       out.put("panY", panY);
       out.put("fineAngle", fineAngle);
       out.put("selection", selection == null ? JSONObject.NULL : selection.toJson());
+      if (appliedCrop != null) out.put("appliedCrop", appliedCrop.toJson());
       JSONArray strokes = new JSONArray();
       for (List<SelectedRegion.Point> stroke : inkStrokes) {
         JSONArray points = new JSONArray();
@@ -217,7 +237,8 @@ public final class ImageEditorState {
           json.optDouble("panX", 0),
           json.optDouble("panY", 0),
           strokes,
-          json.optInt("fineAngle", 0));
+          json.optInt("fineAngle", 0),
+          parseRegion(json.optJSONObject("appliedCrop")));
     } catch (RuntimeException invalid) {
       return initial();
     }
@@ -257,6 +278,7 @@ public final class ImageEditorState {
     return quarterTurns == s.quarterTurns
         && tool == s.tool
         && Objects.equals(selection, s.selection)
+        && Objects.equals(appliedCrop, s.appliedCrop)
         && Double.compare(zoom, s.zoom) == 0
         && Double.compare(panX, s.panX) == 0
         && Double.compare(panY, s.panY) == 0
@@ -266,6 +288,6 @@ public final class ImageEditorState {
 
   @Override
   public int hashCode() {
-    return Objects.hash(quarterTurns, tool, selection, zoom, panX, panY, fineAngle, inkStrokes);
+    return Objects.hash(quarterTurns, tool, selection, zoom, panX, panY, fineAngle, inkStrokes, appliedCrop);
   }
 }

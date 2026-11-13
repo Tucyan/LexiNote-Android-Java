@@ -35,6 +35,10 @@
                 <data android:scheme="https" android:host="taskstream.xyz" android:path="/lexinote/auth/callback" />
             </intent-filter>
         </activity>
+        <activity android:name=".ImageEditorActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
         <provider android:name=".CameraOutputProvider"
             android:authorities="com.lexinote.nativeapp.camera"
             android:exported="false" android:grantUriPermissions="true" />

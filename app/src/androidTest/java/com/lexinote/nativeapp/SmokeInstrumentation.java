@@ -55,7 +55,7 @@ public final class SmokeInstrumentation extends Instrumentation {
       testCredentialEncryption();
       record("Android Keystore API key roundtrip");
       main(this::testCrop);
-      record("native image crop coordinates and rotation");
+      record("full-image rectangle marking and rotation");
       main(
           () -> {
             try {
@@ -299,18 +299,18 @@ public final class SmokeInstrumentation extends Instrumentation {
     crop.onTouchEvent(down);
     crop.onTouchEvent(move);
     crop.onTouchEvent(up);
-    Bitmap selected = crop.crop();
-    check(
-        selected.getWidth() == 60 && selected.getHeight() == 60, "Crop mapped wrong bitmap bounds");
+    Bitmap selected = crop.renderEditedImage();
+    check(crop.region() != null && selected.getWidth() == 100 && selected.getHeight() == 100,
+        "Rectangle selection should mark the full image");
     selected.recycle();
     crop.rotate();
-    Bitmap rotated = crop.crop();
+    Bitmap rotated = crop.renderEditedImage();
     check(
-        Math.abs(rotated.getWidth() - 60) <= 1 && Math.abs(rotated.getHeight() - 60) <= 1,
-        "Rotation did not preserve the selected region");
+        crop.region() != null && rotated.getWidth() == 100 && rotated.getHeight() == 100,
+        "Rotation did not preserve the full marked image");
     rotated.recycle();
     crop.reset();
-    Bitmap full = crop.crop();
+    Bitmap full = crop.renderEditedImage();
     check(full.getWidth() == 100 && full.getHeight() == 100, "Reset did not restore full image");
     full.recycle();
     down.recycle();

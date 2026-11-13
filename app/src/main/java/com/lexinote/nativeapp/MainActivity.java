@@ -63,6 +63,7 @@ public final class MainActivity extends Activity {
   boolean recoveryOnly;
   String loadFailure;
   Bundle pendingStartupState;
+  private Intent pendingImageEditResult;
   int lastPage = -1;
   String lastScreen = "";
   int savedScrollX = 0;
@@ -72,6 +73,7 @@ public final class MainActivity extends Activity {
   public void onCreate(Bundle state) {
     super.onCreate(state);
     pendingStartupState = state;
+    if (state != null) pendingImageEditResult = state.getParcelable("pendingImageEditResult");
     repository = new Repository(this);
     secure = new SecureSettings(this);
     titles = new ConversationTitles(this);
@@ -166,6 +168,12 @@ public final class MainActivity extends Activity {
               android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::handleBack);
     review.restoreState(state);
     render();
+
+    if (pendingImageEditResult != null) {
+      Intent result = pendingImageEditResult;
+      pendingImageEditResult = null;
+      applyImageEditResult(result);
+    }
 
     Intent intent = getIntent();
     if (intent != null && intent.hasExtra("import_fixture_path")) {
@@ -1098,6 +1106,14 @@ public final class MainActivity extends Activity {
   @Override
   protected void onActivityResult(int req, int result, Intent data) {
     super.onActivityResult(req, result, data);
+    if (req == ImageEditorActivity.REQUEST_CODE) {
+      if ((result == RESULT_OK || result == RESULT_FIRST_USER) && data != null) {
+        // After recreation Android can deliver the result before the library finishes loading.
+        if (query == null) pendingImageEditResult = data;
+        else applyImageEditResult(data);
+      }
+      return;
+    }
     if (req == 70) {
       if (result == RESULT_OK) {
         titles.reset(); settingsUi.models.cancel(); settingsUi.models.clearDraft();
@@ -1191,37 +1207,37 @@ public final class MainActivity extends Activity {
       say("请先选择图片");
       return;
     }
-    ImageEditorDialog.show(
-        this,
-        source,
-        imageEditorState,
-        new ImageEditorDialog.Callback() {
-          @Override
-          public void onComplete(ImageEditorResult result) {
-            originalImage = result.originalUri;
-            image = result.effectiveUri == null ? result.originalUri : result.effectiveUri;
-            imageEditorState = result.state;
-            imageRegion = result.region;
-            invalidateDraft();
-            if (page == 1) {
-              query.stage = 0;
-              query.guessReply = null;
-            }
-            // Attachments changed inside an assistant remain part of that session's explicit
-            // source.
-            if (screen.equals("assistant") && session != null) {
-              query.storeImageSource(session);
-              library.touchSession(session, false);
-              persist();
-            }
-            render();
-          }
+    try {
+      startActivityForResult(ImageEditorActivity.editIntent(this, source, imageEditorState, page == 1),
+          ImageEditorActivity.REQUEST_CODE);
+    } catch (Exception failure) {
+      error(failure);
+    }
+  }
 
-          @Override
-          public void onError(Activity activity, Exception error) {
-            MainActivity.this.error(error);
-          }
-        });
+  private void applyImageEditResult(Intent data) {
+    if (recoveryOnly) return;
+    try {
+      ImageEditorResult result = ImageEditorActivity.readResult(data);
+      originalImage = result.originalUri;
+      image = result.effectiveUri == null ? result.originalUri : result.effectiveUri;
+      imageEditorState = result.state;
+      imageRegion = result.region;
+      invalidateDraft();
+      if (page == 1) {
+        query.stage = 0;
+        query.guessReply = null;
+      }
+      // Keep changed attachments in the assistant's explicit source.
+      if (screen.equals("assistant") && session != null) {
+        query.storeImageSource(session);
+        library.touchSession(session, false);
+        persist();
+      }
+      render();
+    } catch (Exception failure) {
+      error(failure);
+    }
   }
 
   void export(String filename, String mime, String content) {
@@ -1261,7 +1277,12 @@ public final class MainActivity extends Activity {
 
   @Override
   protected void onSaveInstanceState(Bundle state) {
-    if (settingsUi == null) { if (pendingStartupState != null) state.putAll(pendingStartupState); super.onSaveInstanceState(state); return; }
+    if (settingsUi == null) {
+      if (pendingStartupState != null) state.putAll(pendingStartupState);
+      state.putParcelable("pendingImageEditResult", pendingImageEditResult);
+      super.onSaveInstanceState(state);
+      return;
+    }
     review.saveState(state);
     settingsUi.models.saveState(state);
     super.onSaveInstanceState(state);
