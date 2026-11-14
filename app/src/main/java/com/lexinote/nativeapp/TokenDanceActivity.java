@@ -2,6 +2,10 @@ package com.lexinote.nativeapp;
 
 import android.app.*;
 import android.content.*;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.content.pm.verify.domain.DomainVerificationManager;
+import android.content.pm.verify.domain.DomainVerificationUserState;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Color;
@@ -36,6 +40,7 @@ public final class TokenDanceActivity extends Activity {
   boolean busy, foreground, manual;
   boolean creatingPayment, creationInterrupted;
   boolean externalPrompt, expiryChecked;
+  boolean reopeningAuthorization;
   int backgroundColor = Color.WHITE, foregroundColor = Color.rgb(15, 23, 42), accentColor = Color.rgb(16, 185, 129);
   int cardColor = Color.WHITE, mutedColor = Color.rgb(100, 116, 139), subtleColor = Color.rgb(148, 163, 184);
   int borderColor = Color.rgb(226, 232, 240), inputBgColor = Color.rgb(241, 245, 249), errorColor = Color.rgb(239, 68, 68);
@@ -65,18 +70,23 @@ public final class TokenDanceActivity extends Activity {
 
   @Override public void onCreate(Bundle state) {
     super.onCreate(state);
+    if (state != null && state.getBoolean("reopening_authorization")) state = null;
     secure = new SecureSettings(this);
     palette();
     String requested = getIntent().getStringExtra("mode");
     if (state != null) requested = state.getString("mode", requested);
-    mode = java.util.Arrays.asList("authorize", "account", "usage", "help", "recharge").contains(requested) ? requested : "account";
+    boolean callback = isCallbackIntent(getIntent());
+    mode = callback ? "authorize"
+        : java.util.Arrays.asList("authorize", "account", "usage", "help", "recharge").contains(requested) ? requested : "account";
     manual = state != null && state.getBoolean("manual");
     if (mode.equals("authorize")) {
       try {
-        pending = secure.pendingTokenDanceAuthorization();
-        if (pending == null || System.currentTimeMillis() - pending.createdAt >= 600000L)
-          newAuthorization(false);
-        else manual = pending.callback == null;
+        if (state != null || callback) pending = secure.pendingTokenDanceAuthorization();
+        if (pending != null && (callback || System.currentTimeMillis() - pending.createdAt < 600000L)) {
+          manual = pending.callback == null;
+        } else if (!callback) {
+          newAuthorization(!canReceiveBrowserCallback());
+        }
       } catch (Exception e) { notice = "无法恢复授权，请重新授权。"; }
     }
     if (state != null && mode.equals("recharge") && state.getString("payment_id") != null) {
@@ -93,15 +103,49 @@ public final class TokenDanceActivity extends Activity {
 
   @Override protected void onNewIntent(Intent intent) {
     super.onNewIntent(intent);
-    setIntent(intent);
-    handleCallbackIntent(intent);
+    if (isCallbackIntent(intent) && "authorize".equals(mode)) {
+      handleCallbackIntent(intent);
+      return;
+    }
+    if ("authorize".equals(intent.getStringExtra("mode")) || isCallbackIntent(intent)) {
+      setIntent(intent);
+      reopeningAuthorization = true;
+      recreate();
+    }
+  }
+
+  boolean canReceiveBrowserCallback() {
+    Uri callback = Uri.parse(TokenDanceProtocol.NATIVE_CALLBACK_URL);
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      DomainVerificationManager manager = getSystemService(DomainVerificationManager.class);
+      if (manager == null) return false;
+      try {
+        DomainVerificationUserState state = manager.getDomainVerificationUserState(getPackageName());
+        if (state == null || !state.isLinkHandlingAllowed()) return false;
+        Integer hostState = state.getHostToStateMap().get(callback.getHost());
+        if (hostState == null || (hostState != DomainVerificationUserState.DOMAIN_STATE_VERIFIED
+            && hostState != DomainVerificationUserState.DOMAIN_STATE_SELECTED)) return false;
+      } catch (PackageManager.NameNotFoundException e) {
+        return false;
+      }
+    }
+    Intent view = new Intent(Intent.ACTION_VIEW, callback).addCategory(Intent.CATEGORY_BROWSABLE);
+    ResolveInfo target = getPackageManager().resolveActivity(view, PackageManager.MATCH_DEFAULT_ONLY);
+    return target != null && target.activityInfo != null
+        && getPackageName().equals(target.activityInfo.packageName)
+        && TokenDanceActivity.class.getName().equals(target.activityInfo.name);
+  }
+
+  boolean isCallbackIntent(Intent intent) {
+    if (intent == null || intent.getData() == null) return false;
+    String raw = intent.getDataString();
+    return TokenDanceProtocol.isNativeCallback(raw)
+        || TokenDanceProtocol.classifyPageUrl(raw) == TokenDanceProtocol.Page.CALLBACK;
   }
 
   void handleCallbackIntent(Intent intent) {
-    if (intent == null || intent.getData() == null) return;
-    String raw = intent.getData().toString();
-    if (mode.equals("authorize") && (TokenDanceProtocol.isNativeCallback(raw) || TokenDanceProtocol.classifyPageUrl(raw) == TokenDanceProtocol.Page.CALLBACK)) {
-      finishAuthorization(raw, false);
+    if (mode.equals("authorize") && isCallbackIntent(intent)) {
+      finishAuthorization(intent.getDataString(), false);
     }
   }
 
@@ -352,7 +396,7 @@ public final class TokenDanceActivity extends Activity {
 
       controlCard.addView(manualContainer);
 
-      errorRetryBtn = outlineButton("重新发起授权", () -> restart(false));
+      errorRetryBtn = outlineButton("重新发起授权", () -> restart(manual));
       LinearLayout.LayoutParams erbLp = new LinearLayout.LayoutParams(-1, dp(38));
       erbLp.topMargin = dp(8);
       errorRetryBtn.setLayoutParams(erbLp);
@@ -549,16 +593,7 @@ public final class TokenDanceActivity extends Activity {
   }
 
   void switchToManual(boolean isManual) {
-    if (busy) return;
-    manual = isManual;
-    if (manual) {
-      notice = "已切换为一次性授权码方式。若已在页面授权，请复制授权码并在下方粘贴。";
-    } else {
-      notice = "";
-      restart(false);
-      return;
-    }
-    updateControlCard();
+    restart(isManual, isManual ? "已切换为一次性授权码方式，请在新页面确认授权。" : "");
   }
 
   void pasteCode() {
@@ -626,19 +661,26 @@ public final class TokenDanceActivity extends Activity {
   }
 
   void newAuthorization(boolean headless) throws Exception {
-    pending = TokenDanceProtocol.begin(headless ? null : TokenDanceProtocol.NATIVE_CALLBACK_URL, System.currentTimeMillis());
-    secure.saveTokenDanceAuthorization(pending);
+    TokenDanceProtocol.Session session = TokenDanceProtocol.begin(
+        headless ? null : TokenDanceProtocol.NATIVE_CALLBACK_URL, System.currentTimeMillis());
+    secure.saveTokenDanceAuthorization(session);
+    pending = session;
     manual = headless;
   }
 
   void restart(boolean headless) {
+    restart(headless, "");
+  }
+
+  void restart(boolean headless, String message) {
     if (busy) return;
     try {
       newAuthorization(headless);
-      notice = "";
-      manual = headless;
+      notice = message;
+      if (codeInput != null) codeInput.setText("");
       updateControlCard();
       if (web != null && pending != null) {
+        web.stopLoading();
         web.loadUrl(TokenDanceProtocol.authorizationUrl(pending));
       }
     } catch (Exception e) {
@@ -649,8 +691,10 @@ public final class TokenDanceActivity extends Activity {
   void openBrowser() {
     if (busy) return;
     try {
-      if (pending == null) newAuthorization(false);
-      notice = "已在系统浏览器打开授权页面。完成授权后将自动返回；若未自动返回，可复制页面授权码在此粘贴。";
+      if (pending == null) newAuthorization(manual);
+      notice = manual
+          ? "已在系统浏览器打开授权页面。确认授权后，请将一次性授权码复制回此处。"
+          : "已在系统浏览器打开授权页面。若未自动返回，请回到此处改用一次性授权码。";
       String url = TokenDanceProtocol.authorizationUrl(pending);
       updateControlCard();
       openExternal(url);
@@ -670,7 +714,7 @@ public final class TokenDanceActivity extends Activity {
   }
 
   void finishAuthorization(String value, boolean headless) {
-    if (busy || pending == null) return;
+    if (busy || pending == null || (!headless && manual)) return;
     try {
       String code = headless
           ? pending.readHeadlessCode(value, System.currentTimeMillis())
@@ -686,11 +730,10 @@ public final class TokenDanceActivity extends Activity {
         finish();
       }, "授权未完成，请重新授权后重试。");
     } catch (Exception e) {
-      fail("授权码无效、已过期或与当前流程不匹配，请重新授权。");
-      if (!headless) {
-        manual = true;
-        notice = "自动授权未完成，已切换为一次性授权码方式。请重新确认授权并粘贴新授权码。";
-        updateControlCard();
+      if (headless) {
+        fail("授权码无效、已过期或与当前流程不匹配，请重新授权。");
+      } else {
+        restart(true, "自动授权未完成，已切换为一次性授权码方式。请重新确认授权并粘贴新授权码。");
       }
     }
   }
@@ -1088,6 +1131,7 @@ public final class TokenDanceActivity extends Activity {
   }
 
   @Override protected void onSaveInstanceState(Bundle state) {
+    state.putBoolean("reopening_authorization", reopeningAuthorization);
     state.putString("mode", mode);
     state.putBoolean("manual", manual);
     if (payment != null) {

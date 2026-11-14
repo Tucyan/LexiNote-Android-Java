@@ -7,8 +7,34 @@ public class TokenDanceProtocolTest {
   TokenDanceProtocol.Session s = TokenDanceProtocol.begin(null, 1000);
   assertEquals(64, s.verifier.length()); assertEquals(43, s.challenge.length());
   assertTrue(TokenDanceProtocol.authorizationUrl(s).contains("code_challenge_method=S256"));
+  assertFalse(TokenDanceProtocol.authorizationUrl(s).contains("callback_url="));
   assertEquals("abc", s.readHeadlessCode(" abc ", 1001));
   try { s.readHeadlessCode("abc", 1002); fail(); } catch (IllegalArgumentException expected) {}
+ }
+ @Test public void activityRestartsAuthorizationWhenSwitchingToHeadless() throws Exception {
+  String activity = activitySource();
+  int createStart = activity.indexOf("void onCreate(");
+  String createBody = activity.substring(createStart, activity.indexOf("void onNewIntent(", createStart));
+  assertTrue("A new connection must select the initial page using callback availability",
+      createBody.contains("newAuthorization(!canReceiveBrowserCallback())"));
+  assertTrue("Automatic authorization must retain a manual entry point",
+      activity.contains("() -> switchToManual(true)"));
+  assertRestartPaths(activity);
+ }
+ private String activitySource() throws Exception {
+  java.nio.file.Path source = java.nio.file.Path.of("src/main/java/com/lexinote/nativeapp/TokenDanceActivity.java");
+  if (!java.nio.file.Files.exists(source)) source = java.nio.file.Path.of("app").resolve(source);
+  return new String(java.nio.file.Files.readAllBytes(source), java.nio.charset.StandardCharsets.UTF_8);
+ }
+ private void assertRestartPaths(String activity) {
+  int switchStart = activity.indexOf("void switchToManual(");
+  String switchBody = activity.substring(switchStart, activity.indexOf("void pasteCode(", switchStart));
+  assertTrue("Switching modes must start a fresh authorization session and load its page",
+      switchBody.contains("restart(isManual,"));
+  int finishStart = activity.indexOf("void finishAuthorization(");
+  String finishBody = activity.substring(finishStart, activity.indexOf("boolean connected(", finishStart));
+  assertTrue("Rejected callbacks must restart with a new Headless session",
+      finishBody.contains("restart(true,"));
  }
  @Test public void callbackRequiresExactAddressStateAndSingleCode() throws Exception {
   TokenDanceProtocol.Session s = TokenDanceProtocol.begin(TokenDanceProtocol.NATIVE_CALLBACK_URL, 1000);

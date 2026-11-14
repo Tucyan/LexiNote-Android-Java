@@ -21,7 +21,7 @@ public final class FullResolutionCamera {
     if (!file.createNewFile()) throw new java.io.IOException("无法创建相机图片文件");
     return new Uri.Builder()
         .scheme("content")
-        .authority(CameraOutputProvider.AUTHORITY)
+        .authority(CameraOutputProvider.authority(context))
         .appendPath(CameraOutputProvider.PATH)
         .appendPath(file.getName())
         .build();
@@ -36,7 +36,7 @@ public final class FullResolutionCamera {
   }
 
   public static Uri persistCaptured(Context context, Uri cameraOutput) throws Exception {
-    File source = CameraOutputProvider.file(context::getFilesDir, cameraOutput);
+    File source = CameraOutputProvider.file(context, cameraOutput);
     if (!source.isFile() || source.length() == 0) throw new FileNotFoundException("相机没有写入完整图片");
     Uri saved = ImageTools.persist(context, cameraOutput);
     cleanup(context, cameraOutput);
@@ -46,7 +46,7 @@ public final class FullResolutionCamera {
   /** Deletes an abandoned capture after cancellation or failed activity result. */
   public static void cleanup(Context context, Uri cameraOutput) {
     try {
-      CameraOutputProvider.file(context::getFilesDir, cameraOutput).delete();
+      CameraOutputProvider.file(context, cameraOutput).delete();
     } catch (FileNotFoundException ignored) {
     }
   }

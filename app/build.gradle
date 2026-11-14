@@ -1,10 +1,17 @@
 plugins { id 'com.android.application' }
 
+def physicalDemo = providers.gradleProperty('physicalDemo').isPresent()
+
 android {
     namespace 'com.lexinote.nativeapp'
     compileSdk 36
     defaultConfig {
-        applicationId 'com.lexinote.nativeapp'
+        applicationId (physicalDemo ? 'com.lexinote.nativeapp.demo' : 'com.lexinote.nativeapp')
+        manifestPlaceholders = [
+            launcherLabel: physicalDemo ? 'LexiNote 演示' : '@string/app_name',
+            callbackScheme: physicalDemo ? 'lexinote-demo' : 'lexinote',
+            callbackHost: physicalDemo ? 'demo.invalid' : 'taskstream.xyz'
+        ]
         minSdk 26
         targetSdk 36
         versionCode 3
