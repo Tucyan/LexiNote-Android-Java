@@ -7,7 +7,6 @@ import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
-import android.graphics.Rect;
 import android.graphics.RectF;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
@@ -25,7 +24,7 @@ public final class ImageCropView extends View {
     void onStateChanged();
   }
 
-  private Bitmap source;
+  private final Bitmap source;
   private Bitmap displayed;
   private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
   private final Matrix imageMatrix = new Matrix();
@@ -113,24 +112,13 @@ public final class ImageCropView extends View {
     drawInk(
         canvas,
         history.current().inkStrokes,
-        0,
-        0,
         displayed.getWidth(),
         displayed.getHeight(),
         true);
 
-    SelectedRegion r = history.current().selection;
-    if (r != null) {
-      paint.setColor(0x2810B981);
-      paint.setStyle(Paint.Style.FILL);
-      if (r.points.isEmpty()) canvas.drawRect(mapRect(r), paint);
-      else canvas.drawPath(mapRegion(r), paint);
-      paint.setColor(0xFF10B981);
-      paint.setStyle(Paint.Style.STROKE);
-      paint.setStrokeWidth(2.5f * getResources().getDisplayMetrics().density);
-      canvas.drawPath(mapRegion(r), paint);
-      paint.setStyle(Paint.Style.FILL);
-    }
+    SelectedRegion selection = region();
+    if (selection != null)
+      drawSelection(canvas, mapRegion(selection), 2.5f * getResources().getDisplayMetrics().density);
 
     if (cropRect != null) {
       RectF screenCrop = mapRectF(cropRect);
@@ -163,17 +151,6 @@ public final class ImageCropView extends View {
     if (drawing) drawGesture(canvas);
   }
 
-  private RectF mapRect(SelectedRegion r) {
-    RectF v =
-        new RectF(
-            (float) r.left * displayed.getWidth(),
-            (float) r.top * displayed.getHeight(),
-            (float) r.right * displayed.getWidth(),
-            (float) r.bottom * displayed.getHeight());
-    imageMatrix.mapRect(v);
-    return v;
-  }
-
   private RectF mapRectF(RectF normalized) {
     RectF v =
         new RectF(
@@ -186,22 +163,44 @@ public final class ImageCropView extends View {
   }
 
   private Path mapRegion(SelectedRegion r) {
-    Path path = new Path();
+    Path path = selectionPath(r);
     if (r.points.isEmpty()) {
-      path.addRect(mapRect(r), Path.Direction.CW);
+      RectF bounds = new RectF();
+      path.computeBounds(bounds, true);
+      imageMatrix.mapRect(bounds);
+      path.reset();
+      path.addRect(bounds, Path.Direction.CW);
+    } else path.transform(imageMatrix);
+    return path;
+  }
+
+  private Path selectionPath(SelectedRegion r) {
+    Path path = new Path();
+    int width = displayed.getWidth(), height = displayed.getHeight();
+    if (r.points.isEmpty()) {
+      path.addRect((float) r.left * width, (float) r.top * height,
+          (float) r.right * width, (float) r.bottom * height, Path.Direction.CW);
       return path;
     }
-    float[] xy = new float[2];
     for (int i = 0; i < r.points.size(); i++) {
       SelectedRegion.Point p = r.points.get(i);
-      xy[0] = (float) p.x * displayed.getWidth();
-      xy[1] = (float) p.y * displayed.getHeight();
-      imageMatrix.mapPoints(xy);
-      if (i == 0) path.moveTo(xy[0], xy[1]);
-      else path.lineTo(xy[0], xy[1]);
+      float x = (float) (p.x * width), y = (float) (p.y * height);
+      if (i == 0) path.moveTo(x, y);
+      else path.lineTo(x, y);
     }
     path.close();
     return path;
+  }
+
+  private void drawSelection(Canvas canvas, Path path, float strokeWidth) {
+    paint.setColor(0x2810B981);
+    paint.setStyle(Paint.Style.FILL);
+    canvas.drawPath(path, paint);
+    paint.setColor(0xFF10B981);
+    paint.setStyle(Paint.Style.STROKE);
+    paint.setStrokeWidth(strokeWidth);
+    canvas.drawPath(path, paint);
+    paint.setStyle(Paint.Style.FILL);
   }
 
   private void drawGesture(Canvas canvas) {
@@ -402,8 +401,6 @@ public final class ImageCropView extends View {
   private void drawInk(
       Canvas canvas,
       List<List<SelectedRegion.Point>> strokes,
-      float originX,
-      float originY,
       int width,
       int height,
       boolean onView) {
@@ -422,14 +419,14 @@ public final class ImageCropView extends View {
       if (stroke.isEmpty()) continue;
       Path path = new Path();
       SelectedRegion.Point first = stroke.get(0);
-      float x = (float) (first.x * displayed.getWidth() - originX),
-          y = (float) (first.y * displayed.getHeight() - originY);
+      float x = (float) (first.x * width),
+          y = (float) (first.y * height);
       path.moveTo(x, y);
       for (int i = 1; i < stroke.size(); i++) {
         SelectedRegion.Point p = stroke.get(i);
         path.lineTo(
-            (float) (p.x * displayed.getWidth() - originX),
-            (float) (p.y * displayed.getHeight() - originY));
+            (float) (p.x * width),
+            (float) (p.y * height));
       }
       if (stroke.size() == 1) canvas.drawCircle(x, y, paint.getStrokeWidth() / 2, paint);
       else canvas.drawPath(path, paint);
@@ -444,59 +441,49 @@ public final class ImageCropView extends View {
     return true;
   }
 
-  public Bitmap crop() {
-    Bitmap base = displayed;
-    boolean recycleBase = false;
-    if (fineAngle != 0) {
-      Matrix m = new Matrix();
-      m.postRotate(fineAngle);
-      base =
-          Bitmap.createBitmap(
-              displayed, 0, 0, displayed.getWidth(), displayed.getHeight(), m, true);
-      recycleBase = true;
+  public Bitmap renderEditedImage() {
+    return renderImage(false);
+  }
+
+  // Guess keeps its existing selection-only image input.
+  Bitmap renderSelection() {
+    return renderImage(true);
+  }
+
+  private Bitmap renderImage(boolean cropToSelection) {
+    int width = displayed.getWidth(), height = displayed.getHeight();
+    RectF bounds = new RectF(0, 0, width, height);
+    Matrix rotation = new Matrix();
+    rotation.setRotate(fineAngle);
+    rotation.mapRect(bounds);
+    SelectedRegion selection = region();
+    if (cropToSelection && selection != null) {
+      RectF selectedBounds = new RectF(
+          bounds.left + (float) Math.floor(selection.left * bounds.width()),
+          bounds.top + (float) Math.floor(selection.top * bounds.height()),
+          bounds.left + (float) Math.ceil(selection.right * bounds.width()),
+          bounds.top + (float) Math.ceil(selection.bottom * bounds.height()));
+      bounds.set(selectedBounds);
     }
-    SelectedRegion r = history.current().selection;
-    int l = 0, t = 0, rr = base.getWidth(), bb = base.getHeight();
-    if (r != null) {
-      l = Math.max(0, (int) Math.floor(r.left * base.getWidth()));
-      t = Math.max(0, (int) Math.floor(r.top * base.getHeight()));
-      rr = Math.min(base.getWidth(), (int) Math.ceil(r.right * base.getWidth()));
-      bb = Math.min(base.getHeight(), (int) Math.ceil(r.bottom * base.getHeight()));
-    }
-    int width = Math.max(1, rr - l), height = Math.max(1, bb - t);
-    Bitmap output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+    Bitmap output = Bitmap.createBitmap(
+        Math.round(bounds.width()), Math.round(bounds.height()), Bitmap.Config.ARGB_8888);
     Canvas canvas = new Canvas(output);
-    canvas.drawBitmap(base, new Rect(l, t, rr, bb), new Rect(0, 0, width, height), paint);
-    drawInk(canvas, history.current().inkStrokes, l, t, width, height, false);
-    if (recycleBase && base != displayed && !base.isRecycled()) base.recycle();
+    canvas.translate(-bounds.left, -bounds.top);
+    canvas.concat(rotation);
+    canvas.drawBitmap(displayed, 0f, 0f, paint);
+    drawInk(canvas, history.current().inkStrokes, width, height, false);
+    if (selection != null && !cropToSelection)
+      drawSelection(canvas, selectionPath(selection), Math.max(2f, width * .005f));
     return output;
   }
 
   public void applyCrop() {
     if (cropRect == null || displayed == null) return;
-    int l = Math.max(0, (int) (cropRect.left * displayed.getWidth()));
-    int t = Math.max(0, (int) (cropRect.top * displayed.getHeight()));
-    int r = Math.min(displayed.getWidth(), (int) (cropRect.right * displayed.getWidth()));
-    int b = Math.min(displayed.getHeight(), (int) (cropRect.bottom * displayed.getHeight()));
-    int w = Math.max(1, r - l), h = Math.max(1, b - t);
-    Bitmap cropped = Bitmap.createBitmap(displayed, l, t, w, h);
-    if (displayed != source && !displayed.isRecycled()) displayed.recycle();
-    if (!source.isRecycled()) source.recycle();
-    source = cropped;
-    displayed = source;
+    SelectedRegion crop = SelectedRegion.rectangle(
+        cropRect.left, cropRect.top, cropRect.right, cropRect.bottom);
     cropRect = null;
-    push(
-        new ImageEditorState(
-            0,
-            history.current().tool,
-            null,
-            1,
-            0,
-            0,
-            Collections.emptyList(),
-            0));
-    fit();
-    notifyChange();
+    push(history.current().withAppliedCrop(crop));
+    displayState(history.current());
   }
 
   public void resetCrop() {
@@ -564,12 +551,22 @@ public final class ImageCropView extends View {
 
   private void displayState(ImageEditorState state) {
     if (displayed != null && displayed != source && !displayed.isRecycled()) displayed.recycle();
-    if (state.quarterTurns == 0) displayed = source;
+    Bitmap base = source;
+    SelectedRegion crop = state.appliedCrop;
+    if (crop != null) {
+      int width = source.getWidth(), height = source.getHeight();
+      int left = Math.min(width - 1, (int) (crop.left * width));
+      int top = Math.min(height - 1, (int) (crop.top * height));
+      int right = Math.max(left + 1, (int) (crop.right * width));
+      int bottom = Math.max(top + 1, (int) (crop.bottom * height));
+      base = Bitmap.createBitmap(source, left, top, right - left, bottom - top);
+    }
+    if (state.quarterTurns == 0) displayed = base;
     else {
-      Matrix m = new Matrix();
-      m.postRotate(state.quarterTurns * 90);
-      displayed =
-          Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), m, true);
+      Matrix rotation = new Matrix();
+      rotation.setRotate(state.quarterTurns * 90);
+      displayed = Bitmap.createBitmap(base, 0, 0, base.getWidth(), base.getHeight(), rotation, true);
+      if (base != source && base != displayed) base.recycle();
     }
     zoom = (float) state.zoom;
     panX = (float) state.panX;

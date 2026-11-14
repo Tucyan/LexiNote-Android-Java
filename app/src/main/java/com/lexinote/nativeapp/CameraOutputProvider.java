@@ -2,6 +2,7 @@ package com.lexinote.nativeapp;
 
 import android.content.ContentProvider;
 import android.content.ContentValues;
+import android.content.Context;
 import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.net.Uri;
@@ -12,27 +13,26 @@ import java.io.FileNotFoundException;
 
 /** Narrow URI-grant provider used only for full-resolution camera output files. */
 public final class CameraOutputProvider extends ContentProvider {
-  static final String AUTHORITY = "com.lexinote.nativeapp.camera";
   static final String PATH = "capture";
 
-  static File file(ContextAccess access, Uri uri) throws FileNotFoundException {
+  static String authority(Context context) {
+    return context.getPackageName() + ".camera";
+  }
+
+  static File file(Context context, Uri uri) throws FileNotFoundException {
     if (uri == null
-        || !AUTHORITY.equals(uri.getAuthority())
+        || !authority(context).equals(uri.getAuthority())
         || uri.getPathSegments().size() != 2
         || !PATH.equals(uri.getPathSegments().get(0)))
       throw new FileNotFoundException("Invalid camera output URI");
     String name = uri.getLastPathSegment();
     if (!name.matches("[a-f0-9-]{36}\\.jpg"))
       throw new FileNotFoundException("Invalid camera file name");
-    File root = new File(access.filesDir(), "camera");
+    File root = new File(context.getFilesDir(), "camera");
     File target = new File(root, name);
     if (!target.getAbsolutePath().startsWith(root.getAbsolutePath() + File.separator))
       throw new FileNotFoundException("Invalid camera file path");
     return target;
-  }
-
-  interface ContextAccess {
-    File filesDir();
   }
 
   @Override
@@ -42,7 +42,7 @@ public final class CameraOutputProvider extends ContentProvider {
 
   @Override
   public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
-    File target = file(() -> getContext().getFilesDir(), uri);
+    File target = file(getContext(), uri);
     File parent = target.getParentFile();
     if (!parent.isDirectory() && !parent.mkdirs())
       throw new FileNotFoundException("Cannot create camera directory");
@@ -69,7 +69,7 @@ public final class CameraOutputProvider extends ContentProvider {
   public Cursor query(
       Uri uri, String[] projection, String selection, String[] args, String sortOrder) {
     try {
-      File file = file(() -> getContext().getFilesDir(), uri);
+      File file = file(getContext(), uri);
       String[] cols =
           projection == null
               ? new String[] {OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE}
@@ -95,7 +95,7 @@ public final class CameraOutputProvider extends ContentProvider {
   @Override
   public int delete(Uri uri, String selection, String[] args) {
     try {
-      return file(() -> getContext().getFilesDir(), uri).delete() ? 1 : 0;
+      return file(getContext(), uri).delete() ? 1 : 0;
     } catch (FileNotFoundException invalid) {
       return 0;
     }

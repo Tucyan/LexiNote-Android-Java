@@ -7,7 +7,7 @@
         </intent>
     </queries>
 
-    <application android:label="@string/app_name" android:theme="@style/AppTheme"
+    <application android:label="${launcherLabel}" android:theme="@style/AppTheme"
         android:icon="@drawable/ic_launcher" android:allowBackup="false"
         android:fullBackupContent="@xml/backup_rules" android:dataExtractionRules="@xml/data_extraction_rules"
         android:supportsRtl="true" android:usesCleartextTraffic="false">
@@ -26,17 +26,21 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="lexinote" android:host="tokendance" android:path="/callback" />
+                <data android:scheme="${callbackScheme}" android:host="tokendance" android:path="/callback" />
             </intent-filter>
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="taskstream.xyz" android:path="/lexinote/auth/callback" />
+                <data android:scheme="https" android:host="${callbackHost}" android:path="/lexinote/auth/callback" />
             </intent-filter>
         </activity>
+        <activity android:name=".ImageEditorActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
         <provider android:name=".CameraOutputProvider"
-            android:authorities="com.lexinote.nativeapp.camera"
+            android:authorities="${applicationId}.camera"
             android:exported="false" android:grantUriPermissions="true" />
     </application>
 </manifest>
