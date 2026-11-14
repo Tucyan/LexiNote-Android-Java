@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LexiNote 演示调试台</title>
+<style>
+:root{color-scheme:light;font:15px/1.5 system-ui,"Microsoft YaHei",sans-serif;color:#162637;background:#eef3f0}
+*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0}header{background:#fff;border-bottom:1px solid #ccd9d4;padding:16px 24px}
+h1{font-size:22px;margin:0 0 10px}h2{font-size:15px;margin:0 0 12px}
+nav,.controls,.context{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.context{color:#4e6560;margin-bottom:10px}.context strong{color:#176853}button,select{font:inherit;border:1px solid #c0d1ca;border-radius:8px;background:white;color:inherit;padding:6px 10px}
+button{cursor:pointer}button:hover{border-color:#0f775c}button:disabled{opacity:.5;cursor:default}.primary{background:#09694f;color:#fff;border-color:#09694f}
+main{display:grid;grid-template-columns:minmax(200px,.75fr) minmax(240px,1fr) minmax(260px,1fr);gap:12px;padding:12px;align-items:start}
+section{background:white;border:1px solid #d5e0dc;border-radius:12px;padding:14px;min-width:0}
+ol,ul{list-style:none;margin:0;padding:0}.steps button{width:100%;text-align:left;margin-bottom:5px;display:flex;justify-content:space-between;gap:6px}
+.selected{background:#d9eee5;border-color:#0f775c}.status{color:#44645a;white-space:nowrap;font-size:12px}
+#preview{display:block;max-width:100%;height:min(72vh,820px);margin:auto;object-fit:contain}
+#photos{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}#photos button{font-size:12px}
+#events{max-height:74vh;overflow:auto}.event{border-bottom:1px solid #e5eeea;padding:8px 0;overflow-wrap:anywhere}
+.meta{font-size:12px;color:#4d655c}.error{color:#a32626}.empty{color:#567169;padding:16px 0}
+@media(max-width:840px){main{grid-template-columns:1fr 1fr}main section:last-child{grid-column:1/-1}}
+@media(max-width:540px){main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>LexiNote 演示控制台 · 逐步确认</h1>
+  <div class="context"><strong id="serial"></strong><label for="runs">运行记录</label><select id="runs"></select><span id="message" role="status"></span></div>
+  <nav id="controls" aria-label="演示控制">
+    <button data-action="prepare">准备演示数据</button>
+    <button class="primary" data-action="next">确认无误，执行下一步</button>
+    <button data-action="retry">重试当前操作</button>
+    <button data-action="snapshot">抓取当前画面</button><button data-action="end">结束演示</button>
+  </nav>
+</header>
+<main>
+  <section><h2>演示步骤</h2><ol id="steps" class="steps"></ol></section>
+  <section><h2 id="preview-title">步骤截图</h2><div id="preview-empty" class="empty">选择已执行的步骤查看截图</div><img id="preview" alt="模拟器步骤截图" hidden><div id="photos"></div></section>
+  <section><h2>操作记录</h2><ul id="events"></ul></section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const statuses = {running:"执行中",passed:"通过",failed:"失败",skipped:"已跳过",retry:"重试",screenshot:"截图",capture_failed:"截图失败",ended:"已结束",awaiting_login:"等待手动登录"};
+let selectedRun = "", selectedStep = "", selectedPhoto = "", followStep = true, lastRender = "", controlError = "", physical = false, nextName = "", sending = false;
+const button = (text, fn) => {
+  const b=document.createElement("button"); b.textContent=text; b.onclick=fn; return b;
+};
+async function request(url, options) {
+  const res=await fetch(url, options); const data=await res.json();
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+$("runs").onchange = () => {
+  selectedRun=$("runs").value; selectedStep=""; selectedPhoto=""; followStep=true; lastRender=""; refresh();
+};
+$("controls").onclick = async e => {
+  const action=e.target.dataset.action; if (!action || sending) return;
+  if (action==="prepare" && !confirm(physical
+      ? "重置这台手机的 LexiNote 演示版，清除登录与网页缓存并导入样例？导入后会暂停。"
+      : "用固定样例备份覆盖指定模拟器的 LexiNote 学习数据？")) return;
+  if (action==="retry" && !confirm("重试上一个失败的操作？如操作是提交请求，可能再次调用 AI。")) return;
+  if (action==="next" && !confirm("已核对当前结果，执行「"+nextName+"」？")) return;
+  if (action==="end" && !confirm("结束本轮演示并保留历史？")) return;
+  try {
+    sending=true;
+    controlError="";
+    const s=await request("/api/control",{method:"POST",headers:{"Content-Type":"application/json","X-LexiNote-Demo":"1"},body:JSON.stringify({action})});
+    if(action==="prepare"){selectedRun="";followStep=true;selectedStep="";selectedPhoto="";}
+    else {selectedRun=s.active || "";followStep=true;selectedPhoto="";}
+    lastRender="";refresh();
+  } catch(error){controlError=error.message; $("message").textContent=controlError;}
+  finally{sending=false;}
+};
+async function refresh(){
+  if(refresh.busy) return;
+  refresh.busy=true;
+  try{
+    const state=await request("/api/state");
+    if(!selectedRun) selectedRun=state.active || state.runs[0] || "";
+    const run=selectedRun ? await request("/api/runs/"+selectedRun) : null;
+    const mark=JSON.stringify([state,run,selectedStep,selectedPhoto,followStep,controlError]);
+    if(mark===lastRender) return; lastRender=mark;
+    physical=!!state.physical;
+    $("serial").title=state.fixed?"固定动作回放，结果由现场人工确认":"按控件定位执行";
+    $("serial").textContent=(physical?"真机 · ":"模拟器 · ")+state.serial+(state.fixed?" · 固定回放":"");
+    $("message").textContent=controlError || state.message ||
+      (state.awaiting_login?"请在手机上手动登录并授权 TokenDance，然后确认下一步。":"");
+    $("runs").replaceChildren(...state.runs.map(id=>{
+      const o=document.createElement("option");o.value=id;o.textContent=id+(id===state.active?" · 当前":"");return o;
+    }));
+    $("runs").value=selectedRun;
+    const historical=selectedRun && selectedRun!==state.active;
+    nextName=state.steps[(run?.next ?? -2)+1]?.name || "";
+    $("controls").querySelector('[data-action="next"]').textContent=
+      nextName ? "确认无误，执行"+nextName : "确认无误，执行下一步";
+    const lastOperation=run?.history?.findLast(e=>e.status==="failed"||e.status==="passed");
+    for(const b of $("controls").querySelectorAll("button")){
+      const a=b.dataset.action;
+      b.disabled=a==="prepare"?state.busy:!state.active||historical||state.busy||!!run?.ended||
+        (a==="next"&&(!nextName||lastOperation?.status==="failed"))||
+        (a==="retry"&&lastOperation?.status!=="failed");
+    }
+    const events=run?.history || [];
+    if(followStep) selectedStep=events.at(-1)?.step || "prepare";
+    $("steps").replaceChildren(...state.steps.map((step,i)=>{
+      const record=events.filter(e=>e.step===step.id&&e.status!=="screenshot").at(-1);
+      const item=document.createElement("li");
+      const b=button((i?i+". ":"")+step.name,()=>{
+        selectedStep=step.id;selectedPhoto="";followStep=false;refresh();
+      });
+      b.classList.toggle("selected",selectedStep===step.id);
+      const s=document.createElement("span");s.className="status";
+      const partial=record?.status==="passed" && record.operation!=="步骤完成";
+      s.textContent=partial?(state.busy&&!historical&&events.at(-1)?.step===step.id?"执行中":"已暂停")
+        :statuses[record?.status]||"待执行";
+      b.append(s);item.append(b);return item;
+    }));
+    const visible=events.filter(e=>e.step===selectedStep);
+    const photos=visible.filter(e=>e.image);
+    const photo=photos.find(e=>e.image===selectedPhoto)||photos.at(-1);
+    const preview=$("preview");preview.hidden=!photo;$("preview-empty").hidden=!!photo;
+    if(photo){
+      const src="/api/runs/"+selectedRun+"/"+photo.image;
+      if(preview.getAttribute("src")!==src)preview.src=src;
+      $("preview-title").textContent=photo.operation;
+    }else{$("preview-title").textContent="步骤截图";preview.removeAttribute("src");}
+    $("photos").replaceChildren(...photos.map(p=>{
+      const b=button(p.operation,()=>{selectedPhoto=p.image;followStep=false;refresh();});
+      b.classList.toggle("selected",p===photo);return b;
+    }));
+    $("events").replaceChildren(...visible.map(e=>{
+      const item=document.createElement("li");item.className="event";
+      const title=document.createElement("div");title.textContent=e.operation;
+      const meta=document.createElement("div");meta.className="meta";
+      meta.textContent=[e.at,statuses[e.status],e.seconds==null?"":e.seconds+" 秒"].filter(Boolean).join(" · ");
+      item.append(title,meta);
+      if(e.error){const err=document.createElement("div");err.className="error";err.textContent=e.error;item.append(err);}
+      return item;
+    }));
+  }catch(error){$("message").textContent=error.message;}
+  finally{refresh.busy=false;}
+}
+refresh();setInterval(refresh,1200);
+</script>
+</body>
+</html>
