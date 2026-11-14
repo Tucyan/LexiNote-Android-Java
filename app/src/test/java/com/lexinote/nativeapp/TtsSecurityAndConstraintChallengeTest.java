@@ -304,8 +304,8 @@ public class TtsSecurityAndConstraintChallengeTest {
     assertTrue("Must throw SecurityException on traversal attempt",
         source.contains("throw new SecurityException"));
 
-    // Verify catch block only catches IOException, so SecurityException (RuntimeException) is NOT swallowed
-    assertTrue("Unzip catch block must catch IOException only",
+    // Extraction errors must propagate so an incomplete install is retried.
+    assertFalse("Unzip must not discard IOException",
         source.contains("catch (IOException ignored)"));
     assertFalse("Unzip catch block must NOT catch Exception or Throwable",
         source.contains("catch (Exception ") || source.contains("catch (Throwable "));

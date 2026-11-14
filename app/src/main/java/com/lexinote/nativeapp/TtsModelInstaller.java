@@ -19,6 +19,7 @@ public final class TtsModelInstaller {
   public static final String ESPEAK_DATA_ZIP = "espeak-ng-data.zip";
   public static final String ESPEAK_DATA_DIR = "espeak-ng-data";
 
+  private static final String ESPEAK_INSTALL_MARKER = ".installed-v2";
   private static final Object INSTALL_LOCK = new Object();
 
   private TtsModelInstaller() {}
@@ -63,7 +64,8 @@ public final class TtsModelInstaller {
 
       boolean modelReady = modelFile.isFile() && modelFile.length() > 0;
       boolean tokensReady = tokensFile.isFile() && tokensFile.length() > 0;
-      boolean espeakReady = espeakDir.isDirectory() && espeakDir.list() != null && espeakDir.list().length > 0;
+      File espeakMarker = new File(espeakDir, ESPEAK_INSTALL_MARKER);
+      boolean espeakReady = espeakMarker.isFile() && hasEnglishVoice(espeakDir);
 
       if (modelReady && tokensReady && espeakReady) {
         return;
@@ -76,7 +78,11 @@ public final class TtsModelInstaller {
         copyAsset(context, "tts/" + TOKENS_NAME, tokensFile);
       }
       if (!espeakReady) {
-        unzipAssetIfPresent(context, "tts/" + ESPEAK_DATA_ZIP, espeakDir);
+        unzipAsset(context, "tts/" + ESPEAK_DATA_ZIP, espeakDir);
+        if (!hasEnglishVoice(espeakDir)) {
+          throw new IOException("Missing eSpeak English voice data");
+        }
+        espeakMarker.createNewFile();
       }
     }
   }
@@ -110,7 +116,16 @@ public final class TtsModelInstaller {
     }
   }
 
-  private static void unzipAssetIfPresent(Context context, String assetZipPath, File targetDir) {
+  private static boolean hasEnglishVoice(File dir) {
+    return new File(dir, "lang/gmw/en-US").length() > 0
+        && new File(dir, "en_dict").length() > 0
+        && new File(dir, "phontab").length() > 0
+        && new File(dir, "phondata").length() > 0
+        && new File(dir, "phonindex").length() > 0;
+  }
+
+  private static void unzipAsset(Context context, String assetZipPath, File targetDir)
+      throws IOException {
     try (InputStream assetIn = context.getAssets().open(assetZipPath);
          ZipInputStream zis = new ZipInputStream(assetIn)) {
       if (!targetDir.exists()) {
@@ -119,7 +134,9 @@ public final class TtsModelInstaller {
       byte[] buffer = new byte[65536];
       ZipEntry entry;
       while ((entry = zis.getNextEntry()) != null) {
-        File file = new File(targetDir, entry.getName());
+        // Older Windows-built archives use backslashes in ZIP entry names.
+        String entryPath = entry.getName().replace('\\', '/');
+        File file = new File(targetDir, entryPath);
         // Guard against Zip Slip vulnerability
         String canonicalTarget = targetDir.getCanonicalPath();
         String canonicalDest = file.getCanonicalPath();
@@ -127,7 +144,7 @@ public final class TtsModelInstaller {
           throw new SecurityException("Zip entry outside target directory: " + entry.getName());
         }
 
-        if (entry.isDirectory()) {
+        if (entryPath.endsWith("/")) {
           file.mkdirs();
         } else {
           File p = file.getParentFile();
@@ -144,8 +161,6 @@ public final class TtsModelInstaller {
         }
         zis.closeEntry();
       }
-    } catch (IOException ignored) {
-      // If optional zip asset is missing or error occurs, continue gracefully
     }
   }
 }
